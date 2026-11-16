@@ -16,7 +16,7 @@ break.
 | Camera pre-open and engine hand-over | [`service/CaptureStartup.kt`](../../app/src/main/java/com/librestatic/opencinecam/service/CaptureStartup.kt) |
 | Root screen, service binding, wizard-to-app handoff | [`CameraScreen.kt`](../../app/src/main/java/com/librestatic/opencinecam/CameraScreen.kt) (`CameraRootScreen`, `rememberCaptureServiceBinder`, `PermissionScreen`) |
 | First-run wizard and its permission page | [`OnboardingScreen.kt`](../../app/src/main/java/com/librestatic/opencinecam/onboarding/OnboardingScreen.kt) (`OnboardingStore`, `OnboardingPage`, `onboardingExitTarget`) |
-| Runtime permission state and "blocked" detection | [`PermissionAccess.kt`](../../app/src/main/java/com/librestatic/opencinecam/PermissionAccess.kt) |
+| Runtime permission state and "blocked" detection | [`PermissionAccess.kt`](../../app/src/main/java/com/librestatic/opencinecam/ui/PermissionAccess.kt) |
 | Theme choice and colour schemes | [`ui/theme/OpenCineCamTheme.kt`](../../app/src/main/java/com/librestatic/opencinecam/ui/theme/OpenCineCamTheme.kt) (`AppTheme`, `AppThemeStore`, `rememberAppTheme`, `CaptureTheme`) |
 | Splash themes | [`res/values/themes.xml`](../../app/src/main/res/values/themes.xml) (`Theme.OpenCineCam.Starting`, `Theme.OpenCineCam.Starting.You`) |
 | Capture service start-up | [`service/CaptureService.kt`](../../app/src/main/java/com/librestatic/opencinecam/service/CaptureService.kt) (`onCreate`, `LocalBinder.prepare`, `LocalBinder.attachPreview`) |

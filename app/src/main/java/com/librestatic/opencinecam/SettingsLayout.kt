@@ -14,6 +14,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.librestatic.opencinecam.diagnostics.label
+import com.librestatic.opencinecam.gallery.label
+import com.librestatic.opencinecam.ui.WindowWidthClass
+import com.librestatic.opencinecam.ui.windowWidthClass
 import kotlin.math.max
 
 /** Width of the categories column when Settings shows two panes. */

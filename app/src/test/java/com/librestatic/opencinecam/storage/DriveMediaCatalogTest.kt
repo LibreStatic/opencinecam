@@ -3,8 +3,8 @@
 
 package com.librestatic.opencinecam.storage
 
-import com.librestatic.opencinecam.GalleryMediaKind
-import com.librestatic.opencinecam.GallerySettings
+import com.librestatic.opencinecam.gallery.GalleryMediaKind
+import com.librestatic.opencinecam.gallery.GallerySettings
 import java.net.URLEncoder
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put

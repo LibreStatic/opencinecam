@@ -5,6 +5,11 @@ import android.content.ContentValues
 import android.provider.MediaStore
 import android.os.ParcelFileDescriptor
 import androidx.test.platform.app.InstrumentationRegistry
+import com.librestatic.opencinecam.gallery.GallerySettings
+import com.librestatic.opencinecam.gallery.ProxyPolicies
+import com.librestatic.opencinecam.gallery.ProxyPolicy
+import com.librestatic.opencinecam.gallery.ProxySettings
+import com.librestatic.opencinecam.gallery.ProxyWaitReason
 import androidx.core.net.toUri
 import com.librestatic.opencinecam.storage.*
 import java.io.File

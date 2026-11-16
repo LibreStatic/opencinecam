@@ -44,9 +44,9 @@ import com.librestatic.opencinecam.subject.SubjectInterviewSettings
 import com.librestatic.opencinecam.subject.SubjectReviewOperatorBar
 import com.librestatic.opencinecam.subject.SubjectSelfMonitorSettings
 import com.librestatic.opencinecam.subject.SubjectSlateSettings
-import com.librestatic.opencinecam.CineGlyph
-import com.librestatic.opencinecam.CineIcon
-import com.librestatic.opencinecam.FitText
+import com.librestatic.opencinecam.ui.CineGlyph
+import com.librestatic.opencinecam.ui.CineIcon
+import com.librestatic.opencinecam.ui.FitText
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp

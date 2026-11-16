@@ -10,6 +10,8 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.provider.MediaStore
 import androidx.test.platform.app.InstrumentationRegistry
+import com.librestatic.opencinecam.gallery.GalleryMediaKind
+import com.librestatic.opencinecam.gallery.GallerySettings
 import com.librestatic.opencinecam.metadata.productionSlateJson
 import com.librestatic.opencinecam.storage.*
 import java.io.File

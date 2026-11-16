@@ -31,6 +31,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.fold.FoldDisplayState
 import com.librestatic.opencinecam.fold.LocalFoldDisplayCoordinator
+import com.librestatic.opencinecam.ui.CineGlyph
+import com.librestatic.opencinecam.ui.CineIcon
+import com.librestatic.opencinecam.ui.predictiveBackPreview
+import com.librestatic.opencinecam.ui.rememberPredictiveBack
 
 @Composable
 internal fun SettingsScreen(

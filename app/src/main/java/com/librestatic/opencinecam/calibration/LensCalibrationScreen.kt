@@ -35,7 +35,7 @@ import com.librestatic.opencinecam.SettingsMuted
 import com.librestatic.opencinecam.settingsSideGutterDp
 import com.librestatic.opencinecam.SettingsSwitchRow
 import com.librestatic.opencinecam.SettingsTopBar
-import com.librestatic.opencinecam.CineIcon
+import com.librestatic.opencinecam.ui.CineIcon
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
 import java.text.DateFormat
 import java.util.Date

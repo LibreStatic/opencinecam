@@ -45,6 +45,9 @@ import com.librestatic.opencinecam.fold.DisplaySessionPhase
 import com.librestatic.opencinecam.fold.FoldDisplayCoordinator
 import com.librestatic.opencinecam.fold.FoldDisplayState
 import com.librestatic.opencinecam.service.CaptureService
+import com.librestatic.opencinecam.ui.AppHaptics
+import com.librestatic.opencinecam.ui.HapticEvent
+import com.librestatic.opencinecam.ui.LocalAppHaptics
 import com.librestatic.opencinecam.ui.viewfinder.chromePanel
 
 internal data class OperatorActions(val capture: () -> Unit, val perform: (OperatorAction) -> Unit, val available: (OperatorAction) -> Boolean,

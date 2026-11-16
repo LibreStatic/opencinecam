@@ -14,6 +14,15 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
+import com.librestatic.opencinecam.gallery.GalleryMediaKind
+import com.librestatic.opencinecam.gallery.GallerySettings
+import com.librestatic.opencinecam.gallery.GallerySettingsControls
+import com.librestatic.opencinecam.gallery.galleryTechnicalText
+import com.librestatic.opencinecam.gallery.MediaCatalogContent
+import com.librestatic.opencinecam.gallery.MediaCatalogSource
+import com.librestatic.opencinecam.gallery.takeNeedsAttention
+import com.librestatic.opencinecam.gallery.takeTitleText
+import com.librestatic.opencinecam.gallery.title
 import com.librestatic.opencinecam.storage.*
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.NonCancellable

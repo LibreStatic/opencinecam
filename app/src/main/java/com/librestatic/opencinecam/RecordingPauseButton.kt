@@ -14,6 +14,8 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.librestatic.opencinecam.ui.hapticClick
+import com.librestatic.opencinecam.ui.HapticEvent
 
 /** A stop button always remains separate; capability comes from the live recording owner. */
 @Composable

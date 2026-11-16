@@ -11,6 +11,7 @@ import android.os.SystemClock
 import android.provider.MediaStore
 import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.camera.*
+import com.librestatic.opencinecam.gallery.GallerySettings
 import com.librestatic.opencinecam.media.audio.AudioBitDepth
 import com.librestatic.opencinecam.media.audio.AudioSourceSelection
 import com.librestatic.opencinecam.metadata.parseProductionSlateJson

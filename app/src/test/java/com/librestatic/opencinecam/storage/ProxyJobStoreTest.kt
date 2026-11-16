@@ -2,6 +2,7 @@
 package com.librestatic.opencinecam.storage
 
 import com.librestatic.opencinecam.*
+import com.librestatic.opencinecam.gallery.ProxySettings
 import java.io.File
 import java.nio.file.Files
 import java.util.UUID

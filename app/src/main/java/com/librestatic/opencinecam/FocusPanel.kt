@@ -50,6 +50,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.camera.FocusPullEasing
 import com.librestatic.opencinecam.service.CaptureService
+import com.librestatic.opencinecam.ui.CineGlyph
+import com.librestatic.opencinecam.ui.CineIcon
+import com.librestatic.opencinecam.ui.CineSlider
+import com.librestatic.opencinecam.ui.FitText
+import com.librestatic.opencinecam.ui.HapticEvent
+import com.librestatic.opencinecam.ui.LocalAppHaptics
 import java.util.Locale
 import kotlin.math.roundToInt
 

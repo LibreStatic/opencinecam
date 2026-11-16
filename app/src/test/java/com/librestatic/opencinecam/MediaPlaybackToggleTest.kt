@@ -1,6 +1,10 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam
 
+import com.librestatic.opencinecam.gallery.PendingPlay
+import com.librestatic.opencinecam.gallery.pendingPlayStep
+import com.librestatic.opencinecam.gallery.PlaybackPhase
+import com.librestatic.opencinecam.gallery.playbackToggleAction
 import org.junit.Assert.*
 import org.junit.Test
 

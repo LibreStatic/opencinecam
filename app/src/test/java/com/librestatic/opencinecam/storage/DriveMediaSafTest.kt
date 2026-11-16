@@ -116,12 +116,12 @@ class DriveMediaSafTest {
         assertEquals(take.metadata, snapshot.documents.map { it.artifact })
         assertNotNull(snapshot.documents.single().text)
         // The plan rebuilds the drive namespace and re-runs the catalog's declaration check on it.
-        val plan = mediaSharePlan(snapshot, com.librestatic.opencinecam.MediaSharingSettings(
-            metadata = com.librestatic.opencinecam.MediaShareMetadata.TECHNICAL))
+        val plan = mediaSharePlan(snapshot, com.librestatic.opencinecam.gallery.MediaSharingSettings(
+            metadata = com.librestatic.opencinecam.gallery.MediaShareMetadata.TECHNICAL))
         assertEquals(take.originals, plan.originals)
         assertEquals(listOf("take.technical.json"), plan.generated.map { it.name })
-        val originalsOnly = mediaSharePlan(snapshot, com.librestatic.opencinecam.MediaSharingSettings(
-            content = com.librestatic.opencinecam.MediaShareContent.ORIGINALS_ONLY))
+        val originalsOnly = mediaSharePlan(snapshot, com.librestatic.opencinecam.gallery.MediaSharingSettings(
+            content = com.librestatic.opencinecam.gallery.MediaShareContent.ORIGINALS_ONLY))
         assertEquals(listOf("A001.mp4"), originalsOnly.originals.map { it.name })
     }
 
@@ -130,8 +130,8 @@ class DriveMediaSafTest {
         put("OpenCineCam/A004/A004$RAW_VIDEO_EXTENSION")
         for (take in takes()) assertEquals(take, catalog().shareSnapshot(take).take)
         val keyed = takes().single { it.id.startsWith("drive:") }
-        assertEquals(keyed.originals, mediaSharePlan(catalog().shareSnapshot(keyed), com.librestatic.opencinecam.MediaSharingSettings(
-            content = com.librestatic.opencinecam.MediaShareContent.ORIGINALS_ONLY)).originals)
+        assertEquals(keyed.originals, mediaSharePlan(catalog().shareSnapshot(keyed), com.librestatic.opencinecam.gallery.MediaSharingSettings(
+            content = com.librestatic.opencinecam.gallery.MediaShareContent.ORIGINALS_ONLY)).originals)
     }
 
     @Test fun aShareSnapshotRefusesAChangedTake() {

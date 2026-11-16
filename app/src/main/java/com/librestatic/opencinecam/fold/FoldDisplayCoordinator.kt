@@ -40,9 +40,9 @@ import com.librestatic.opencinecam.subject.SubjectReviewController
 import com.librestatic.opencinecam.subject.SubjectSyncArming
 import com.librestatic.opencinecam.subject.SubjectSyncMarkerController
 import com.librestatic.opencinecam.subject.SubjectSyncMarkerReport
-import com.librestatic.opencinecam.LocalAppHaptics
-import com.librestatic.opencinecam.LocalScrollLongText
-import com.librestatic.opencinecam.rememberAppHaptics
+import com.librestatic.opencinecam.ui.LocalAppHaptics
+import com.librestatic.opencinecam.ui.LocalScrollLongText
+import com.librestatic.opencinecam.ui.rememberAppHaptics
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay

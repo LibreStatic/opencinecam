@@ -1,9 +1,9 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam.storage
 
-import com.librestatic.opencinecam.GallerySettings
+import com.librestatic.opencinecam.gallery.GallerySettings
 import com.librestatic.opencinecam.metadata.HARDWARE_TRUTH_SCHEMA
-import com.librestatic.opencinecam.GalleryMediaKind
+import com.librestatic.opencinecam.gallery.GalleryMediaKind
 import com.librestatic.opencinecam.ProductionSlateSettings
 import com.librestatic.opencinecam.metadata.parseProductionSlateJson
 import java.util.Locale

@@ -8,6 +8,9 @@ import android.net.Uri
 import android.provider.MediaStore
 import androidx.core.net.toUri
 import androidx.test.platform.app.InstrumentationRegistry
+import com.librestatic.opencinecam.gallery.GallerySettings
+import com.librestatic.opencinecam.gallery.MediaShareContent
+import com.librestatic.opencinecam.gallery.MediaSharingSettings
 import com.librestatic.opencinecam.metadata.productionSlateJson
 import com.librestatic.opencinecam.storage.*
 import java.io.File

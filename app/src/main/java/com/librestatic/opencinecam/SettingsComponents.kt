@@ -47,6 +47,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.diagnostics.label
+import com.librestatic.opencinecam.gallery.label
+import com.librestatic.opencinecam.ui.CineGlyph
+import com.librestatic.opencinecam.ui.CineIcon
+import com.librestatic.opencinecam.ui.CineSlider
+import com.librestatic.opencinecam.ui.hapticClick
+import com.librestatic.opencinecam.ui.HapticEvent
+import com.librestatic.opencinecam.ui.LocalAppHaptics
 
 internal val SettingsSurface: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surfaceContainer
 internal val SettingsSurfaceRaised: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surfaceContainerHigh

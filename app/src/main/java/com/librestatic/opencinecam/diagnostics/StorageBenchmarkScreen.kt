@@ -43,7 +43,7 @@ import com.librestatic.opencinecam.SettingsMuted
 import com.librestatic.opencinecam.settingsSideGutterDp
 import com.librestatic.opencinecam.SettingsTopBar
 import com.librestatic.opencinecam.storage.ContentResolverBenchmarkDestination
-import com.librestatic.opencinecam.CineIcon
+import com.librestatic.opencinecam.ui.CineIcon
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch

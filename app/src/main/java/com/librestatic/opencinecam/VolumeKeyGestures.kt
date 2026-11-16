@@ -2,6 +2,7 @@
 package com.librestatic.opencinecam
 
 import android.view.KeyEvent
+import com.librestatic.opencinecam.ui.HapticEvent
 
 /** Main-thread timers for [VolumeKeyGestures]: MainActivity backs it with a Handler, tests with a fake clock. */
 interface VolumeKeyScheduler {

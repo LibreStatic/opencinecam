@@ -27,7 +27,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.service.CaptureService
-import com.librestatic.opencinecam.toSpec
+import com.librestatic.opencinecam.ui.CineSlider
 import com.librestatic.opencinecam.camera.OpenCineLogSourcePath
 import com.librestatic.opencinecam.camera.CaptureFrameRate
 import com.librestatic.opencinecam.camera.ExposureMode

@@ -7,6 +7,8 @@ import android.provider.MediaStore
 import androidx.core.net.toUri
 import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.*
+import com.librestatic.opencinecam.gallery.GallerySettings
+import com.librestatic.opencinecam.gallery.ProxySettings
 import com.librestatic.opencinecam.metadata.productionSlateJson
 import java.io.File
 import java.util.UUID

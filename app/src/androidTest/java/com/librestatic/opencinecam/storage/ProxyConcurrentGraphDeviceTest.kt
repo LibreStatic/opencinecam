@@ -11,9 +11,9 @@ import android.provider.MediaStore
 import androidx.core.net.toUri
 import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.CameraSettings
-import com.librestatic.opencinecam.GallerySettings
+import com.librestatic.opencinecam.gallery.GallerySettings
 import com.librestatic.opencinecam.ProductionSlateSettings
-import com.librestatic.opencinecam.ProxySettings
+import com.librestatic.opencinecam.gallery.ProxySettings
 import com.librestatic.opencinecam.SubjectPreviewGpuTest
 import com.librestatic.opencinecam.camera.CaptureEpochClock
 import com.librestatic.opencinecam.camera.RecordingFrameSize

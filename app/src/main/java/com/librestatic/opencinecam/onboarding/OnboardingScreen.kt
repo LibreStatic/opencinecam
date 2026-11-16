@@ -47,9 +47,9 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.zIndex
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
 import com.librestatic.opencinecam.ui.theme.LocalReducedMotion
-import com.librestatic.opencinecam.WindowHeightClass
-import com.librestatic.opencinecam.WindowWidthClass
-import com.librestatic.opencinecam.windowWidthClass
+import com.librestatic.opencinecam.ui.WindowHeightClass
+import com.librestatic.opencinecam.ui.WindowWidthClass
+import com.librestatic.opencinecam.ui.windowWidthClass
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
@@ -147,11 +147,11 @@ import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.AboutScreen
 import com.librestatic.opencinecam.HingeSafeSettingsPane
 import com.librestatic.opencinecam.loadThirdPartyComponents
-import com.librestatic.opencinecam.AdaptiveWindow
-import com.librestatic.opencinecam.CineGlyph
-import com.librestatic.opencinecam.CineIcon
-import com.librestatic.opencinecam.openAppPermissionSettings
-import com.librestatic.opencinecam.permissionBlocked
+import com.librestatic.opencinecam.ui.AdaptiveWindow
+import com.librestatic.opencinecam.ui.CineGlyph
+import com.librestatic.opencinecam.ui.CineIcon
+import com.librestatic.opencinecam.ui.openAppPermissionSettings
+import com.librestatic.opencinecam.ui.permissionBlocked
 import kotlinx.coroutines.launch
 
 // Theme roles under the names the wizard uses; the Cine palette gives the approved look.

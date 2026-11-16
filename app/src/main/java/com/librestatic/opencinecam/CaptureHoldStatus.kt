@@ -53,6 +53,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.librestatic.opencinecam.ui.CineGlyph
+import com.librestatic.opencinecam.ui.CineIcon
+import com.librestatic.opencinecam.ui.FitText
 import com.librestatic.opencinecam.ui.theme.LocalReducedMotion
 import com.librestatic.opencinecam.ui.viewfinder.chromePanel
 import kotlinx.coroutines.delay

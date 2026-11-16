@@ -16,6 +16,7 @@ import androidx.compose.material3.TooltipState
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import com.librestatic.opencinecam.ui.LocalAdaptiveWindow
 
 /** What a shortcut does on the capture screen. */
 internal enum class CaptureShortcutCommand {

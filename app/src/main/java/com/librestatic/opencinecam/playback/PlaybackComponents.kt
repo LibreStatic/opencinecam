@@ -48,9 +48,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.librestatic.opencinecam.CineGlyph
-import com.librestatic.opencinecam.CineIcon
-import com.librestatic.opencinecam.FitText
+import com.librestatic.opencinecam.ui.CineGlyph
+import com.librestatic.opencinecam.ui.CineIcon
+import com.librestatic.opencinecam.ui.FitText
 import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.SettingsAccent
 import com.librestatic.opencinecam.SettingsBorder

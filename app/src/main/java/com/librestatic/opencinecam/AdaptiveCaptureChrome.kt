@@ -74,6 +74,7 @@ import com.librestatic.opencinecam.camera.ZoomMath
 import com.librestatic.opencinecam.fold.FoldDisplaySettings
 import com.librestatic.opencinecam.camera.ZoomLensSwitchMode
 import com.librestatic.opencinecam.ui.viewfinder.ZoomRocker
+import com.librestatic.opencinecam.ui.zoomHapticFor
 import com.librestatic.opencinecam.ui.viewfinder.LocalChromeOpacity
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -89,6 +90,10 @@ import com.librestatic.opencinecam.calibration.LensCalibrationUiState
 import androidx.compose.ui.tooling.preview.Preview
 import com.librestatic.opencinecam.service.CaptureService
 import com.librestatic.opencinecam.subject.OutOfFrameHudChip
+import com.librestatic.opencinecam.ui.CineIcon
+import com.librestatic.opencinecam.ui.ContextPanePlacement
+import com.librestatic.opencinecam.ui.HapticEvent
+import com.librestatic.opencinecam.ui.LocalAppHaptics
 import com.librestatic.opencinecam.camera.CaptureFrameRate
 import com.librestatic.opencinecam.camera.TapFocusState
 import com.librestatic.opencinecam.camera.ExposureMode

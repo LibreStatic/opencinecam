@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam
 
+import com.librestatic.opencinecam.gallery.playbackTimecode
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

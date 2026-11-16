@@ -70,7 +70,7 @@ import com.librestatic.opencinecam.discrepancyLines
 import com.librestatic.opencinecam.requestedReportedLines
 import com.librestatic.opencinecam.core.model.JsonReportRedactor
 import com.librestatic.opencinecam.core.model.QuirkResolution
-import com.librestatic.opencinecam.label
+import com.librestatic.opencinecam.gallery.label
 import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.SettingsAccent
 import com.librestatic.opencinecam.SettingsCard
@@ -82,7 +82,7 @@ import com.librestatic.opencinecam.SettingsSurface
 import com.librestatic.opencinecam.SettingsSurfaceRaised
 import com.librestatic.opencinecam.SettingsTopBar
 import com.librestatic.opencinecam.storage.prepareCapabilityReportShare
-import com.librestatic.opencinecam.CineIcon
+import com.librestatic.opencinecam.ui.CineIcon
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch

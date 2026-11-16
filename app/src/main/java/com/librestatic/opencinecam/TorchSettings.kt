@@ -25,6 +25,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.librestatic.opencinecam.ui.CineSlider
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)

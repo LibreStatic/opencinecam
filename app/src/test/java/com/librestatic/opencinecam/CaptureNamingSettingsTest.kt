@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam
 
+import com.librestatic.opencinecam.gallery.MediaShareContent
+import com.librestatic.opencinecam.gallery.MediaSharingSettings
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Test

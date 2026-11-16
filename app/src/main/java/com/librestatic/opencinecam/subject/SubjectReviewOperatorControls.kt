@@ -35,9 +35,9 @@ import com.librestatic.opencinecam.SettingsSurface
 import com.librestatic.opencinecam.storage.LocalMediaArtifact
 import com.librestatic.opencinecam.storage.LocalMediaTake
 import com.librestatic.opencinecam.storage.readOcLogClip
-import com.librestatic.opencinecam.CineIcon
-import com.librestatic.opencinecam.CineIconButton
-import com.librestatic.opencinecam.FitText
+import com.librestatic.opencinecam.ui.CineIcon
+import com.librestatic.opencinecam.ui.CineIconButton
+import com.librestatic.opencinecam.ui.FitText
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow

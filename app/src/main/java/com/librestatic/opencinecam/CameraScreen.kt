@@ -68,10 +68,18 @@ import com.librestatic.opencinecam.diagnostics.CameraCapabilitiesScreen
 import com.librestatic.opencinecam.diagnostics.StorageBenchmarkScreen
 import com.librestatic.opencinecam.fold.FoldDisplayState
 import com.librestatic.opencinecam.fold.LocalFoldDisplayCoordinator
+import com.librestatic.opencinecam.gallery.GalleryCatalogCache
+import com.librestatic.opencinecam.gallery.MediaCatalogScreen
 import com.librestatic.opencinecam.onboarding.OnboardingScreen
 import com.librestatic.opencinecam.onboarding.OnboardingStore
 import com.librestatic.opencinecam.onboarding.SplashHandoff
 import com.librestatic.opencinecam.service.CaptureService
+import com.librestatic.opencinecam.ui.LocalAppHaptics
+import com.librestatic.opencinecam.ui.LocalScrollLongText
+import com.librestatic.opencinecam.ui.predictiveBackPreview
+import com.librestatic.opencinecam.ui.rememberAppHaptics
+import com.librestatic.opencinecam.ui.rememberPermissionAccess
+import com.librestatic.opencinecam.ui.rememberPredictiveBack
 import kotlinx.coroutines.flow.MutableStateFlow
 
 @Composable

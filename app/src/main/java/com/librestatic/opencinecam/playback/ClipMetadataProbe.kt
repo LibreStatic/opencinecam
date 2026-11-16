@@ -49,7 +49,7 @@ fun probeClipMetadata(context: Context, uri: String, log: OcLogClip?): ClipMetad
 }
 
 /** Blocking; the first audio track of [uri], or null when there is none or it cannot be read. */
-internal fun probeAudioMetadata(context: Context, uri: String): com.librestatic.opencinecam.AudioMetadata? {
+internal fun probeAudioMetadata(context: Context, uri: String): com.librestatic.opencinecam.gallery.AudioMetadata? {
     val extractor = MediaExtractor()
     return try {
         extractor.setDataSource(context, Uri.parse(uri), null)
@@ -63,7 +63,7 @@ internal fun probeAudioMetadata(context: Context, uri: String): com.librestatic.
             android.media.AudioFormat.ENCODING_PCM_32BIT, android.media.AudioFormat.ENCODING_PCM_FLOAT -> 32
             else -> format.intOrNull("bits-per-sample")
         }
-        com.librestatic.opencinecam.AudioMetadata(format.getString(MediaFormat.KEY_MIME), format.intOrNull(MediaFormat.KEY_SAMPLE_RATE),
+        com.librestatic.opencinecam.gallery.AudioMetadata(format.getString(MediaFormat.KEY_MIME), format.intOrNull(MediaFormat.KEY_SAMPLE_RATE),
             format.intOrNull(MediaFormat.KEY_CHANNEL_COUNT), depth, float = pcm == android.media.AudioFormat.ENCODING_PCM_FLOAT,
             bitRate = format.intOrNull(MediaFormat.KEY_BIT_RATE), durationUs = format.longOrNull(MediaFormat.KEY_DURATION)?.takeIf { it > 0 })
     } catch (_: Exception) {

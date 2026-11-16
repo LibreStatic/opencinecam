@@ -7,8 +7,8 @@ import android.provider.MediaStore
 import android.util.AtomicFile
 import androidx.core.net.toUri
 import androidx.test.platform.app.InstrumentationRegistry
-import com.librestatic.opencinecam.GallerySettings
-import com.librestatic.opencinecam.ProxySettings
+import com.librestatic.opencinecam.gallery.GallerySettings
+import com.librestatic.opencinecam.gallery.ProxySettings
 import java.io.File
 import java.security.MessageDigest
 import java.util.UUID
@@ -75,7 +75,7 @@ class ProxyDeletionDeviceTest {
                 assertEquals(1, resolver.delete(result.proxyUri.toUri(), null, null))
                 assertArrayEquals(metadata, resolver.openInputStream(result.metadataUri.toUri())!!.use { it.readBytes() })
             }
-            val owner = ProxyJobQueue(store, engine, admission = { com.librestatic.opencinecam.ProxyWaitReason.CHARGING }).also { queue = it; it.start() }
+            val owner = ProxyJobQueue(store, engine, admission = { com.librestatic.opencinecam.gallery.ProxyWaitReason.CHARGING }).also { queue = it; it.start() }
             withTimeout(20_000) { owner.states.first { it.loaded || it.error != null } }
             if (!partial) owner.deleteProxy(selected, result)
             // A loaded emission can precede recovery completion; this reads after the queue gate retires.

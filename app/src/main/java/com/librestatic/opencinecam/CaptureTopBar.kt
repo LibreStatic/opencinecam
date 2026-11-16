@@ -50,6 +50,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.librestatic.opencinecam.service.CaptureService
 import com.librestatic.opencinecam.storage.LocalMediaRepository
 import com.librestatic.opencinecam.subject.OutOfFrameHudChip
+import com.librestatic.opencinecam.ui.CineGlyph
+import com.librestatic.opencinecam.ui.CineIcon
+import com.librestatic.opencinecam.ui.FitText
 import com.librestatic.opencinecam.camera.OpenCineLogSourcePath
 import com.librestatic.opencinecam.fold.DisplayOperation
 import com.librestatic.opencinecam.fold.DisplaySessionPhase

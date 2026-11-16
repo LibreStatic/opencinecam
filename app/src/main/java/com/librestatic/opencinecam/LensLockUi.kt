@@ -23,6 +23,9 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.librestatic.opencinecam.ui.CineGlyph
+import com.librestatic.opencinecam.ui.CineIcon
+import com.librestatic.opencinecam.ui.FitText
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
 import com.librestatic.opencinecam.ui.viewfinder.chromePanel
 import java.util.Locale

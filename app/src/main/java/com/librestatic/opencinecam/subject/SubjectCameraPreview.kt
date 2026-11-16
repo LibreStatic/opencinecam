@@ -37,8 +37,8 @@ import com.librestatic.opencinecam.fold.SubjectPreviewGuide
 import com.librestatic.opencinecam.liveCameraState
 import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.currentAudioMeterSnapshot
-import com.librestatic.opencinecam.CineGlyph
-import com.librestatic.opencinecam.CineIcon
+import com.librestatic.opencinecam.ui.CineGlyph
+import com.librestatic.opencinecam.ui.CineIcon
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 
