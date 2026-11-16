@@ -9,6 +9,8 @@
     <string name="raw_video_crop_note">Um recorte grava só o centro do sensor: a mesma leitura, um campo de visão mais estreito.</string>
     <string name="raw_video_config_frozen">A configuração muda entre takes.</string>
     <string name="raw_video_rate">%1$d MB/s</string>
+    <string name="raw_video_rate_compressed">%1$d MB/s (≈%2$d MB/s escritos)</string>
+    <string name="raw_video_rate_written">≈%1$d MB/s escritos</string>
     <string name="raw_video_rate_and_time">%1$s · restam %2$s</string>
     <string name="raw_video_label_crop">%1$s · recorte</string>
     <string name="raw_video_label_compressed">Comprimido</string>

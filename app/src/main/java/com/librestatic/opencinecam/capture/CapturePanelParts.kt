@@ -191,7 +191,7 @@ internal fun ChoiceTile(
             // A second, quieter line under the name: the pixels under "4K".
             detail?.let {
                 FitText(it, color = textColor.copy(alpha = textColor.alpha * 0.8f), fontSize = 12.sp, lineHeight = 14.sp,
-                    textAlign = TextAlign.Center, maxLines = 1)
+                    textAlign = TextAlign.Center, maxLines = 2)
             }
         }
     }

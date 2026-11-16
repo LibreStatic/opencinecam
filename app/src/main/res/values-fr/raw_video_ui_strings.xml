@@ -9,6 +9,8 @@
     <string name="raw_video_crop_note">Un recadrage n’enregistre que le centre du capteur : la même lecture, un champ de vision plus étroit.</string>
     <string name="raw_video_config_frozen">La configuration se change entre deux prises.</string>
     <string name="raw_video_rate">%1$d Mo/s</string>
+    <string name="raw_video_rate_compressed">%1$d Mo/s (≈%2$d Mo/s écrits)</string>
+    <string name="raw_video_rate_written">≈%1$d Mo/s écrits</string>
     <string name="raw_video_rate_and_time">%1$s · %2$s restantes</string>
     <string name="raw_video_label_crop">%1$s · recadrage</string>
     <string name="raw_video_label_compressed">Compressé</string>
