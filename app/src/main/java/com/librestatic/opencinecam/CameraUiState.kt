@@ -193,6 +193,13 @@ data class CameraUiState(
     val analysisSuspension: com.librestatic.opencinecam.camera.AnalysisSuspension = com.librestatic.opencinecam.camera.AnalysisSuspension.NONE,
     val audioLevels: AudioLevelSnapshot? = null,
     val audioClipLatched: Boolean = false,
+    /** Which side of the processing latched [audioClipLatched]: the microphone's samples, the recorded ones, or both. */
+    val audioInputClipLatched: Boolean = false,
+    val audioRecordedClipLatched: Boolean = false,
+    /** PLAN-074 decision 14: the microphone clipped before the app (flat runs below full scale); held 5 s after the last sign. */
+    val audioInputOverloaded: Boolean = false,
+    /** PLAN-074 decision 4: the low-latency input was asked for, but the monitor or the take records through AudioRecord. */
+    val audioInputFallback: Boolean = false,
     val audioMonitoringActive: Boolean = false,
     val audioListeningStatus: AudioListeningStatus = AudioListeningStatus(),
     val audioListeningOutputs: List<AudioListeningDevice> = emptyList(),

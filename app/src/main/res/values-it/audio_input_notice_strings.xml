@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- PLAN-074: capture notices about the microphone input, under the zoom. -->
+    <string name="audio_input_overload">Microfono saturo: riduci il livello o cambia ingresso</string>
+    <string name="audio_input_fallback">Senza microfono diretto: ingresso standard</string>
+</resources>

@@ -10,6 +10,9 @@ import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.AudioManager
+import com.librestatic.opencinecam.media.audio.PcmInput
+import com.librestatic.opencinecam.media.audio.PcmInputTimestamp
+import com.librestatic.opencinecam.media.audio.audioRouting
 import android.media.audiofx.AudioEffect
 import android.media.audiofx.AutomaticGainControl
 import android.media.audiofx.NoiseSuppressor
@@ -1039,7 +1042,7 @@ class OpenCineLogGpuPipeline(
                     // Own before configuration: a throwing setter must not hide a live muxer.
                     muxer = MediaMuxer(ownedOutput.fileDescriptor, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
                     requireNotNull(muxer).setOrientationHint(geometry.containerRotationDegrees)
-                    val captureEpoch = separateAudioClock ?: audio?.let { CaptureEpochClock(cameraTimestampRealtime, it.sampleRateHz) }
+                    val captureEpoch = separateAudioClock ?: audio?.let { CaptureEpochClock(cameraTimestampRealtime, it.sampleRateHz, it.syncOffsetNs) }
                     embeddedAac = audio?.let {
                         EmbeddedAac.create(requireNotNull(appContext) { "An Android context is required for embedded AAC." }, it,
                             requireNotNull(aacCalibration), requireNotNull(captureEpoch), fileRetirement::noteFailure) { preparation.isCancelled || closed.get() }
@@ -2151,7 +2154,9 @@ class OpenCineLogGpuPipeline(
 
     private class EmbeddedAac(
         val codec: MediaCodec,
-        private val audioRecord: AudioRecord,
+        private val context: Context,
+        private val input: PcmInput,
+        private val equalizer: InputEqualizer?,
         private val sampleRateHz: Int,
         private val channels: Int,
         private val hardwareAgc: AutomaticGainControl?,
@@ -2171,7 +2176,7 @@ class OpenCineLogGpuPipeline(
         @Volatile private var stopThread: Thread? = null
         @Volatile private var stopFailure: Throwable? = null
         private var codecStarted = false
-        private val levelMeter = AudioLevelMeter(PcmMeterEncoding.PCM_16, channels, sampleRateHz = audioRecord.sampleRate)
+        private val levelMeter = AudioLevelMeter(PcmMeterEncoding.PCM_16, channels, sampleRateHz = input.sampleRateHz)
         @Volatile private var feederThread: Thread? = null
         @Volatile var submittedPcmFrames = 0L
             private set
@@ -2181,38 +2186,40 @@ class OpenCineLogGpuPipeline(
         fun start(onFailure: (Throwable) -> Unit) {
             codec.start()
             codecStarted = true
-            audioRecord.startRecording()
-            check(audioRecord.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
-                "AudioRecord did not enter RECORDING state."
-            }
-            inputGuard?.attach(audioRecord, com.librestatic.opencinecam.media.audio.AudioCapturePath.AUDIO_RECORD)
+            input.start()
+            inputGuard?.attach(input.audioRouting(context), com.librestatic.opencinecam.media.audio.AudioCapturePath.AUDIO_RECORD)
             val startedAtNs = android.os.SystemClock.elapsedRealtimeNanos()
             val pcmEpoch = PcmCaptureEpoch(sampleRateHz)
-            val timestamp = android.media.AudioTimestamp()
+            val readEpoch = PcmReadEpochEstimate(sampleRateHz, ESTIMATED_AUDIO_ANCHOR_DELAY_NS)
+            val timestamp = PcmInputTimestamp()
             feederThread = Thread({
                 var submittedFrames = 0L
                 var capturedFrames = 0L
                 var inFlightReadFrames = 0
+                var readFrames = 0L
                 val frameBytes = PCM_BYTES_PER_SAMPLE * channels
                 val buffer = ByteBuffer.allocateDirect(calibration.config.maxInputBytes / frameBytes * frameBytes)
                 try {
                     while (!stopRequested.get()) {
                         buffer.clear()
-                        val read = audioRecord.read(buffer, buffer.capacity(), AudioRecord.READ_BLOCKING)
+                        val read = input.read(buffer, buffer.capacity())
                         if (read <= 0) {
                             if (stopRequested.get()) break
-                            if (read == AudioRecord.ERROR_DEAD_OBJECT || read == AudioRecord.ERROR_INVALID_OPERATION) {
-                                error("AudioRecord read failed with code $read.")
+                            if (read == PcmInput.ERROR_DEAD || read == PcmInput.ERROR_INVALID) {
+                                error("PCM input read failed with code $read.")
                             }
                             continue
                         }
-                        check(read % (PCM_BYTES_PER_SAMPLE * channels) == 0) { "AudioRecord returned a partial PCM frame" }
+                        check(read % (PCM_BYTES_PER_SAMPLE * channels) == 0) { "PCM input returned a partial PCM frame" }
                         inFlightReadFrames = read / frameBytes
-                        val stampResult = audioRecord.getTimestamp(timestamp, android.media.AudioTimestamp.TIMEBASE_BOOTTIME)
-                        if (stampResult == AudioRecord.SUCCESS) {
+                        readFrames += inFlightReadFrames
+                        val returnedAtNs = android.os.SystemClock.elapsedRealtimeNanos()
+                        readEpoch.observeRead(readFrames, returnedAtNs)
+                        if (input.timestamp(timestamp)) {
                             captureEpoch.audioInput(pcmEpoch.observe(timestamp.framePosition, timestamp.nanoTime))
-                        } else if (pcmEpoch.current() == null && android.os.SystemClock.elapsedRealtimeNanos() - startedAtNs >= ESTIMATED_AUDIO_ANCHOR_DELAY_NS) {
-                            captureEpoch.audioInput(pcmEpoch.estimate(startedAtNs))
+                        } else if (pcmEpoch.current() == null && readEpoch.settled(returnedAtNs)) {
+                            // Frozen only once the read estimate has seen its whole window, which opens at the first read.
+                            captureEpoch.audioInput(pcmEpoch.estimate(readEpoch.frameZeroNs() ?: startedAtNs))
                         }
                         val platformAgc = hardwareAgcReader.read()
                         requireExclusiveAgcObservation(platformAgc, hardwareAgc != null, recordingGain.enabled, softAgc != null)
@@ -2221,6 +2228,7 @@ class OpenCineLogGpuPipeline(
                         val observedEffects = AudioEffectsSnapshot(effectReaders[0].read(), appliedAgc, effectReaders[2].read())
                         inputGuard?.silenceIfMuted(buffer, read)
                         levelMeter.observeInput(buffer, read)
+                        equalizer?.process(buffer, read, PcmMeterEncoding.PCM_16)
                         softAgc?.processPcm16(buffer, read)
                         recordingGain.process(buffer, read, PcmMeterEncoding.PCM_16, channels)
                         listeningSink.offerListening(buffer, read, PcmMeterEncoding.PCM_16, sampleRateHz, channels)
@@ -2254,7 +2262,7 @@ class OpenCineLogGpuPipeline(
                     else android.util.Log.w(LOG_TAG, "AAC feeder failure after stop request; $inFlightReadFrames read PCM frames " +
                         "were not selected (captured=$capturedFrames, submitted=$submittedFrames).", failure)
                 } finally {
-                    if (pcmEpoch.current() == null) captureEpoch.audioInput(pcmEpoch.estimate(startedAtNs))
+                    if (pcmEpoch.current() == null) captureEpoch.audioInput(pcmEpoch.estimate(readEpoch.frameZeroNs() ?: startedAtNs))
                     stopDeadline.begin()
                     runCatching {
                         // Explicit codec drain samples are not captured PCM and never enter the meter or capture clock.
@@ -2289,7 +2297,7 @@ class OpenCineLogGpuPipeline(
             if (!stopRequested.compareAndSet(false, true)) return
             stopDeadline.begin()
             stopThread = Thread({
-                try { if (audioRecord.recordingState == AudioRecord.RECORDSTATE_RECORDING) audioRecord.stop() }
+                try { input.stop() }
                 catch (failure: Throwable) { stopFailure = failure }
             }, "OpenCineCamAacStop").apply { isDaemon = true; start() }
         }
@@ -2307,7 +2315,7 @@ class OpenCineLogGpuPipeline(
             }
             release { inputGuard?.detach() }
             effects.forEach { effect -> release { effect.release() } }
-            release { audioRecord.release() }
+            release { input.close() }
             release { if (codecStarted) codec.stop() }
             release { codec.release() }
             failure?.let { throw it }
@@ -2340,29 +2348,32 @@ class OpenCineLogGpuPipeline(
             fun create(context: Context, config: Camera2EmbeddedAudioConfig, calibration: AacCodecCalibration, captureEpoch: CaptureEpochClock,
                 onRetirementFailure: (Throwable) -> Unit, isCancelled: () -> Boolean): EmbeddedAac {
                 requireRecordAudio(context)
-                val channelMask = channelMask(config)
                 val minimum = minimumBufferBytes(config)
                 check(calibration.config.sampleRateHz == config.sampleRateHz && calibration.config.channels == config.channels &&
                     calibration.config.bitrateBps == config.bitrateBps && calibration.config.maxInputBytes == minimum * 2) {
                     "AAC calibration does not match the requested audio configuration"
                 }
+                val device = config.preferredInputDeviceId?.let { requestedId ->
+                    context.getSystemService(AudioManager::class.java)
+                        .getDevices(AudioManager.GET_DEVICES_INPUTS)
+                        .firstOrNull { it.id == requestedId }
+                        ?: error("Requested audio input $requestedId is no longer connected.")
+                }
                 check(!isCancelled()) { "Recording preparation was cancelled" }
-                val audioRecord = AudioRecord.Builder()
-                    .setAudioSource(config.source)
-                    .setAudioFormat(
-                        AudioFormat.Builder()
-                            .setSampleRate(config.sampleRateHz)
-                            .setChannelMask(channelMask)
-                            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                            .build(),
-                    )
-                    .setBufferSizeInBytes(minimum * 2)
-                    .build()
+                val opened = com.librestatic.opencinecam.media.audio.PcmInputs.open(com.librestatic.opencinecam.media.audio.PcmInputRequest(
+                    source = config.sourceSelection ?: com.librestatic.opencinecam.media.audio.AudioSourceSelection.MIC,
+                    sampleRateHz = config.sampleRateHz,
+                    channels = config.channels,
+                    encoding = AudioFormat.ENCODING_PCM_16BIT,
+                    bufferBytes = minimum * 2,
+                    preferredDevice = device,
+                    androidSource = config.source,
+                    formatCheck = com.librestatic.opencinecam.media.audio.PcmFormatCheck.SAMPLE_RATE,
+                ))
+                val input = opened.input
                 var hardwareAgc: AutomaticGainControl? = null
                 val effects = mutableListOf<AudioEffect>()
                 try {
-                check(audioRecord.state == AudioRecord.STATE_INITIALIZED) { "AudioRecord initialization failed." }
-                check(audioRecord.sampleRate == config.sampleRateHz) { "AudioRecord sample rate differs from the configured AAC rate" }
                 fun observeOptional(available: () -> Boolean, create: () -> AudioEffect?, requested: Boolean): Pair<AudioEffect?, AudioEffectObservationReader> {
                     var failed = false
                     val supported = try { available() } catch (_: Throwable) { failed = true; null }
@@ -2376,24 +2387,26 @@ class OpenCineLogGpuPipeline(
                     }
                     return effect to AudioEffectObservationReader(requested, effect, supported, failed)
                 }
-                val ns = observeOptional(NoiseSuppressor::isAvailable, { NoiseSuppressor.create(audioRecord.audioSessionId) }, config.enableNoiseSuppressor)
-                val aec = observeOptional(AcousticEchoCanceler::isAvailable, { AcousticEchoCanceler.create(audioRecord.audioSessionId) }, config.enableAcousticEchoCanceler)
+                // An input without a session (the low-latency one) carries no platform effects: they read
+                // UNAVAILABLE, and software AGC stands in for the hardware one.
+                val session = input.audioSessionId
+                val ns = observeOptional({ session != null && NoiseSuppressor.isAvailable() },
+                    { session?.let { NoiseSuppressor.create(it) } }, config.enableNoiseSuppressor)
+                val aec = observeOptional({ session != null && AcousticEchoCanceler.isAvailable() },
+                    { session?.let { AcousticEchoCanceler.create(it) } }, config.enableAcousticEchoCanceler)
                 val agc = if (config.recordingGain.enabled) {
-                    val supported = AutomaticGainControl.isAvailable()
-                    createDisabledManualAgc(audioRecord.audioSessionId) { hardwareAgc = it; effects += it }
+                    val supported = session != null && AutomaticGainControl.isAvailable()
+                    if (session != null) createDisabledManualAgc(session) { hardwareAgc = it; effects += it }
                     hardwareAgc to AudioEffectObservationReader(config.enableAutomaticGainControl, hardwareAgc, supported)
-                } else observeOptional(AutomaticGainControl::isAvailable, { AutomaticGainControl.create(audioRecord.audioSessionId) }, config.enableAutomaticGainControl)
+                } else observeOptional({ session != null && AutomaticGainControl.isAvailable() },
+                    { session?.let { AutomaticGainControl.create(it) } }, config.enableAutomaticGainControl)
                 hardwareAgc = agc.first as AutomaticGainControl?
                 val initialAgc = agc.second.read()
                 val softwareAgc = if (!config.recordingGain.enabled && config.enableAutomaticGainControl &&
                     (hardwareAgc == null || initialAgc.state == AudioEffectState.DISABLED)) SoftAgc(config.sampleRateHz, config.channels) else null
-                config.preferredInputDeviceId?.let { requestedId ->
-                        val device = context.getSystemService(AudioManager::class.java)
-                            .getDevices(AudioManager.GET_DEVICES_INPUTS)
-                            .firstOrNull { it.id == requestedId }
-                            ?: error("Requested audio input $requestedId is no longer connected.")
-                        check(audioRecord.setPreferredDevice(device)) { "AudioRecord rejected audio input $requestedId." }
-                    }
+                // The evidence carries the curve applied on the path that opened, so the take record and the PCM agree.
+                val evidence = pcmInputEvidence(config.sourceSelection?.name ?: "SOURCE_${config.source}", opened, config.eqCurve, config.eqProfileId)
+                val equalizer = evidence.inputEqualizer(config.sampleRateHz, config.channels)
                     val codec = MediaCodec.createByCodecName(calibration.config.codecName)
                     try {
                         codec.configure(
@@ -2402,8 +2415,14 @@ class OpenCineLogGpuPipeline(
                             null,
                             MediaCodec.CONFIGURE_FLAG_ENCODE,
                         )
-                        return EmbeddedAac(codec, audioRecord, config.sampleRateHz, config.channels, hardwareAgc,
+                        val aac = EmbeddedAac(codec, context, input, equalizer, config.sampleRateHz, config.channels, hardwareAgc,
                             effects, listOf(ns.second, agc.second, aec.second), agc.second, softwareAgc, config.onAudioLevel, config.recordingGain, config.listeningSink, captureEpoch, calibration, config.inputGuard)
+                        config.onInputOpened?.let { report ->
+                            runCatching {
+                                report(evidence)
+                            }.onFailure { android.util.Log.w(LOG_TAG, "Embedded audio input evidence was not recorded.", it) }
+                        }
+                        return aac
                     } catch (failure: Throwable) {
                         try { codec.release() } catch (cleanup: Throwable) {
                             onRetirementFailure(cleanup); if (cleanup !== failure) failure.addSuppressed(cleanup)
@@ -2411,7 +2430,7 @@ class OpenCineLogGpuPipeline(
                         throw failure
                     }
                 } catch (failure: Throwable) {
-                    for (release in effects.map { effect -> { effect.release() } } + { audioRecord.release() }) {
+                    for (release in effects.map { effect -> { effect.release() } } + { input.close() }) {
                         try { release() } catch (cleanup: Throwable) {
                             onRetirementFailure(cleanup); if (cleanup !== failure) failure.addSuppressed(cleanup)
                         }
@@ -2526,21 +2545,26 @@ class OpenCineLogGpuPipeline(
         private const val CODEC_TIMEOUT_US = 20_000L
         private const val CODEC_STOP_TIMEOUT_NS = 5_000_000_000L
         private const val LOG_TAG = "OpenCineLogGpuPipeline"
-        /** Without an AudioTimestamp the PCM origin is estimated on the first read completing after this delay. */
+        /**
+         * Without an AudioTimestamp the PCM origin is estimated from the reads returning in this window after the
+         * first one ([PcmReadEpochEstimate]), and frozen on the first read completing after it.
+         */
         internal const val ESTIMATED_AUDIO_ANCHOR_DELAY_NS = 500_000_000L
         internal const val MIN_PENDING_MUX_SAMPLES = 64
 
         /**
          * Pre-start mux queue bound. Samples queue until both formats and both capture anchors exist; with no
-         * AudioTimestamp the audio anchor arrives on the first PCM read completing after the estimate delay, i.e.
-         * up to delay + one read period after the feeder starts. Allow that window plus 0.5 s of drain/encoder
-         * latency at the video rate and the AAC packet rate (1024 PCM frames per packet). Examples: 60 fps,
-         * 48 kHz, 80 ms reads -> 1.08 s -> 65 + 51 = 116; 30 fps -> 84; video-only keeps the historical 64.
+         * AudioTimestamp the audio anchor arrives on the first PCM read completing after the estimate window, which
+         * opens at the first read: up to one read period (plus the input's start-up latency) for the first read,
+         * then the delay and one more read period after the feeder starts. Allow that window plus 0.5 s of
+         * drain/encoder latency, which also absorbs the start-up latency, at the video rate and the AAC packet rate
+         * (1024 PCM frames per packet). Examples: 60 fps, 48 kHz, 80 ms reads -> 1.16 s -> 70 + 55 = 125;
+         * 30 fps -> 90; video-only keeps the historical 64.
          */
         internal fun maxPendingMuxSamples(videoFps: Int, audioRateHz: Int?, audioReadFrames: Int?): Int {
             // Non-throwing: evaluated before drain()'s cleanup scope.
             if (audioRateHz == null || audioReadFrames == null || audioRateHz <= 0 || audioReadFrames <= 0) return MIN_PENDING_MUX_SAMPLES
-            val windowNs = ESTIMATED_AUDIO_ANCHOR_DELAY_NS + pcmFrameDurationNs(audioReadFrames.toLong(), audioRateHz) + 500_000_000L
+            val windowNs = ESTIMATED_AUDIO_ANCHOR_DELAY_NS + 2 * pcmFrameDurationNs(audioReadFrames.toLong(), audioRateHz) + 500_000_000L
             fun perWindow(ratePerSecond: Double) = kotlin.math.ceil(ratePerSecond * windowNs / 1_000_000_000.0).toInt()
             return maxOf(MIN_PENDING_MUX_SAMPLES, perWindow(videoFps.coerceAtLeast(1).toDouble()) + perWindow(audioRateHz / 1024.0))
         }

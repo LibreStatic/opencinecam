@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="audio_sync_offset_title">Audio sync offset</string>
+    <string name="audio_sync_offset_help">Shifts where the recorded audio sits against the picture, for microphones whose delay the app cannot measure, such as Bluetooth and some USB microphones. If you hear sound before you see it, move the audio later; if you hear it after, move it earlier. Check with a clap or a slate on a test take.</string>
+    <string name="audio_sync_offset_none">No offset</string>
+    <string name="audio_sync_offset_later">Audio %1$d ms later</string>
+    <string name="audio_sync_offset_earlier">Audio %1$d ms earlier</string>
+    <string name="audio_sync_offset_minus">1 ms earlier</string>
+    <string name="audio_sync_offset_plus">1 ms later</string>
+    <string name="audio_sync_offset_reset">Reset</string>
+    <string name="audio_sync_offset_scope">Applies to audio embedded in the video and to RAW video. Separate WAV and FLAC files are not shifted; the offset is saved in the take record.</string>
+    <string name="audio_sync_offset_pending">The new offset applies from the next take. This take keeps the offset it started with.</string>
+</resources>

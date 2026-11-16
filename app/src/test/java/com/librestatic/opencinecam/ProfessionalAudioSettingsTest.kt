@@ -112,4 +112,29 @@ class ProfessionalAudioSettingsTest {
         }
     }
 
+    @Test
+    fun anUnavailableSourcePrefersCamcorderWhenOffered() {
+        val withCamcorder = capabilities.copy(sources = listOf(AudioSourceSelection.CAMCORDER, AudioSourceSelection.VOICE_RECOGNITION, AudioSourceSelection.MIC))
+        assertEquals(AudioSourceSelection.CAMCORDER,
+            CameraSettings(audioSource = AudioSourceSelection.LOW_LATENCY).normalizedFor(withCamcorder).audioSource)
+        assertEquals(AudioSourceSelection.MIC,
+            CameraSettings(audioSource = AudioSourceSelection.MIC).normalizedFor(withCamcorder).audioSource)
+        assertEquals(AudioSourceSelection.MIC,
+            CameraSettings(audioSource = AudioSourceSelection.UNPROCESSED).normalizedFor(capabilities.copy(sources = emptyList())).audioSource)
+    }
+
+    @Test
+    fun theEqualiserCurveRoundTripsAndAnUnreadableOneLoadsFlat() {
+        val curve = com.librestatic.opencinecam.camera.EqCurve(
+            points = listOf(com.librestatic.opencinecam.camera.EqPoint.coerced(com.librestatic.opencinecam.camera.EqFilterType.BELL, 2_500.0, -3.0, 1.4)),
+            trimDb = 2.0,
+        )
+        val prefs = PresetPreferences()
+        CameraSettingsStore(prefs).save(CameraSettings(audioEqCurve = curve))
+        assertTrue((prefs.all["audio-eq-curve"] as String).contains("BELL"))
+        assertEquals(curve, CameraSettingsStore(prefs).load().audioEqCurve)
+        assertEquals(com.librestatic.opencinecam.camera.EqCurve(),
+            CameraSettingsStore(PresetPreferences(mapOf("audio-eq-curve" to "{broken"))).load().audioEqCurve)
+        assertEquals(com.librestatic.opencinecam.camera.EqCurve(), CameraSettingsStore(PresetPreferences()).load().audioEqCurve)
+    }
 }

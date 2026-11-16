@@ -162,6 +162,10 @@ class DeviceProfilesTest {
         assertEquals(QuirkEffect.MOTO_HIGH_SPEED_SESSION_KEYS, QuirkEffect.fromId("moto-high-speed-session-keys"))
         assertEquals("qti-raw-frame-rate-override", QuirkEffect.QTI_RAW_FRAME_RATE_OVERRIDE.id)
         assertEquals(QuirkEffect.QTI_RAW_FRAME_RATE_OVERRIDE, QuirkEffect.fromId("qti-raw-frame-rate-override"))
+        assertEquals("audio-default-low-latency-input", QuirkEffect.AUDIO_DEFAULT_LOW_LATENCY_INPUT.id)
+        assertEquals(QuirkEffect.AUDIO_DEFAULT_LOW_LATENCY_INPUT, QuirkEffect.fromId("audio-default-low-latency-input"))
+        assertEquals("audio-unprocessed-source-clips", QuirkEffect.AUDIO_UNPROCESSED_SOURCE_CLIPS.id)
+        assertEquals(QuirkEffect.AUDIO_UNPROCESSED_SOURCE_CLIPS, QuirkEffect.fromId("audio-unprocessed-source-clips"))
         assertNull(QuirkEffect.fromId("do-something-new"))
         assertNull(DeviceProfileQuirk("q", "recreate-session", true).knownEffect)
     }

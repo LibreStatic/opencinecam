@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="audio_sync_offset_title">Décalage de synchro audio</string>
+    <string name="audio_sync_offset_help">Décale le son enregistré par rapport à l\'image, pour les micros dont l\'application ne peut pas mesurer le retard, comme les micros Bluetooth et certains micros USB. Si le son arrive avant l\'image, retardez l\'audio ; s\'il arrive après, avancez-le. Vérifiez avec un clap ou une claquette sur une prise de test.</string>
+    <string name="audio_sync_offset_none">Aucun décalage</string>
+    <string name="audio_sync_offset_later">Audio retardé de %1$d ms</string>
+    <string name="audio_sync_offset_earlier">Audio avancé de %1$d ms</string>
+    <string name="audio_sync_offset_minus">Avancer de 1 ms</string>
+    <string name="audio_sync_offset_plus">Retarder de 1 ms</string>
+    <string name="audio_sync_offset_reset">Réinitialiser</string>
+    <string name="audio_sync_offset_scope">S\'applique à l\'audio intégré à la vidéo et à la vidéo RAW. Les fichiers WAV et FLAC séparés ne sont pas décalés ; le décalage est enregistré dans la fiche de la prise.</string>
+    <string name="audio_sync_offset_pending">Le nouveau décalage s\'applique à partir de la prochaine prise. Cette prise garde le décalage avec lequel elle a commencé.</string>
+</resources>

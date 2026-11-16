@@ -14,6 +14,7 @@ import android.graphics.Bitmap
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -86,6 +87,15 @@ class CaptureAdaptiveUiTest {
         composeRule.onNodeWithContentDescription("Stop recording").assertIsEnabled()
         composeRule.onNodeWithContentDescription(modeButton(CaptureMode.PHOTO)).assertIsNotDisplayed()
         composeRule.onNodeWithTag("recording-stop-glyph", useUnmergedTree = true).assertIsEnabled()
+    }
+
+    @Test
+    fun finalizingTakeShowsBusyStopThatDoesNotAnswer() {
+        setChrome(landscape = true, selectorStyle = ModeSelectorStyle.DIAL, phase = CameraUiPhase.RECORDING, recordingFinalizing = true)
+
+        composeRule.onNodeWithContentDescription("Stop recording").assertIsNotEnabled()
+        composeRule.onNodeWithTag("recording-stop-busy", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithTag("recording-stop-glyph", useUnmergedTree = true).assertDoesNotExist()
     }
 
     @Test
@@ -378,6 +388,7 @@ class CaptureAdaptiveUiTest {
         aeLockActive: Boolean = false,
         afLockSupported: Boolean = false,
         afLockState: LockState = LockState.OFF,
+        recordingFinalizing: Boolean = false,
     ) {
         composeRule.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(
@@ -409,6 +420,7 @@ class CaptureAdaptiveUiTest {
                         aeLockActive = aeLockActive,
                         afLockSupported = afLockSupported,
                         afLockState = afLockState,
+                        recordingFinalizing = recordingFinalizing,
                     ),
                     binder = null,
                     settings = CameraSettings(modeSelectorStyle = selectorStyle),

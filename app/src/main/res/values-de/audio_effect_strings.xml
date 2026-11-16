@@ -6,6 +6,7 @@
     <string name="audio_effect_aec">Akustische Echounterdrückung (AEC)</string>
     <string name="audio_effect_help">Nur der aktuelle PCM-Erzeuger meldet diese Beobachtungen. Verfügbarkeit und Anforderungen belegen keine Anwendung. Ohne PCM-Beleg, auch bei MediaRecorder, wird die Verarbeitung nicht beobachtet; Gleichwertigkeit der Backends wird nicht vorausgesetzt.</string>
     <string name="audio_effect_request_help">Anforderung für die nächste Audiokonfiguration; der beobachtete Zustand wird separat angezeigt.</string>
+    <string name="audio_effect_not_with_input">Mit diesem Eingang nicht verfügbar.</string>
     <string name="audio_effect_manual">Die manuelle Aufnahmeverstärkung setzt die AGC-Anforderung für die nächste Konfiguration aus. Der aktuelle Beleg kann weiterhin den bereits festgelegten Take beschreiben.</string>
     <string name="audio_effect_yes">Ja</string>
     <string name="audio_effect_no">No</string>

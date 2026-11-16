@@ -297,7 +297,7 @@ Step 0 (the SAF, `MediaMuxer`, `ftruncate` and unplug probe) is recorded in OCC-
 | FAT32 rejection | Pick a folder on the FAT32 stick | The FAT32 message; the destination stays Phone; no probe file is left on the stick |
 | Long take | 10 min 4K MP4 with WAV, then FLAC | One folder per take with MP4, audio and sidecars; the MP4 plays on a computer; the HUD shows `USB` and the drive's free space |
 | Still | One photo, one burst, one DNG | Files under `OpenCineCam/Stills/<stem>/`; nothing in the phone's DCIM |
-| No drive at start | Unplug, start a take | The amber `PHONE` chip and the fallback notice idle; the take records to the phone with the notice on the warning line |
+| No drive at start | Unplug, start a take | The neutral "Internal storage" chip and no notice idle; the take records to the phone with the notice on the warning line |
 | Pull mid-take | Pull the drive (or the hub cable) during a take | The take stops within a second or two with "the USB drive was disconnected"; the app does not hang in Stopping (watch for `MediaMuxer` blocking on ENODEV) |
 | Physical pull, app stays alive | Pull the drive cable (not `sm unmount`) during a take, with `adb logcat` running | The app stays alive and the take stops as above; logcat shows "Closed N descriptor(s) on the drive" from `RecordingDestination` and no `vold: Sending Interrupt to pid <ours>` |
 | Recovery on replug | Plug the drive back without restarting the app | "Interrupted takes recovered from the USB drive: 1"; the MP4 is repaired or kept as incomplete; the marker is gone |
@@ -311,7 +311,7 @@ None has run yet. Set Settings > Recording > If the drive disconnects to Continu
 
 | Case | Steps | Expected |
 |---|---|---|
-| MP4 pull mid-take | Record 4K VIDEO with WAV audio to the drive, pull the drive after 30 s | The drive part stops and is kept; within about 1–2 s a take `<stem>_cont1.mp4` (and its WAV) records to the phone with the amber `PHONE` chip and "Drive disconnected: continuing on the phone"; same take number on the slate; timecode carries on; `<stem>_cont1.clip.json` has `continuation.of` = the drive take's recordingId and `previousName` its file; on replug the drive part is recovered |
+| MP4 pull mid-take | Record 4K VIDEO with WAV audio to the drive, pull the drive after 30 s | The drive part stops and is kept; within about 1–2 s a take `<stem>_cont1.mp4` (and its WAV) records to the phone with the amber "Internal storage" chip and "Drive disconnected: continuing on the phone"; same take number on the slate; timecode carries on; `<stem>_cont1.clip.json` has `continuation.of` = the drive take's recordingId and `previousName` its file; on replug the drive part is recovered |
 | Write failure first | Pull the drive so the write fails before the volume event (watch for ENODEV in logcat) | One continuation only, whichever trigger comes first; no second `_cont` take |
 | LOG and HLG | Repeat the pull in LOG and in HLG | The continuation keeps the mode, LUT and colour; its sidecar validates |
 | RAW qualified on the phone | RAW video at a configuration qualified on both, pull the drive | A phone `.ocraw` take `<stem>_cont1.ocraw` starts in `Documents/OpenCineCam/RAW/` with `continuationOf` in its static metadata; the drive `.ocraw` is repaired on replug |
@@ -331,5 +331,5 @@ None has run yet. Use a fast USB SSD (exFAT, powered hub) on a phone with RAW vi
 | Qualify the drive | Start the qualification from the prompt | The step shows the drive's free space and "Testing the USB drive …"; scratch files appear under `<picked>/OpenCineCam/.occ-qualify/` during the run and are gone after it; RES/FPS then offers what the drive passed |
 | Full-sensor 30 fps take | Record 2 min of full-sensor RAW at 30 fps | `USB` chip and the drive's free space and minutes left; `<picked>/OpenCineCam/<stem>/<stem>.ocraw` with no marker; the gallery and the desktop converter read it with no missing frame |
 | Pull mid-take, replug | Pull the drive during a RAW take, then plug it back without restarting the app | The take stops with "the USB drive was disconnected" and "will be recovered when the USB drive is connected again"; no crash in Stopping; on replug "Interrupted takes recovered from the USB drive: 1" and the `.ocraw` plays up to the pull, marker gone |
-| Drive absent | Unplug the drive, choose RAW video | Amber `PHONE` chip and the notice; RAW video uses the phone's qualified configurations and records to `Documents/OpenCineCam/RAW/` |
+| Drive absent | Unplug the drive, choose RAW video | The neutral "Internal storage" chip and no notice; RAW video uses the phone's qualified configurations and records to `Documents/OpenCineCam/RAW/` |
 | Killed qualification | Force-stop the app during a drive qualification, then replug the drive or start another qualification | `.occ-qualify` is emptied; nothing else on the drive changes |

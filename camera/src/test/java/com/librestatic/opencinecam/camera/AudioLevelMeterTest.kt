@@ -3,6 +3,10 @@ package com.librestatic.opencinecam.camera
 
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import kotlin.math.PI
+import kotlin.math.roundToInt
+import kotlin.math.sin
+import kotlin.random.Random
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -51,6 +55,24 @@ class AudioLevelMeterTest {
         assertFalse(snapshot.clipped)
     }
 
+    @Test fun `tells a clipped input from clipped recorded samples`() {
+        fun pcm(sample: Short) = ByteBuffer.allocateDirect(2).order(ByteOrder.LITTLE_ENDIAN).apply { putShort(sample) }
+        // Only the processed samples reach full scale, as a gain pushed too far does.
+        val boosted = AudioLevelMeter(PcmMeterEncoding.PCM_16, 1).run {
+            observeInput(pcm(8_000), 2)
+            analyze(pcm(Short.MAX_VALUE), 2, 0L)!!
+        }
+        assertTrue(boosted.clipped)
+        assertFalse(boosted.inputClipped)
+        assertTrue(boosted.recordedClipped)
+        // A source that never shows its input counts everything as recorded.
+        val unobserved = AudioLevelMeter(PcmMeterEncoding.PCM_16, 1).analyze(pcm(Short.MAX_VALUE), 2, 0L)!!
+        assertFalse(unobserved.inputClipped)
+        assertTrue(unobserved.recordedClipped)
+        val quiet = AudioLevelMeter(PcmMeterEncoding.PCM_16, 1).run { observeInput(pcm(8_000), 2); analyze(pcm(8_000), 2, 0L)!! }
+        assertFalse(quiet.clipped || quiet.inputClipped || quiet.recordedClipped)
+    }
+
     @Test fun `publishes at no more than ten hertz`() {
         val pcm = ByteBuffer.allocateDirect(2).order(ByteOrder.LITTLE_ENDIAN).apply { putShort(1) }
         val meter = AudioLevelMeter(PcmMeterEncoding.PCM_16, 1)
@@ -67,6 +89,8 @@ class AudioLevelMeterTest {
             DigitalRecordingGain(true, -24).process(input, input.capacity(), encoding, 2)
             val snapshot = meter.analyze(input, input.capacity(), 0)!!
             assertTrue("Input clipping must survive $encoding attenuation", snapshot.clipped)
+            assertTrue(snapshot.inputClipped)
+            assertFalse("The attenuated samples that are recorded did not clip", snapshot.recordedClipped)
             snapshot.channels.forEach { level ->
                 assertEquals(-24f, level.peakDbfs, .02f)
                 assertEquals(-24f, level.rmsDbfs, .02f)
@@ -151,4 +175,99 @@ class AudioLevelMeterTest {
                 PcmMeterEncoding.PCM_FLOAT -> { putFloat(1f); putFloat(-1f) }
             }
         }
+
+    // ---- input overload (clipping below full scale) ---------------------------------------------------
+
+    @Test fun `a sine clipped at -6 dBFS is an input overload and not a clip`() {
+        for (encoding in PcmMeterEncoding.entries) {
+            val snapshot = window(AudioLevelMeter(encoding, 1), encoding, clip(tone(1_000.0, amplitude = 1.0), .5))
+            assertTrue("$encoding", snapshot.inputOverloaded)
+            assertFalse("$encoding", snapshot.clipped)
+            assertFalse("$encoding", snapshot.inputClipped)
+        }
+    }
+
+    @Test fun `clean sines at -6 dBFS are not an overload`() {
+        for (encoding in PcmMeterEncoding.entries) {
+            for (frequency in listOf(50.0, 200.0, 1_000.0, 8_000.0)) {
+                for (phase in listOf(0.0, .1, .3, 1.3)) {
+                    val snapshot = window(AudioLevelMeter(encoding, 1), encoding, tone(frequency, phase = phase))
+                    assertFalse("$encoding $frequency Hz phase $phase", snapshot.inputOverloaded)
+                }
+            }
+        }
+    }
+
+    @Test fun `a quiet clipped signal under -12 dBFS is not an overload`() {
+        val snapshot = window(AudioLevelMeter(PcmMeterEncoding.PCM_16, 1), PcmMeterEncoding.PCM_16, clip(tone(1_000.0, amplitude = .4), .2))
+        assertFalse(snapshot.inputOverloaded)
+    }
+
+    @Test fun `clipping at full scale is an input clip and not an overload`() {
+        for (encoding in PcmMeterEncoding.entries) {
+            val snapshot = window(AudioLevelMeter(encoding, 1), encoding, clip(tone(1_000.0, amplitude = 2.0), 1.0))
+            assertTrue("$encoding", snapshot.inputClipped)
+            assertFalse("$encoding", snapshot.inputOverloaded)
+        }
+    }
+
+    @Test fun `white noise peaking at -6 dBFS is not an overload`() {
+        val random = Random(7)
+        val noise = DoubleArray(4_800) { random.nextDouble(-.5, .5) }
+        for (encoding in PcmMeterEncoding.entries) assertFalse("$encoding", window(AudioLevelMeter(encoding, 1), encoding, noise).inputOverloaded)
+    }
+
+    @Test fun `the overload flag clears on the next clean window`() {
+        val meter = AudioLevelMeter(PcmMeterEncoding.PCM_16, 1)
+        assertTrue(window(meter, PcmMeterEncoding.PCM_16, clip(tone(1_000.0, amplitude = 1.0), .5), 1_000L).inputOverloaded)
+        assertFalse(window(meter, PcmMeterEncoding.PCM_16, tone(1_000.0), 1_100L).inputOverloaded)
+        // An overload between publications is kept until the next published snapshot.
+        val clipped = encode(clip(tone(1_000.0, amplitude = 1.0), .5), PcmMeterEncoding.PCM_16)
+        meter.observeInput(clipped, clipped.capacity())
+        assertNull(meter.analyze(clipped, clipped.capacity(), 1_150L))
+        assertTrue(window(meter, PcmMeterEncoding.PCM_16, DoubleArray(4_800), 1_200L).inputOverloaded)
+        assertFalse(window(meter, PcmMeterEncoding.PCM_16, DoubleArray(4_800), 1_300L).inputOverloaded)
+    }
+
+    @Test fun `one saturated channel of two is enough`() {
+        val clean = tone(1_000.0)
+        val saturated = clip(tone(1_000.0, amplitude = 1.0), .5)
+        for (encoding in listOf(PcmMeterEncoding.PCM_16, PcmMeterEncoding.PCM_FLOAT)) {
+            assertTrue("$encoding", window(AudioLevelMeter(encoding, 2), encoding, interleave(clean, saturated)).inputOverloaded)
+            assertTrue("$encoding", window(AudioLevelMeter(encoding, 2), encoding, interleave(saturated, clean)).inputOverloaded)
+            assertFalse("$encoding", window(AudioLevelMeter(encoding, 2), encoding, interleave(clean, tone(200.0))).inputOverloaded)
+        }
+    }
+
+    /** One published window of [samples] (interleaved), observed as input and analysed unchanged. */
+    private fun window(meter: AudioLevelMeter, encoding: PcmMeterEncoding, samples: DoubleArray, at: Long = 0L): AudioLevelSnapshot {
+        val pcm = encode(samples, encoding)
+        meter.observeInput(pcm, pcm.capacity())
+        return meter.analyze(pcm, pcm.capacity(), at)!!
+    }
+
+    /** 100 ms of a sine at 48 kHz; the default amplitude is -6 dBFS. */
+    private fun tone(frequencyHz: Double, amplitude: Double = .5, phase: Double = 0.0): DoubleArray =
+        DoubleArray(4_800) { amplitude * sin(2 * PI * frequencyHz * it / 48_000 + phase) }
+
+    private fun clip(samples: DoubleArray, ceiling: Double): DoubleArray = DoubleArray(samples.size) { samples[it].coerceIn(-ceiling, ceiling) }
+
+    private fun interleave(left: DoubleArray, right: DoubleArray): DoubleArray =
+        DoubleArray(left.size * 2) { if (it % 2 == 0) left[it / 2] else right[it / 2] }
+
+    private fun encode(samples: DoubleArray, encoding: PcmMeterEncoding): ByteBuffer {
+        val buffer = ByteBuffer.allocateDirect(samples.size * encoding.bytesPerSample).order(ByteOrder.LITTLE_ENDIAN)
+        samples.forEachIndexed { index, value ->
+            val offset = index * encoding.bytesPerSample
+            when (encoding) {
+                PcmMeterEncoding.PCM_16 -> buffer.putShort(offset, (value * 32768).coerceIn(-32768.0, 32767.0).roundToInt().toShort())
+                PcmMeterEncoding.PCM_24 -> {
+                    val v = (value * 8388608).coerceIn(-8388608.0, 8388607.0).roundToInt()
+                    buffer.put(offset, v.toByte()); buffer.put(offset + 1, (v shr 8).toByte()); buffer.put(offset + 2, (v shr 16).toByte())
+                }
+                PcmMeterEncoding.PCM_FLOAT -> buffer.putFloat(offset, value.toFloat())
+            }
+        }
+        return buffer
+    }
 }

@@ -6,6 +6,7 @@
     <string name="audio_effect_aec">Annulation de l\'écho acoustique (AEC)</string>
     <string name="audio_effect_help">Seul le producteur PCM actuel signale ces observations. La disponibilité et les demandes ne prouvent pas l\'application. Sans accusé PCM, y compris avec MediaRecorder, le traitement n\'est pas observé ; la parité entre backends n\'est pas supposée.</string>
     <string name="audio_effect_request_help">Demande pour la prochaine configuration audio ; l\'état observé est affiché séparément.</string>
+    <string name="audio_effect_not_with_input">Non disponible avec cette entrée.</string>
     <string name="audio_effect_manual">Le gain d\'enregistrement manuel suspend la demande AGC pour la prochaine configuration. L\'accusé actuel peut encore décrire la prise figée.</string>
     <string name="audio_effect_yes">Oui</string>
     <string name="audio_effect_no">Non</string>

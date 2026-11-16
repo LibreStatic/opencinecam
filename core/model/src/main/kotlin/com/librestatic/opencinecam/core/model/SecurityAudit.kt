@@ -14,10 +14,14 @@ data class AuditFinding(
 
 /**
  * Explicit, off-by-default features that justify network or location permissions
- * (OCC-PRIV-001 as amended 2026-09-26, ADR-0027 amendment). A permission listed here
- * is only acceptable when its feature is declared in the audit input.
+ * (OCC-PRIV-001 as amended 2026-09-26, ADR-0027 amendment) or an exported component besides
+ * the launcher. A permission or component listed here is only acceptable when its feature is
+ * declared in the audit input.
  */
-enum class OptInFeature(val justifiedPermissions: Set<String>) {
+enum class OptInFeature(
+    val justifiedPermissions: Set<String>,
+    val justifiedExportedComponents: Set<String> = emptySet(),
+) {
     /**
      * OCC-PLAN-067 / ADR-0034: user-started HTTPS WebDAV transfers of finalized captures, and
      * the opt-in automatic upload of new takes (amendment 2026-10-19). The dataSync foreground
@@ -35,6 +39,13 @@ enum class OptInFeature(val justifiedPermissions: Set<String>) {
     GEOTAGGING(
         setOf("android.permission.ACCESS_COARSE_LOCATION", "android.permission.ACCESS_FINE_LOCATION"),
     ),
+
+    /**
+     * OCC-PLAN-072 / ADR-0037 decision 9: the no-display handler of `USB_DEVICE_ATTACHED` for mass
+     * storage, which the system can only start when it is exported. It is disabled in the manifest
+     * and enabled only while a USB folder is the recording destination.
+     */
+    USB_DRIVE_RECORDING(emptySet(), setOf(".UsbDriveAttachAlias")),
 }
 
 data class SecurityAuditInput(
@@ -85,6 +96,7 @@ object SecurityPrivacyAccessibilityAuditor {
 
     fun audit(input: SecurityAuditInput): SecurityAuditReport {
         val optInPermissions = input.declaredOptInFeatures.flatMapTo(mutableSetOf()) { it.justifiedPermissions }
+        val optInComponents = input.declaredOptInFeatures.flatMapTo(mutableSetOf()) { it.justifiedExportedComponents }
         val findings = listOf(
             check(
                 "SEC-NETWORK",
@@ -107,10 +119,10 @@ object SecurityPrivacyAccessibilityAuditor {
             check(
                 "SEC-COMPONENTS",
                 input.exportedComponents.all { (name, exported) ->
-                    !exported || name == input.launcherComponent
+                    !exported || name == input.launcherComponent || name in optInComponents
                 },
-                "only the deliberate launcher activity is exported",
-                "non-launcher component is exported",
+                "only the launcher activity and components justified by a declared opt-in feature are exported",
+                "a component is exported without being the launcher or justified by a declared opt-in feature",
             ),
             check(
                 "PRIV-CONSENT",

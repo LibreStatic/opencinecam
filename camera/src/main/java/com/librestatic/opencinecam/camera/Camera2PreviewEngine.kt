@@ -305,6 +305,19 @@ data class Camera2EmbeddedAudioConfig(
     val enableAcousticEchoCanceler: Boolean = false,
     /** Watches the take's routed input and applies the loss policy (OCC-AUDIO-012). */
     val inputGuard: com.librestatic.opencinecam.media.audio.AudioInputRouteGuard? = null,
+    /**
+     * The source the take asked for (PLAN-074 decision 2); [source] stays its platform value for
+     * MediaRecorder. Null reads [source] as a plain `AudioRecord` source.
+     */
+    val sourceSelection: com.librestatic.opencinecam.media.audio.AudioSourceSelection? = null,
+    /** The input equaliser the PCM path applies (PLAN-074 decision 6). */
+    val eqCurve: EqCurve = EqCurve(),
+    /** The profile [eqCurve] came from, for the take record; null for a custom curve. */
+    val eqProfileId: String? = null,
+    /** Told once what input the embedded AAC path opened, for the take record (decision 11). */
+    val onInputOpened: ((PcmInputEvidence) -> Unit)? = null,
+    /** The manual sync offset (PLAN-074 decision 12) the take's clock places the AAC track by; positive is later. */
+    val syncOffsetNs: Long = 0,
 )
 
 data class PhotoFlashReport(
@@ -4408,6 +4421,7 @@ class Camera2PreviewEngine(
         }
         latestEncodedProgress = null
         lastRecordingLutEvidence = null
+        lastDirectRecorderTiming = null
         cameraExecutor.execute {
             // Queue acceptance is not native admission: close or a preview replacement may
             // supersede this request before it gets the camera executor.
@@ -4416,6 +4430,7 @@ class Camera2PreviewEngine(
                 return@execute
             }
             try {
+                directRecorderAnchors = null
                 session?.stopRepeating()
                 session?.close()
                 session = null
@@ -4727,6 +4742,26 @@ class Camera2PreviewEngine(
     @Volatile private var lastCaptureEpochReport: CaptureEpochReport? = null
     fun consumeCaptureEpochReport(): CaptureEpochReport? = lastCaptureEpochReport.also { lastCaptureEpochReport = null }
 
+    /** Camera thread only; the capture callbacks armed while the recorder runs feed it. */
+    private class DirectRecorderAnchors {
+        var startElapsedNs = 0L
+        var firstFrameSensorNs: Long? = null
+        var lastFrameSensorNs: Long? = null
+        var frames = 0L
+        var drained = false
+        fun frame(sensorNs: Long) {
+            if (startElapsedNs == 0L) return
+            if (firstFrameSensorNs == null) firstFrameSensorNs = sensorNs
+            if (lastFrameSensorNs?.let { sensorNs > it } != false) lastFrameSensorNs = sensorNs
+            frames++
+        }
+        fun timing() = DirectRecorderTiming(startElapsedNs, firstFrameSensorNs, lastFrameSensorNs, frames, drained)
+    }
+    private var directRecorderAnchors: DirectRecorderAnchors? = null
+    @Volatile private var lastDirectRecorderTiming: DirectRecorderTiming? = null
+    /** The frame anchors of the constrained high-speed take MediaRecorder just finished; null for any other take. */
+    fun consumeDirectRecorderTiming(): DirectRecorderTiming? = lastDirectRecorderTiming.also { lastDirectRecorderTiming = null }
+
     fun consumeLastRecordingLutEvidence(): BakedLutEvidence? =
         lastRecordingLutEvidence.also { lastRecordingLutEvidence = null }
 
@@ -4809,6 +4844,7 @@ class Camera2PreviewEngine(
         val continuation = recorderDrainContinuation ?: return
         drainingRecorderSession = null
         recorderDrainContinuation = null
+        directRecorderAnchors?.drained = true
         continuation()
     }
 
@@ -4832,6 +4868,8 @@ class Camera2PreviewEngine(
             Log.w(TAG, "MediaRecorder stop failed", failure)
         }
         Log.i(TAG, "Recorder take stopped: success=$success highSpeed=${activeVideoProfile?.constrainedHighSpeed == true}")
+        lastDirectRecorderTiming = directRecorderAnchors?.takeIf { it.startElapsedNs != 0L }?.timing()
+        directRecorderAnchors = null
         releaseRecorder(request)
         reportRecordingStopped(success, recorderOutputRetirement())
         if (success && descriptor != null && device != null && pipeline != null) {
@@ -5265,9 +5303,12 @@ class Camera2PreviewEngine(
                             }
                             repeatingBuilder = builder
                             val burst = configured.createHighSpeedRequestList(builder.build())
+                            // Created before the callback is armed, which binds to it; it counts frames once the recorder runs.
+                            val anchors = if (startRecorder) DirectRecorderAnchors().also { directRecorderAnchors = it } else directRecorderAnchors
                             configured.setRepeatingBurstRequests(burst, cameraExecutor, previewCaptureCallback(descriptor, false))
                             if (startRecorder) {
                                 requireNotNull(recorder).start()
+                                anchors?.startElapsedNs = SystemClock.elapsedRealtimeNanos()
                                 recording = true
                                 startRecorderLevelPolling(request)
                                 val size = activeVideoProfile?.size ?: descriptor.previewSize
@@ -5840,6 +5881,7 @@ class Camera2PreviewEngine(
         // the CameraConstrainedHighSpeedCaptureSession the engine holds, so an identity check
         // against the argument dropped every HFR result and a GPU HFR preview never "started".
         val armedSession = session
+        val armedAnchors = directRecorderAnchors
         if (notifyStarted && descriptor != null && !disposed.get()) {
             armedSession?.let { pendingPreviewStartedReceipt = PreviewStartedReceipt(it, callbackGeneration, descriptor) }
         }
@@ -5858,8 +5900,11 @@ class Camera2PreviewEngine(
                     request: CaptureRequest,
                     result: TotalCaptureResult,
                 ) {
-                    if (disposed.get() || callbackGeneration != generation || armedSession == null ||
-                        armedSession !== this@Camera2PreviewEngine.session) return
+                    if (disposed.get() || callbackGeneration != generation) return
+                    // Before the session check: a stopping recorder session is no longer the engine's, and the frames it
+                    // still delivers are the take's last.
+                    armedAnchors?.let { anchors -> result.get(android.hardware.camera2.CaptureResult.SENSOR_TIMESTAMP)?.let(anchors::frame) }
+                    if (armedSession == null || armedSession !== this@Camera2PreviewEngine.session) return
                     noteLensForFrame(result)
                     noteZoomLag(armedSession, result)
                     noteCalibrationMeta(result)
@@ -7590,6 +7635,7 @@ class Camera2PreviewEngine(
         recordSurface = null
         recorderVideoCodec = null
         recorderOverGpuPreview = false
+        directRecorderAnchors = null
         // Release the acceptance fence last, never while MediaRecorder still owns native I/O.
         recorderRequest.compareAndSet(expected, null)
         settleOutputRetirements()

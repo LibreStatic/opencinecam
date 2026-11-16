@@ -36,6 +36,20 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import com.librestatic.opencinecam.normalizedFor
+import com.librestatic.opencinecam.withSimpleGain
+import com.librestatic.opencinecam.withEqProfile
+import com.librestatic.opencinecam.withListenStart
+import com.librestatic.opencinecam.withListenVolume
+import com.librestatic.opencinecam.AppSection
+import com.librestatic.opencinecam.AppShell
+import com.librestatic.opencinecam.AudioListeningDevice
+import com.librestatic.opencinecam.AudioListeningOutput
+import com.librestatic.opencinecam.AudioListeningPhase
+import com.librestatic.opencinecam.AudioListeningStatus
+import com.librestatic.opencinecam.listenExitPrompt
+import com.librestatic.opencinecam.rememberListenExitGuard
+import com.librestatic.opencinecam.rememberPredictiveBack
+import androidx.compose.foundation.clickable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -226,6 +240,73 @@ fun CaptureFpsLock() = CaptureChrome(driverFpsLockState(holding = false))
 @Composable
 fun CaptureFpsLockHolding() = CaptureChrome(driverFpsLockState(holding = true))
 
+/** A second pair of the same earbuds, so the panel and the status number the one that plays. */
+private val DriverBluetoothBudsTwin = AudioListeningDevice(35, DriverBluetoothBuds.name, AudioListeningOutput.BLUETOOTH)
+
+/** What the service reports for [settings]: a headphone route on a connected device plays at once (no connect step). */
+internal fun driverListeningStatus(settings: CameraSettings, outputs: List<AudioListeningDevice>): AudioListeningStatus {
+    val device = outputs.firstOrNull { it.id == settings.audioListeningOutputDeviceId }
+    return if (settings.audioListening.enabled && device != null && device.output != AudioListeningOutput.SPEAKER) {
+        AudioListeningStatus(AudioListeningPhase.ACTIVE, device.id, device.id, device.name)
+    } else AudioListeningStatus()
+}
+
+/** Video with a USB-C headset connected and nothing playing: the listen key (`capture-listen`) leads the lock keys, off. */
+@Composable
+fun CaptureListenAvailable() = CaptureChrome(
+    driverCaptureState(CaptureMode.VIDEO).copy(audioListeningOutputs = listOf(DriverPhoneSpeaker, DriverUsbHeadset)),
+    fakeListening = true,
+)
+
+/** Listening on the USB-C headset: the key is on; a tap stops it, a long press opens the panel. */
+@Composable
+fun CaptureListening() = CaptureChrome(
+    driverCaptureState(CaptureMode.VIDEO).copy(audioListeningOutputs = listOf(DriverPhoneSpeaker, DriverUsbHeadset)),
+    CameraSettings(histogramEnabled = true).withListenStart(DriverUsbHeadset),
+    fakeListening = true,
+)
+
+/** The listen panel open while the second of two identical earbuds plays at 65 %; Stop shows a start button per output. */
+@Composable
+fun CaptureListenPanel() = CaptureChrome(
+    driverCaptureState(CaptureMode.VIDEO).copy(
+        audioListeningOutputs = listOf(DriverPhoneSpeaker, DriverUsbHeadset, DriverBluetoothBuds, DriverBluetoothBudsTwin)),
+    CameraSettings(histogramEnabled = true).withListenStart(DriverBluetoothBudsTwin).withListenVolume(65),
+    initialPane = CaptureInitialPane.LISTEN,
+    fakeListening = true,
+)
+
+/**
+ * The Settings shell with listening armed on the USB-C headset: `click tag=nav-capture` (or back) asks first
+ * (`listen-exit-dialog`, a dialog: use `tree`); either answer shows a stand-in for the capture screen, which a tap
+ * leaves for Settings again.
+ */
+@Composable
+fun SettingsListenExit() = DriverTheme {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val window = AdaptiveWindow(maxWidth.value, maxHeight.value, false)
+        var settings by remember { mutableStateOf(CameraSettings().withListenStart(DriverUsbHeadset)) }
+        var section by remember { mutableStateOf(AppSection.SETTINGS) }
+        val outputs = listOf(DriverPhoneSpeaker, DriverUsbHeadset)
+        val state = driverCaptureState(CaptureMode.VIDEO).copy(audioListeningOutputs = outputs,
+            audioListeningStatus = driverListeningStatus(settings, outputs))
+        val navigate = rememberListenExitGuard(section, state, settings, { settings = it }) { section = it }
+        rememberPredictiveBack(enabled = section != AppSection.CAPTURE,
+            animate = !listenExitPrompt(section, AppSection.CAPTURE, state.audioListeningStatus)) { navigate(AppSection.CAPTURE) }
+        CompositionLocalProvider(LocalAdaptiveWindow provides window) {
+            if (section == AppSection.CAPTURE) Box(
+                Modifier.fillMaxSize().clickable { section = AppSection.SETTINGS }.testTag("driver-capture-stand-in"),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(if (settings.audioListening.enabled) "Capture screen · listening" else "Capture screen", color = Color.White)
+            } else AppShell(section, null, onSelect = navigate) {
+                SettingsScreen(state, settings, audioPermissionGranted = true, onRequestAudioPermission = {}, onOpenAbout = {},
+                    onSettingsChange = { settings = it })
+            }
+        }
+    }
+}
+
 /** The fake camera with 1080p constrained high-speed profiles at 120 and 240 fps, so slow motion can run. */
 private fun driverSlowMotionState(phase: CameraUiPhase = CameraUiPhase.PREVIEWING): CameraUiState {
     val camera = DriverCamera.copy(videoProfiles = DriverCamera.videoProfiles + listOf(120, 240).map {
@@ -301,7 +382,7 @@ fun CaptureCodecFallback() = CaptureChrome(
         recordingWarning = stringResource(R.string.video_codec_fallback_warning)),
 )
 
-/** Video with the next take going to the USB drive: the USB chip, and the drive's own free space in the status line. */
+/** Video with the next take going to the USB drive: the "USB storage" chip, and the drive's own free space in the status line. */
 @Composable
 fun CaptureDestinationSsd() = CaptureChrome(
     driverCaptureState(CaptureMode.VIDEO).copy(availableStorageBytes = 41_000_000_000L,
@@ -309,7 +390,7 @@ fun CaptureDestinationSsd() = CaptureChrome(
             driveLabel = "WD Elements", driveFreeBytes = 1_734_000_000_000L)),
 )
 
-/** Video with a drive configured but not connected: the amber PHONE chip and the notice under the zoom. */
+/** Video with a drive configured but not connected: the neutral "Internal storage" chip, and no notice. */
 @Composable
 fun CaptureDestinationFallback() = CaptureChrome(
     driverCaptureState(CaptureMode.VIDEO).copy(
@@ -319,7 +400,7 @@ fun CaptureDestinationFallback() = CaptureChrome(
 
 /**
  * Video with a drive configured that is still spinning up (a USB storage device attached moments ago, its volume not
- * mounted yet): the amber PHONE chip and the "USB drive starting" notice under the zoom.
+ * mounted yet): the amber "Internal storage" chip and the "USB drive starting" notice under the zoom.
  */
 @Composable
 fun CaptureDestinationStarting() = CaptureChrome(
@@ -330,7 +411,7 @@ fun CaptureDestinationStarting() = CaptureChrome(
 
 /**
  * Video with the configured drive mounted under another volume name (vold's stable name, `FFF1-7571-01`, after a mount
- * was cut short): the amber PHONE chip and the "Choose USB folder again" notice under the zoom.
+ * was cut short): the amber "Internal storage" chip and the "Choose USB folder again" notice under the zoom.
  */
 @Composable
 fun CaptureDestinationRenamed() = CaptureChrome(
@@ -341,7 +422,7 @@ fun CaptureDestinationRenamed() = CaptureChrome(
 
 /**
  * PLAN-072 Delivery 4: the drive was lost mid-take and the take goes on on the phone (a new `_cont1` take, 4 s in):
- * the amber PHONE chip and the "continuing on the phone" notice under the zoom while it records.
+ * the amber "Internal storage" chip and the "continuing on the phone" notice under the zoom while it records.
  */
 @Composable
 fun CaptureDestinationContinued() = CaptureChrome(
@@ -355,6 +436,15 @@ fun CaptureDestinationContinued() = CaptureChrome(
 fun CaptureRecording() = CaptureChrome(
     driverCaptureState(CaptureMode.VIDEO, CameraUiPhase.RECORDING).copy(recordingElapsedMs = 83_000L),
 )
+
+/**
+ * The same take after stop, while its file closes: the hidden chrome's strip reads "Finalizing…" and its stop control
+ * is disabled, muted and ringed (`recording-stop-busy`). Reduced motion keeps the ring still for the driver.
+ */
+@Composable
+fun CaptureRecordingFinalizing() = CompositionLocalProvider(LocalReducedMotion provides true) {
+    CaptureChrome(driverCaptureState(CaptureMode.VIDEO, CameraUiPhase.RECORDING).copy(recordingElapsedMs = 83_000L, recordingFinalizing = true))
+}
 
 /** Recording under the Adaptive policy with a live warning: it must show in every layout while the take runs. */
 @Composable
@@ -376,6 +466,36 @@ fun CaptureRecordingFallback() = CaptureChrome(
     driverCaptureState(CaptureMode.VIDEO, CameraUiPhase.RECORDING).copy(recordingElapsedMs = 83_000L,
         activeAudioInput = com.librestatic.opencinecam.media.audio.ActiveAudioInput(7, null, "", 15, confirmed = false, fallback = true)),
 )
+
+/**
+ * A take whose microphone reached full scale while the recorded audio stayed under it: the meter reads "CLIP IN".
+ * `Both` latched the recorded side too, the longest label ("CLIP IN+REC").
+ */
+@Composable
+fun CaptureClipInput() = CaptureChrome(
+    driverCaptureState(CaptureMode.VIDEO, CameraUiPhase.RECORDING).copy(recordingElapsedMs = 83_000L,
+        audioClipLatched = true, audioInputClipLatched = true),
+)
+
+@Composable
+fun CaptureClipBoth() = CaptureChrome(
+    driverCaptureState(CaptureMode.VIDEO, CameraUiPhase.RECORDING).copy(recordingElapsedMs = 83_000L,
+        audioClipLatched = true, audioInputClipLatched = true, audioRecordedClipLatched = true),
+)
+
+/** PLAN-074 decision 14: the microphone clipped below full scale, so the overload notice sits under the zoom. */
+@Composable
+fun CaptureAudioOverload() = CaptureChrome(driverCaptureState(CaptureMode.VIDEO).copy(audioInputOverloaded = true))
+
+/** The same notice while a take records at 01:23; reveal the chrome to see it. */
+@Composable
+fun CaptureAudioOverloadRecording() = CaptureChrome(
+    driverCaptureState(CaptureMode.VIDEO, CameraUiPhase.RECORDING).copy(recordingElapsedMs = 83_000L, audioInputOverloaded = true),
+)
+
+/** PLAN-074 decision 4: the low-latency input was asked for and the monitor records through AudioRecord instead. */
+@Composable
+fun CaptureAudioInputFallback() = CaptureChrome(driverCaptureState(CaptureMode.VIDEO).copy(audioInputFallback = true))
 
 private fun driverAudioInput(confirmed: Boolean) = com.librestatic.opencinecam.media.audio.ActiveAudioInput(
     deviceId = 42, key = com.librestatic.opencinecam.media.audio.AudioInputKey(22, "USB-C Lavalier", "card=2;device=0"),
@@ -528,7 +648,7 @@ fun CaptureRawVideoRecording() = CaptureChrome(
 
 
 /**
- * RAW video with the next take going to the USB drive (PLAN-072 Delivery 3): the USB chip beside the status line, whose
+ * RAW video with the next take going to the USB drive (PLAN-072 Delivery 3): the "USB storage" chip beside the status line, whose
  * free space and minutes left are the drive's (1.7 TB), and the chooser's times left too.
  */
 @Composable
@@ -545,7 +665,7 @@ fun CaptureRawVideoSsdRecording() = CaptureChrome(
     DriverRawVideoSettings,
 )
 
-/** RAW video with the drive configured but not connected: the amber PHONE chip and the notice, gated by the phone. */
+/** RAW video with the drive configured but not connected: the neutral "Internal storage" chip, gated by the phone, and no notice. */
 @Composable
 fun CaptureRawVideoDriveFallback() = CaptureChrome(
     driverRawVideoState().copy(recordingDestination = com.librestatic.opencinecam.RecordingDestinationStatus(configuredDrive = true,
@@ -1474,12 +1594,16 @@ private fun CaptureChrome(
     previewAspectRatio: Float? = null,
     rawQualificationInfo: (() -> RawVideoQualificationInfo?)? = null,
     initialRawQualifyPrompt: Boolean = false,
+    // The listening status follows the settings copy, so the listen key and panel answer taps.
+    fakeListening: Boolean = false,
 ) = DriverTheme(forceDark = true) {
     BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
         val window = AdaptiveWindow(maxWidth.value, maxHeight.value, hardwareKeyboard)
         var current by remember { mutableStateOf(settings) }
         val scopes = rememberSaveable(saver = CaptureScopeVisibility.Saver) { CaptureScopeVisibility(scopesHidden) }
-        val live = withDriverAnalysis(state, current.monitoring)
+        val live = withDriverAnalysis(state, current.monitoring).let {
+            if (fakeListening) it.copy(audioListeningStatus = driverListeningStatus(current, it.audioListeningOutputs)) else it
+        }
         val actions = driverOperatorActions(live, current, scopes) { current = it }
         CompositionLocalProvider(LocalAdaptiveWindow provides window, LocalOperatorActions provides actions,
             LocalFoldDisplayStateWithoutCoordinator provides foldState) {
@@ -1908,6 +2032,108 @@ fun SettingsAudioInputMissing() = AudioInputSettings(
     CameraSettings(audioInputKey = com.librestatic.opencinecam.media.audio.AudioInputKey(22, "RØDE Wireless GO II RX", "card=3;device=0")),
 )
 
+/** The audio placed 40 ms later by hand: Audio shows the sync offset row after the recording gain. */
+@Composable
+fun SettingsAudioSync() = AudioInputSettings(CameraSettings(audioSyncOffsetMs = 40))
+
+/**
+ * The Razr's reference equaliser in use: `textInput equaliser tag=settings-search` reaches the professional audio
+ * card, whose Input equaliser row (`settings-input-equalizer`) sits after the sync offset and reads "Reference (this
+ * phone)".
+ */
+@Composable
+fun SettingsAudioEqualizer() = AudioInputSettings(
+    CameraSettings(audioSource = com.librestatic.opencinecam.media.audio.AudioSourceSelection.LOW_LATENCY,
+        audioEqCurve = DriverReferenceEqProfile.curve, audioEqProfileId = DriverReferenceEqProfile.id),
+)
+
+/**
+ * The input equaliser editor on a user profile with four points, the second selected, over a live fake spectrum with
+ * held peaks; the listen card has no headphones to offer (only the phone's speaker).
+ */
+@Composable
+fun InputEqualizer() = InputEqualizerDriverPage(
+    CameraSettings().withEqProfile(DriverLavalierEqProfile), DriverReferenceEqProfile,
+    listOf(DriverInterviewEqProfile, DriverLavalierEqProfile), initialSelected = 1,
+)
+
+/**
+ * Listening on a USB-C headset from the editor: the listen card with the status, the volume at 65 % and Stop, over
+ * the lavalier profile with held peaks and no clip.
+ */
+@Composable
+fun InputEqualizerListening() = InputEqualizerDriverPage(
+    CameraSettings().withEqProfile(DriverLavalierEqProfile).withListenStart(DriverUsbHeadset).withListenVolume(65),
+    DriverReferenceEqProfile, listOf(DriverLavalierEqProfile),
+    outputs = listOf(DriverPhoneSpeaker, DriverUsbHeadset),
+    listeningStatus = com.librestatic.opencinecam.AudioListeningStatus(com.librestatic.opencinecam.AudioListeningPhase.ACTIVE,
+        DriverUsbHeadset.id, DriverUsbHeadset.id, DriverUsbHeadset.name),
+)
+
+/**
+ * The recording clipped with a presence boost: the peak trace in the error colour, the clip line under the legend,
+ * and Bluetooth earbuds offered but not listening.
+ */
+@Composable
+fun InputEqualizerClipped() = InputEqualizerDriverPage(
+    CameraSettings().withEqProfile(DriverLavalierEqProfile), DriverReferenceEqProfile, listOf(DriverLavalierEqProfile),
+    recordedClipped = true, outputs = listOf(DriverPhoneSpeaker, DriverBluetoothBuds),
+)
+
+/** Recording a snippet with only the phone's speaker: "Recording: 4 s of 10 s" and Stop. */
+@Composable
+fun InputEqualizerSnippetRecording() = InputEqualizerDriverPage(
+    CameraSettings().withEqProfile(DriverLavalierEqProfile), DriverReferenceEqProfile, listOf(DriverLavalierEqProfile),
+    snippet = com.librestatic.opencinecam.EqSnippetUiState(com.librestatic.opencinecam.EqSnippetPhase.RECORDING, recordedMs = 4_300),
+)
+
+/** A 7 s snippet looping through the curve with only the phone's speaker: the paused-microphone note and Stop. */
+@Composable
+fun InputEqualizerSnippetPlaying() = InputEqualizerDriverPage(
+    CameraSettings().withEqProfile(DriverLavalierEqProfile), DriverReferenceEqProfile, listOf(DriverLavalierEqProfile),
+    snippet = com.librestatic.opencinecam.EqSnippetUiState(com.librestatic.opencinecam.EqSnippetPhase.PLAYING, snippetMs = DRIVER_SNIPPET_MS),
+)
+
+/** Simple mode: a custom curve of the three fixed bands with their gains moved. */
+@Composable
+fun InputEqualizerSimple() = InputEqualizerDriverPage(
+    CameraSettings(audioEqCurve = com.librestatic.opencinecam.camera.EqCurve(com.librestatic.opencinecam.simpleEqPoints())
+        .withSimpleGain(com.librestatic.opencinecam.SimpleEqBand.LOW, 2.0).withSimpleGain(com.librestatic.opencinecam.SimpleEqBand.MID, -1.5)
+        .withSimpleGain(com.librestatic.opencinecam.SimpleEqBand.HIGH, 3.0)),
+    DriverReferenceEqProfile, listOf(DriverLavalierEqProfile),
+)
+
+/** The lavalier profile bypassed: the switch off, the curve greyed, the spectrum's two layers the same. */
+@Composable
+fun InputEqualizerBypassed() = InputEqualizerDriverPage(
+    CameraSettings().withEqProfile(DriverLavalierEqProfile).let { it.copy(audioEqCurve = it.audioEqCurve.copy(enabled = false)) },
+    DriverReferenceEqProfile, listOf(DriverLavalierEqProfile),
+)
+
+/** The Razr's reference profile with the low-latency input: read-only badge, its three points. */
+@Composable
+fun InputEqualizerReference() = InputEqualizerDriverPage(
+    CameraSettings(audioSource = com.librestatic.opencinecam.media.audio.AudioSourceSelection.LOW_LATENCY).withEqProfile(DriverReferenceEqProfile),
+    DriverReferenceEqProfile, listOf(DriverLavalierEqProfile),
+)
+
+/** The reference profile with the Camcorder input: the waiting note, and no live spectrum (the hint instead). */
+@Composable
+fun InputEqualizerReferenceWaiting() = InputEqualizerDriverPage(
+    CameraSettings(audioSource = com.librestatic.opencinecam.media.audio.AudioSourceSelection.CAMCORDER).withEqProfile(DriverReferenceEqProfile),
+    DriverReferenceEqProfile, listOf(DriverLavalierEqProfile), liveSpectrum = false,
+)
+
+/** A flat curve on a phone with no reference profile and no saved ones, no live spectrum. */
+@Composable
+fun InputEqualizerEmpty() = InputEqualizerDriverPage(CameraSettings(), liveSpectrum = false)
+
+/** A take recording: the controls stay, with the note that changes apply from the next take. */
+@Composable
+fun InputEqualizerLocked() = InputEqualizerDriverPage(
+    CameraSettings().withEqProfile(DriverLavalierEqProfile), DriverReferenceEqProfile, listOf(DriverLavalierEqProfile), recording = true,
+)
+
 @Composable
 private fun AudioInputSettings(initial: CameraSettings) = DriverTheme {
     val depths = listOf(com.librestatic.opencinecam.media.audio.AudioBitDepth.PCM_16, com.librestatic.opencinecam.media.audio.AudioBitDepth.PCM_24)
@@ -1929,7 +2155,8 @@ private fun AudioInputSettings(initial: CameraSettings) = DriverTheme {
     var settings by remember { mutableStateOf(initial.normalizedFor(capabilities)) }
     SettingsScreen(CameraUiState(phase = CameraUiPhase.PREVIEWING, audioCapabilities = capabilities),
         settings, audioPermissionGranted = true,
-        onRequestAudioPermission = {}, onOpenAbout = {}, onSettingsChange = { settings = it.normalizedFor(capabilities) })
+        onRequestAudioPermission = {}, onOpenAbout = {}, onSettingsChange = { settings = it.normalizedFor(capabilities) },
+        onOpenInputEqualizer = {})
 }
 
 /** The network drive page (PLAN-071 §8 route 3), stopped: the switch off, the originals hidden and the instructions below. */

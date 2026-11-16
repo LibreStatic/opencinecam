@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="listen_key">Écoute au casque</string>
+    <string name="listen_key_on">activée</string>
+    <string name="listen_key_connecting">connexion</string>
+    <string name="listen_key_off">désactivée</string>
+    <string name="listen_key_open_panel">Sortie et volume</string>
+    <string name="listen_panel_title">CASQUE</string>
+    <string name="listen_panel_hint">Vous entendez ce qui est enregistré</string>
+    <string name="listen_panel_no_output">Branchez un casque USB-C ou Bluetooth</string>
+    <string name="listen_panel_raw_video">En vidéo RAW, le micro s’entend une fois la prise lancée</string>
+    <string name="listen_exit_title">Continuer l’écoute ?</string>
+    <string name="listen_exit_body">L’écoute est toujours active (%1$s).</string>
+    <string name="listen_exit_keep">Continuer l’écoute</string>
+    <string name="listen_exit_stop">Arrêter</string>
+</resources>

@@ -7,6 +7,7 @@
     <string name="audio_gain_agc_requested">Pedir controlo automático de ganho (AGC)</string>
     <string name="audio_gain_agc_suspended">O modo manual suspende o AGC, inclusive em 0 dB. A preferência de AGC é mantida para quando o modo manual for desativado.</string>
     <string name="audio_gain_agc_backend">O AGC é um pedido, não uma prova de aplicação. Os efeitos de hardware e o AGC por software dependem do backend de gravação ativo e do formato PCM; o MediaRecorder não expõe esse controlo.</string>
+    <string name="audio_gain_agc_low_latency">Com a entrada de baixa latência, o AGC da plataforma não está disponível; com o AGC ativado, a aplicação aplica o AGC por software.</string>
     <string name="audio_gain_pending">As alterações de ganho de gravação estão pendentes para o próximo take. Este take mantém o ganho e a configuração de AGC admitidos.</string>
     <string name="audio_gain_aac_backend">Com AAC, o codificador do telemóvel define o ganho. O ganho manual e o controlo automático de ganho exigem WAV ou FLAC.</string>
     <string name="audio_gain_no_receipt">Sem recibo atual de aplicação de ganho PCM. O valor configurado é apenas um pedido.</string>

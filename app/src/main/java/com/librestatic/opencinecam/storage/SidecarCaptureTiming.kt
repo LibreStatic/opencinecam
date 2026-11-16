@@ -1,26 +1,40 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam.storage
 
-import android.media.AudioRecord
-import android.media.AudioTimestamp
+import com.librestatic.opencinecam.media.audio.PcmInput
+import com.librestatic.opencinecam.media.audio.PcmInputTimestamp
 import com.librestatic.opencinecam.camera.PcmSourceTiming
 import com.librestatic.opencinecam.camera.PcmSourceTimingReport
 import org.json.JSONObject
 
 /**
- * AudioRecord timestamps use BOOTTIME; command receipts never substitute for missing source anchors.
+ * PCM input timestamps use BOOTTIME; command receipts never substitute for missing source anchors.
  * The capture thread writes while the recording ticker reads [report] live, so every access locks.
  */
 internal class SidecarCaptureTiming(rate: Int, private val frameBytes: Int,
     private val shared: com.librestatic.opencinecam.camera.CaptureEpochClock? = null) {
     init { require(shared == null || shared.sampleRateHz == rate) }
     private val source = PcmSourceTiming(rate, frameBytes)
-    private val timestamp = AudioTimestamp()
+    private val readEpoch = com.librestatic.opencinecam.camera.PcmReadEpochEstimate(rate)
+    private var readFrames = 0L
+    private val timestamp = PcmInputTimestamp()
     private var capturedFrames = 0L
+    /** A read of [bytes] returned at [boottimeNs]; call it right after the read, before the PCM is processed. */
     @Synchronized
-    fun captured(record: AudioRecord, buffer: java.nio.ByteBuffer, bytes: Int): Int {
+    fun readReturned(bytes: Int, boottimeNs: Long) {
+        readFrames += bytes / frameBytes
+        readEpoch.observeRead(readFrames, boottimeNs)
+    }
+    /**
+     * Frame zero estimated from the reads, for an input without timestamps. It places audio appended to a take
+     * (PLAN-074 decision 10); the source epoch in [report] stays timestamps only.
+     */
+    @Synchronized
+    fun readEstimatedFrameZeroNs(): Long? = readEpoch.frameZeroNs()
+    @Synchronized
+    fun captured(input: PcmInput, buffer: java.nio.ByteBuffer, bytes: Int): Int {
         source.captured(bytes)
-        if (record.getTimestamp(timestamp, AudioTimestamp.TIMEBASE_BOOTTIME) == AudioRecord.SUCCESS) {
+        if (input.timestamp(timestamp)) {
             source.observeTimestamp(timestamp.framePosition, timestamp.nanoTime)
             shared?.audioInput(requireNotNull(source.report().epoch))
         } else source.timestampUnavailable()

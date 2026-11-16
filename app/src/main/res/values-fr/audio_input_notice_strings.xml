@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- PLAN-074: capture notices about the microphone input, under the zoom. -->
+    <string name="audio_input_overload">Micro saturé : baissez le son ou changez d\'entrée</string>
+    <string name="audio_input_fallback">Micro brut indisponible : entrée standard utilisée</string>
+</resources>

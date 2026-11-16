@@ -37,6 +37,13 @@ class SettingsCatalogTest {
         for (query in listOf("rotation", "girar", "rotación", "drehen")) assertTrue(query, "rotate-when-locked" in SettingsCatalog.search(query, null) { "" })
         assertTrue("rotate-when-locked" in SettingsCatalog.search("", SettingsCategory.CONTROLS) { "" })
     }
+    @Test fun inputEqualiserIsSearchableInEveryLanguage() {
+        for (query in listOf("equaliser", "equalizer", "ecualizador", "equalizador", "égaliseur", "equalizzatore", "Entzerrer", "EQ", "graves"))
+            assertTrue(query, AUDIO_EQ_SETTING_ID in SettingsCatalog.search(query, null) { "" })
+        assertTrue(AUDIO_EQ_SETTING_ID in SettingsCatalog.search("", SettingsCategory.AUDIO) { "" })
+        val label = { id: Int -> if (id == R.string.input_eq_title) "Input equaliser" else "" }
+        assertEquals(setOf(AUDIO_EQ_SETTING_ID), SettingsCatalog.titleMatches("equaliser", label))
+    }
     @Test fun categoryFiltersAndUnknownSearchIsEmpty() {
         assertFalse("torch" in SettingsCatalog.search("", SettingsCategory.AUDIO) { "" })
         assertTrue(SettingsCatalog.search("no-such-setting", null) { "" }.isEmpty())

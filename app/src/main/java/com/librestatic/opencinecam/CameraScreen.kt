@@ -37,6 +37,7 @@ import com.librestatic.opencinecam.ui.theme.LocalReducedMotion
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.items
+import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntOffset
@@ -81,6 +82,7 @@ import android.os.BatteryManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.foundation.gestures.animateScrollBy
@@ -316,8 +318,30 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
     var settingsPage by rememberSaveable { mutableStateOf(SettingsPage.MAIN) }
     val settingsStateHolder = rememberSaveableStateHolder()
 
-    val sectionBack = rememberPredictiveBack(enabled = section != AppSection.CAPTURE && settingsPage == SettingsPage.MAIN) {
-        section = AppSection.CAPTURE
+    // Every way out of Settings to the capture screen (back, the gesture, the Capture tab) asks first while listening is armed.
+    val navigate = rememberListenExitGuard(section, state, settings, settingsRepository::set) {
+        settingsPage = SettingsPage.MAIN
+        section = it
+    }
+    // A back that will ask does not preview the capture screen it may not reach.
+    val sectionBack = rememberPredictiveBack(enabled = section != AppSection.CAPTURE && settingsPage == SettingsPage.MAIN,
+        animate = !listenExitPrompt(section, AppSection.CAPTURE, state.audioListeningStatus)) {
+        navigate(AppSection.CAPTURE)
+    }
+    // Lens calibration runs on the viewfinder, so its Start leaves Settings too: it starts only once the operator has
+    // chosen, and not at all when the question is dismissed.
+    val startLensCalibration = rememberListenExitGuard(section, state, settings, settingsRepository::set) {
+        binder?.startLensCalibration()
+        settingsPage = SettingsPage.MAIN
+        section = it
+    }
+    // The replayed tour leaves Settings for the viewfinder as well.
+    val replayTour = rememberListenExitGuard(section, state, settings, settingsRepository::set) {
+        onboardingStore.reset()
+        settingsPage = SettingsPage.MAIN
+        section = it
+        tourReplay = true
+        onboardingDone = false
     }
 
     val pageBack = rememberPredictiveBack(enabled = section == AppSection.SETTINGS && settingsPage != SettingsPage.MAIN) {
@@ -367,8 +391,10 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
     val appHaptics = rememberAppHaptics(settings.haptics, state.phase == CameraUiPhase.RECORDING)
     val operatorActions = rememberOperatorActions(state, settings, binder, foldDisplays, foldState, section == AppSection.CAPTURE,
         onSettingsChanged = { settingsRepository.set(it) }, haptics = appHaptics)
+    // Held here rather than in the key, so a start waiting for the service survives the chrome hiding during a take.
+    val listenStarter = rememberListenStarter(settings, state.audioListeningStatus, settingsRepository::set) { binder?.reconnectAudioListening() }
     CompositionLocalProvider(LocalLiveCameraState provides liveState, LocalOperatorActions provides operatorActions,
-        LocalAppHaptics provides appHaptics,
+        LocalAppHaptics provides appHaptics, LocalListenStarter provides listenStarter,
         LocalAudioListeningActions provides { binder?.reconnectAudioListening() }) {
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         if (section == AppSection.CAPTURE) {
@@ -399,10 +425,7 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
         } else {
             // The capture surface binds the camera, so it is not composed under the gesture: the shrinking shell reveals the background.
             Box(Modifier.fillMaxSize().predictiveBackPreview(sectionBack).background(MaterialTheme.colorScheme.background)) {
-            AppShell(section, foldState.hinge, onSelect = {
-                settingsPage = SettingsPage.MAIN
-                section = it
-            }) {
+            AppShell(section, foldState.hinge, onSelect = navigate) {
                 when (section) {
                     AppSection.MEDIA -> MediaCatalogScreen(settings.gallery,
                         onSettings = { gallery -> settingsRepository.update { it.copy(gallery = gallery) } },
@@ -416,14 +439,8 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
                         Box(Modifier.fillMaxSize().predictiveBackPreview(pageBack).background(MaterialTheme.colorScheme.surface)) {
                         AboutScreen(
                             onBack = { settingsPage = SettingsPage.MAIN },
-                            onReplayTour = {
-                                onboardingStore.reset()
-                                settingsPage = SettingsPage.MAIN
-                                // Like the first run, the replayed tour ends (Skip or Done) on the viewfinder.
-                                section = AppSection.CAPTURE
-                                tourReplay = true
-                                onboardingDone = false
-                            },
+                            // Like the first run, the replayed tour ends (Skip or Done) on the viewfinder.
+                            onReplayTour = { replayTour(AppSection.CAPTURE) },
                         )
                         }
                     } else if (settingsPage == SettingsPage.CAPABILITIES) {
@@ -450,14 +467,14 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
                             settings = settings,
                             onSettingsChange = settingsRepository::set,
                             onBack = { settingsPage = SettingsPage.MAIN },
-                            onStart = {
-                                // The run happens on the viewfinder: start it, then show the capture screen.
-                                binder?.startLensCalibration()
-                                settingsPage = SettingsPage.MAIN
-                                section = AppSection.CAPTURE
-                            },
+                            // The run happens on the viewfinder: start it, then show the capture screen.
+                            onStart = { startLensCalibration(AppSection.CAPTURE) },
                             onDelete = { binder?.deleteLensCalibration() },
                         )
+                        }
+                    } else if (settingsPage == SettingsPage.INPUT_EQUALIZER) {
+                        Box(Modifier.fillMaxSize().predictiveBackPreview(pageBack).background(MaterialTheme.colorScheme.surface)) {
+                            InputEqualizerScreen(state, settings, settingsRepository::set, binder, onBack = { settingsPage = SettingsPage.MAIN })
                         }
                     } else if (settingsPage == SettingsPage.NETWORK_DRIVE) {
                         Box(Modifier.fillMaxSize().predictiveBackPreview(pageBack).background(MaterialTheme.colorScheme.surface)) {
@@ -477,6 +494,7 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
                             onOpenCapabilities = { settingsPage = SettingsPage.CAPABILITIES },
                             onOpenStorageBenchmark = { settingsPage = SettingsPage.STORAGE_BENCHMARK },
                             onOpenLensCalibration = { settingsPage = SettingsPage.LENS_CALIBRATION },
+                            onOpenInputEqualizer = { settingsPage = SettingsPage.INPUT_EQUALIZER },
                             onOpenNetworkDrive = { settingsPage = SettingsPage.NETWORK_DRIVE },
                             onSetLensLock = binder?.let { owner -> { id -> owner.setLensLock(id) } },
                             onSelectRawVideoConfig = binder?.let { owner -> { key -> owner.selectRawVideoConfig(key) } },
@@ -1413,10 +1431,11 @@ private sealed interface CapturePane {
     data object Modes : CapturePane
     data object Monitor : CapturePane
     data object Displays : CapturePane
+    data object Listen : CapturePane
 }
 
 /** A pane the capture chrome opens with. Only the headless renders set it; the app always starts closed. */
-internal enum class CaptureInitialPane { WHITE_BALANCE, FOCUS, TAKE_LENGTH, MONITOR, MODES, MODE_SHEET, DISPLAYS, RESOLUTION }
+internal enum class CaptureInitialPane { WHITE_BALANCE, FOCUS, TAKE_LENGTH, MONITOR, MODES, MODE_SHEET, DISPLAYS, RESOLUTION, LISTEN }
 
 private fun CaptureInitialPane.pane(): CapturePane? = when (this) {
     CaptureInitialPane.WHITE_BALANCE -> CapturePane.Control(ControlDial.WB)
@@ -1427,6 +1446,7 @@ private fun CaptureInitialPane.pane(): CapturePane? = when (this) {
     CaptureInitialPane.MODE_SHEET -> null
     CaptureInitialPane.DISPLAYS -> CapturePane.Displays
     CaptureInitialPane.RESOLUTION -> CapturePane.Control(ControlDial.RESOLUTION)
+    CaptureInitialPane.LISTEN -> CapturePane.Listen
 }
 
 @Composable
@@ -1958,7 +1978,8 @@ internal fun AdaptiveCaptureChrome(
                         horizontalAlignment = Alignment.End,
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        LockToggles(state = state, binder = binder, afLockBehavior = settings.afLockBehavior, settings = settings, onSettingsChanged = onSettingsChanged)
+                        LockToggles(state = state, binder = binder, afLockBehavior = settings.afLockBehavior, settings = settings, onSettingsChanged = onSettingsChanged,
+                            onOpenListen = { pane = CapturePane.Listen; modeSheet = false })
                         // A hinge split has no picture under its chrome: its F-keys go in the deck.
                         if (!hinge) OperatorButtonColumn(state, settings)
                     }
@@ -1998,6 +2019,7 @@ internal fun AdaptiveCaptureChrome(
                 afLockBehavior = settings.afLockBehavior,
                 settings = settings,
                 onSettingsChanged = onSettingsChanged,
+                onOpenListen = { pane = CapturePane.Listen; modeSheet = false },
                 modifier = Modifier.align(Alignment.TopEnd).padding(end = endOccupied + 8.dp, top = 8.dp)
                     .onSizeChanged { topEndClusterWidthPx = it.width },
             )
@@ -2159,6 +2181,7 @@ internal fun AdaptiveCaptureChrome(
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
+                CapturePane.Listen -> CaptureListenPanel(state, settings, onSettingsChanged) { pane = null }
                 CapturePane.Displays -> {
                     val displaysScroll = rememberScrollState()
                     Column(Modifier.verticalScroll(displaysScroll).testTag("fold-displays-pane"),
@@ -2676,10 +2699,33 @@ private fun CaptureTopBar(
         if (showThumbnail) MediaThumbnailAction(state.lastSavedUri, onOpenMedia)
         else Spacer(Modifier.width(4.dp))
         if (showStatus) {
-            CaptureStatusLine(state, Modifier.weight(1f))
-            CaptureDestinationChip(state)
-            ThermalHudChip()
-            OutOfFrameHudChip(state)
+            val spacing = if (showThumbnail) 6.dp else 2.dp
+            val labelledChipWidth = captureDestinationChipLabelledWidth(state)
+            // The warning chips take their room first; the destination chip keeps its label only where the status
+            // line still has DESTINATION_CHIP_STATUS_ROOM_DP beside it, and shows its icon alone otherwise.
+            SubcomposeLayout(Modifier.weight(1f)) { constraints ->
+                val loose = constraints.copy(minWidth = 0, minHeight = 0)
+                val warnings = subcompose("warnings") {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(spacing)) {
+                        ThermalHudChip()
+                        OutOfFrameHudChip(state)
+                    }
+                }.map { it.measure(loose) }
+                val warningsWidth = warnings.maxOfOrNull { it.width } ?: 0
+                val room = (constraints.maxWidth - warningsWidth - if (warningsWidth > 0) spacing.roundToPx() else 0).coerceAtLeast(0)
+                val labelled = room - labelledChipWidth.roundToPx() >= DESTINATION_CHIP_STATUS_ROOM_DP.dp.roundToPx()
+                val status = subcompose("status") {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(spacing)) {
+                        CaptureStatusLine(state, Modifier.weight(1f))
+                        CaptureDestinationChip(state, labelled = labelled)
+                    }
+                }.map { it.measure(loose.copy(minWidth = room, maxWidth = room)) }
+                val height = (status + warnings).maxOfOrNull { it.height } ?: 0
+                layout(constraints.maxWidth, height) {
+                    status.forEach { it.placeRelative(0, (height - it.height) / 2) }
+                    warnings.forEach { it.placeRelative(constraints.maxWidth - warningsWidth, (height - it.height) / 2) }
+                }
+            }
         } else Spacer(Modifier.weight(1f))
         actions()
     }
@@ -2831,7 +2877,10 @@ private fun InstrumentStack(
     val destinationNotice = captureDestinationFallbackText(state, recording)
     // Recording, that the take continues on the phone because its drive was lost (PLAN-072 Delivery 4).
     val showContinued = captureDestinationContinued(state)
-    val showNotice = showSuspension || showLensNotice || graphNotice != null || showRawRisk || destinationNotice != null || showContinued
+    // And what the microphone input says (PLAN-074): it overloads, or the low-latency input fell back.
+    val audioNotices = audioInputNotices(state, settings)
+    val showNotice = showSuspension || showLensNotice || graphNotice != null || showRawRisk || destinationNotice != null || showContinued ||
+        audioNotices.isNotEmpty()
     if (!showAudio && !showLogSource && !showZoom && !showHistogram && !showNotice && !showLowLight) return
     BoxWithConstraints(modifier) {
         val histogramWidth = (maxWidth * .34f).coerceIn(112.dp, 240.dp)
@@ -2851,6 +2900,7 @@ private fun InstrumentStack(
             if (showRawRisk) RawVideoRiskyNotice(width, rawVideoActiveOption(state)?.burstSeconds)
             if (destinationNotice != null) CaptureDestinationFallbackNotice(destinationNotice, width)
             if (showContinued) CaptureDestinationContinuedNotice(width)
+            audioNotices.forEach { AudioInputNoticeView(it, width) }
         }
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             FittingStack(horizontal, spacing = 8.dp, fillLast = stretchHistogram,
@@ -3031,9 +3081,11 @@ private fun LockToggles(
     afLockBehavior: AfLockBehavior,
     settings: CameraSettings,
     onSettingsChanged: (CameraSettings) -> Unit,
+    onOpenListen: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val haptics = LocalAppHaptics.current
+    val listen = currentListenStarter(settings, state.audioListeningStatus, onSettingsChanged)
     val manualExposure = state.requestedIso != null || state.requestedExposureTimeNs != null
     val manualFocus = state.requestedFocusDiopters != null
     val aeAvailable = state.aeLockSupported && !manualExposure && !state.captureControlsLocked
@@ -3042,7 +3094,38 @@ private fun LockToggles(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        // Night photo sits first in the row. While it can be offered on this camera its place is
+        // Headphone monitoring (modes with sound): tap starts or stops, a long press opens the output and volume panel.
+        // It never shares the row with Night, which is for photos.
+        val listenStatus = state.audioListeningStatus
+        if (listenKeyVisible(state.selectedMode, settings, listenStatus, state.audioListeningOutputs)) {
+            val look = listenKeyLook(listenStatus)
+            LockButton(
+                label = stringResource(R.string.listen_key),
+                shortLabel = stringResource(R.string.listen_key_short),
+                active = look == ListenKeyLook.ON,
+                pending = look == ListenKeyLook.PENDING,
+                testTag = "capture-listen",
+                glyph = CineIcon.HEADPHONES,
+                stateLabel = stringResource(when (look) {
+                    ListenKeyLook.ON -> R.string.listen_key_on
+                    ListenKeyLook.PENDING -> R.string.listen_key_connecting
+                    ListenKeyLook.OFF -> R.string.listen_key_off
+                }),
+                onLongClick = {
+                    haptics.perform(HapticEvent.Select)
+                    onOpenListen()
+                },
+                longClickLabel = stringResource(R.string.listen_key_open_panel),
+                onClick = {
+                    when (val action = listenKeyTapAction(settings, listenStatus, state.audioListeningOutputs)) {
+                        ListenTapAction.Stop -> { haptics.perform(HapticEvent.LockOff); listen.stop() }
+                        is ListenTapAction.Start -> { haptics.perform(HapticEvent.LockOn); listen.start(action.device) }
+                        ListenTapAction.OpenPanel -> { haptics.perform(HapticEvent.Select); onOpenListen() }
+                    }
+                },
+            )
+        }
+        // Night photo leads the row in photo modes. While it can be offered on this camera its place is
         // kept, so the lock keys and the instruments under them stay put when it appears.
         if (nightToggleAvailable(state, settings)) {
             if (nightToggleVisible(state, settings)) {
@@ -3142,6 +3225,11 @@ private fun LockButton(
     pending: Boolean = false,
     testTag: String,
     glyph: CineIcon? = null,
+    // Spoken instead of "on"/"off" when the key has a third state.
+    stateLabel: String? = null,
+    // A long press with its accessibility action, when the key has more behind it than the toggle.
+    onLongClick: (() -> Unit)? = null,
+    longClickLabel: String? = null,
     onClick: () -> Unit,
 ) {
     val bg = when {
@@ -3160,11 +3248,12 @@ private fun LockButton(
             .clip(RoundedCornerShape(12.dp))
             .background(bg)
             .border(1.dp, border, RoundedCornerShape(12.dp))
-            .clickable(enabled = enabled, onClick = onClick)
+            .then(if (onLongClick != null) Modifier.combinedClickable(enabled = enabled, onLongClickLabel = longClickLabel,
+                onLongClick = onLongClick, onClick = onClick) else Modifier.clickable(enabled = enabled, onClick = onClick))
             .semantics(mergeDescendants = true) {
                 contentDescription = label
                 role = Role.Switch
-                stateDescription = if (active) "on" else "off"
+                stateDescription = stateLabel ?: if (active) "on" else "off"
             }
             .testTag(testTag),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -3483,23 +3572,33 @@ internal fun CaptureButton(
                 },
             )
             // Starting and closing a take both spin; the colour says which one is in progress.
-            val reducedMotion = LocalReducedMotion.current
-            AnimatedVisibility(
+            RecordBusyRing(
                 visible = busy,
+                color = if (recordState == RecordButtonState.PREPARING) RecordRed else Amber,
+                tag = "record-busy-indicator",
                 modifier = Modifier.matchParentSize(),
-                enter = if (reducedMotion) EnterTransition.None else fadeIn(),
-                exit = if (reducedMotion) ExitTransition.None else fadeOut(),
-            ) {
-                CircularWavyProgressIndicator(
-                    color = if (recordState == RecordButtonState.PREPARING) RecordRed else Amber,
-                    trackColor = Color.Transparent,
-                    modifier = Modifier.fillMaxSize().padding(2.dp).testTag("record-busy-indicator"),
-                )
-            }
+            )
         }
     } }
     if (labelBeside) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { label(); button() }
     else Column(horizontalAlignment = Alignment.CenterHorizontally) { button(); label() }
+}
+
+/** The ring a busy record control wears; reduced motion swaps the endless spin for a still ring. */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun RecordBusyRing(visible: Boolean, color: Color, tag: String, modifier: Modifier) {
+    val reducedMotion = LocalReducedMotion.current
+    AnimatedVisibility(
+        visible = visible,
+        modifier = modifier,
+        enter = if (reducedMotion) EnterTransition.None else fadeIn(),
+        exit = if (reducedMotion) ExitTransition.None else fadeOut(),
+    ) {
+        val ring = Modifier.fillMaxSize().padding(2.dp).testTag(tag)
+        if (reducedMotion) Box(ring.border(2.dp, color, CircleShape))
+        else CircularWavyProgressIndicator(color = color, trackColor = Color.Transparent, modifier = ring)
+    }
 }
 
 /**
@@ -3698,6 +3797,8 @@ private fun RecordingOverlay(
 ) {
     var showMonitors by remember { mutableStateOf(false) }
     val stopRecordingDescription = stringResource(R.string.stop_recording)
+    val finalizing = state.recordingFinalizing
+    val finalizingLabel = stringResource(R.string.rec_state_finalizing)
     BoxWithConstraints(modifier.padding(top = 8.dp, start = 10.dp, end = 10.dp).fillMaxWidth()) {
         // A phone-width strip drops the frame size and the monitoring shortcut to keep REC, the
         // meter and stop on one row.
@@ -3713,9 +3814,11 @@ private fun RecordingOverlay(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Box(Modifier.size(8.dp).clip(CircleShape).background(RecordRed))
-                Text((if (state.recordingPauseStatus?.paused == true) stringResource(R.string.recording_paused) else "REC") + " " + formatDuration(state.recordingElapsedMs) +
-                    state.takeLengthLimitMs?.let { " / " + formatDuration(it) }.orEmpty(),
+                Box(Modifier.size(8.dp).clip(CircleShape).background(if (finalizing) RecordButtonState.FINALIZING.color else RecordRed))
+                // The clock stops meaning anything once the take is closing, so the strip says so instead.
+                Text(if (finalizing) finalizingLabel
+                    else (if (state.recordingPauseStatus?.paused == true) stringResource(R.string.recording_paused) else "REC") + " " + formatDuration(state.recordingElapsedMs) +
+                        state.takeLengthLimitMs?.let { " / " + formatDuration(it) }.orEmpty(),
                     color = MaterialTheme.colorScheme.onSurface, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                 if (!compact && state.recordingWidth != null && state.recordingHeight != null) {
                     Text(formatFrameSize(state.recordingWidth, state.recordingHeight), color = Muted, fontSize = 12.sp, maxLines = 1)
@@ -3734,10 +3837,25 @@ private fun RecordingOverlay(
             Spacer(Modifier.weight(1f))
             if (!compact) TopAction(CineIcon.MONITORING, stringResource(R.string.monitoring_tools)) { showMonitors = !showMonitors }
             if (showStop) {
+                // Like the full chrome's record button: a closing take answers no second stop.
                 Box(
-                    Modifier.size(48.dp).semantics { contentDescription = stopRecordingDescription }.border(2.dp, MaterialTheme.colorScheme.onSurface, CircleShape).padding(5.dp).clip(CircleShape).clickable { binder?.capturePrimary() },
+                    Modifier.size(48.dp)
+                        .semantics {
+                            contentDescription = stopRecordingDescription
+                            if (finalizing) stateDescription = finalizingLabel
+                        }
+                        .border(2.dp, if (finalizing) Muted else MaterialTheme.colorScheme.onSurface, CircleShape)
+                        .padding(5.dp)
+                        .clip(CircleShape)
+                        .clickable(enabled = !finalizing) { binder?.capturePrimary() },
                     contentAlignment = Alignment.Center,
-                ) { Box(Modifier.size(16.dp).testTag("recording-stop-glyph").clip(RoundedCornerShape(2.dp)).background(RecordRed)) }
+                ) {
+                    Box(
+                        if (finalizing) Modifier.size(16.dp).clip(RoundedCornerShape(2.dp)).background(Muted)
+                        else Modifier.size(16.dp).testTag("recording-stop-glyph").clip(RoundedCornerShape(2.dp)).background(RecordRed),
+                    )
+                    RecordBusyRing(finalizing, RecordButtonState.FINALIZING.color, "recording-stop-busy", Modifier.matchParentSize())
+                }
             }
         }
         // The Adaptive policy's live warning, on every layout: CaptureStatus is hidden while a take runs.
@@ -3811,8 +3929,18 @@ internal fun AudioMeterHud(
                 fontSize = 12.sp, lineHeight = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(stringResource(audioMeterModeLabel(meterSettings.mode)), Modifier.testTag("audio-meter-mode"), color = Muted,
                 fontSize = 12.sp, lineHeight = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (state.audioClipLatched) Text("CLIP", Modifier.testTag("audio-meter-clip"), color = RecordRed, fontSize = 12.sp,
-                lineHeight = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+            if (state.audioClipLatched) {
+                // IN: the microphone's samples hit full scale. REC: the processed samples that are recorded did.
+                val clipDescription = when {
+                    state.audioInputClipLatched && state.audioRecordedClipLatched -> stringResource(R.string.audio_meter_clip_both)
+                    state.audioInputClipLatched -> stringResource(R.string.audio_meter_clip_input)
+                    state.audioRecordedClipLatched -> stringResource(R.string.audio_meter_clip_recorded)
+                    else -> null
+                }
+                Text(audioClipLabel(state.audioInputClipLatched, state.audioRecordedClipLatched),
+                    Modifier.testTag("audio-meter-clip").semantics { clipDescription?.let { stateDescription = it } },
+                    color = RecordRed, fontSize = 12.sp, lineHeight = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+            }
             val meterTrack = MaterialTheme.colorScheme.surfaceContainerHighest
             val meterLine = MaterialTheme.colorScheme.onSurface
             val meterGreen = OkGreen
@@ -4336,6 +4464,7 @@ internal fun SettingsContent(
     onSelectRawVideoConfig: ((String) -> Unit)? = null,
     onRequalifyRawVideo: (() -> Unit)? = null,
     onRecordingDestinationChanged: () -> Unit = {},
+    onOpenInputEqualizer: (() -> Unit)? = null,
     /** Cards a search names in their title: they come first, the rest keep the page's order. */
     leadingIds: Set<String> = emptySet(),
 ) {
@@ -4498,8 +4627,10 @@ internal fun SettingsContent(
                 },
             )
         }
+        // The sync offset and equaliser rows live in the professional audio card, so finding them shows that card.
+        val audioFormatVisible = "audio-format" in visibleIds || AUDIO_SYNC_OFFSET_SETTING_ID in visibleIds || AUDIO_EQ_SETTING_ID in visibleIds
         if (!audioPermissionGranted) {
-            if (("audio-permission" in visibleIds || "audio-format" in visibleIds)) settingsCard("audio-permission") {
+            if (("audio-permission" in visibleIds || audioFormatVisible)) settingsCard("audio-permission") {
                 if (audioPermissionBlocked) {
                     Text(stringResource(R.string.permission_blocked_explanation), color = Muted, fontSize = 14.sp)
                 }
@@ -4508,11 +4639,12 @@ internal fun SettingsContent(
                     colors = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = MaterialTheme.colorScheme.onPrimary),
                 ) { Text(stringResource(if (audioPermissionBlocked) R.string.permission_open_settings else R.string.grant_microphone)) }
             }
-        } else if ("audio-format" in visibleIds) settingsCard("audio-format") {
+        } else if (audioFormatVisible) settingsCard("audio-format") {
             ProfessionalAudioSettings(
                 state = state,
                 settings = settings,
                 onSettingsChange = onSettingsChange,
+                onOpenInputEqualizer = onOpenInputEqualizer,
             )
         }
         if ("burst" in visibleIds) settingsCard("burst") {
@@ -4726,7 +4858,7 @@ internal fun SettingsContent(
         if ("about" in visibleIds) settingsCard("about") {
             SettingsLinkRow(stringResource(R.string.about_title), stringResource(R.string.about_settings_summary), onOpenAbout)
         }
-        cards.sortedByDescending { it.first in leadingIds }.forEach { (key, content) -> this.settingsCard(key, content) }
+        cards.sortedByDescending { it.first in leadingIds || (it.first == "audio-format" && (AUDIO_SYNC_OFFSET_SETTING_ID in leadingIds || AUDIO_EQ_SETTING_ID in leadingIds)) }.forEach { (key, content) -> this.settingsCard(key, content) }
     }
     }
     }
@@ -4756,6 +4888,7 @@ private fun ProfessionalAudioSettings(
     state: CameraUiState,
     settings: CameraSettings,
     onSettingsChange: (CameraSettings) -> Unit,
+    onOpenInputEqualizer: (() -> Unit)? = null,
 ) {
     val capabilities = state.audioCapabilities
     // The settings card is the surface; no second box inside it.
@@ -4891,21 +5024,27 @@ private fun ProfessionalAudioSettings(
             Modifier.testTag("audio-input-loss-hint"), color = Muted, fontSize = 14.sp,
         )
 
+        // The platform effects are not attached to the low-latency input (PLAN-074 decision 4).
+        val lowLatencyInput = settings.audioSource.lowLatency
+        val effectSummary = stringResource(if (lowLatencyInput) R.string.audio_effect_not_with_input else R.string.audio_effect_request_help)
         SettingsToggleRow(
             title = stringResource(R.string.audio_effect_ns),
-            summary = stringResource(R.string.audio_effect_request_help),
+            summary = effectSummary,
             checked = settings.noiseSuppressorEnabled,
-            enabled = capabilities.noiseSuppressorAvailable,
+            enabled = capabilities.noiseSuppressorAvailable && !lowLatencyInput,
             onCheckedChange = { update(settings.copy(noiseSuppressorEnabled = it)) },
         )
         SettingsToggleRow(
             title = stringResource(R.string.audio_effect_aec),
-            summary = stringResource(R.string.audio_effect_request_help),
+            summary = effectSummary,
             checked = settings.acousticEchoCancelerEnabled,
-            enabled = capabilities.acousticEchoCancelerAvailable,
+            enabled = capabilities.acousticEchoCancelerAvailable && !lowLatencyInput,
             onCheckedChange = { update(settings.copy(acousticEchoCancelerEnabled = it)) },
         )
         AudioRecordingGainSettings(state, settings, onSettingsChange)
+        AudioSyncOffsetSettings(state, settings, onSettingsChange)
+        if (onOpenInputEqualizer != null) SettingsLinkRow(stringResource(R.string.input_eq_title), rememberInputEqSummary(settings), onOpenInputEqualizer,
+            Modifier.testTag("settings-input-equalizer"))
         Text(stringResource(R.string.audio_format_container_hint), color = Muted, fontSize = 14.sp)
     }
 }
@@ -4973,7 +5112,8 @@ private fun ProductionSlateTextField(tag: String, label: Int, value: String, onC
 internal fun AudioMeterSettingsControls(settings: CameraSettings, onSettingsChange: (CameraSettings) -> Unit) {
     val options = settings.audioMeter
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        SettingsSectionTitle(stringResource(R.string.audio_meter_title), help = stringResource(R.string.audio_meter_help), helpTag = "audio-meter-settings-help")
+        SettingsSectionTitle(stringResource(R.string.audio_meter_title), help = stringResource(R.string.audio_meter_help) + "\n\n" + stringResource(R.string.audio_meter_clip_help),
+            helpTag = "audio-meter-settings-help")
         SettingsSwitchRow(stringResource(R.string.audio_meter_visible), options.visible,
             { onSettingsChange(settings.copy(audioMeter = options.copy(visible = it))) }, tag = "audio-meter-settings-visible")
         SettingsChips(stringResource(R.string.settings_mode), AudioMeterMode.entries, options.mode,
@@ -5101,10 +5241,11 @@ internal fun AudioListeningSettingsControls(
         Text(stringResource(if (request.output == AudioListeningOutput.SPEAKER) R.string.audio_listening_speaker_warning else R.string.audio_listening_latency),
             Modifier.testTag("audio-listening-route-help"), color = Muted, fontSize = 14.sp)
         val devices = state.audioListeningOutputs.filter { it.output == request.output }
+        val deviceLabels = listenDeviceLabels(devices)
         val autoDevice = stringResource(R.string.audio_listening_auto)
         SettingsChips(stringResource(R.string.audio_listening_device_title), listOf<Int?>(null) + devices.map { it.id },
             settings.audioListeningOutputDeviceId,
-            label = { id -> if (id == null) autoDevice else devices.firstOrNull { it.id == id }?.name ?: id.toString() },
+            label = { id -> if (id == null) autoDevice else deviceLabels[id] ?: id.toString() },
             onSelect = { onSettingsChange(settings.copy(audioListeningOutputDeviceId = it)) },
             tag = { "audio-listening-device-${it ?: "auto"}" })
         Text(stringResource(R.string.audio_listening_requested_device,
@@ -5170,7 +5311,11 @@ internal fun AudioRecordingGainSettings(
             modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("audio-gain-slider").semantics { contentDescription = requestedLabel })
         SettingsSwitchRow(agcLabel, settings.automaticGainControlEnabled,
             { onSettingsChange(settings.copy(automaticGainControlEnabled = it)) }, tag = "audio-gain-agc", enabled = !gain.enabled)
-        Text(stringResource(if (gain.enabled) R.string.audio_gain_agc_suspended else R.string.audio_gain_agc_backend),
+        Text(stringResource(when {
+                gain.enabled -> R.string.audio_gain_agc_suspended
+                settings.audioSource.lowLatency -> R.string.audio_gain_agc_low_latency
+                else -> R.string.audio_gain_agc_backend
+            }),
             Modifier.testTag("audio-gain-agc-help"), color = Muted, fontSize = 14.sp)
         val applied = state.audioLevels?.appliedRecordingGain.takeIf { state.audioMonitoringActive }
         Text(when {
@@ -5181,6 +5326,68 @@ internal fun AudioRecordingGainSettings(
         if (state.structuralSettingsFrozen && (state.effectiveSettings?.audioRecordingGain != gain ||
                 state.effectiveSettings?.automaticGainControlEnabled != settings.automaticGainControlEnabled)) {
             Text(stringResource(R.string.audio_gain_pending), Modifier.testTag("audio-gain-pending"), color = Amber, fontSize = 14.sp)
+        }
+    }
+}
+
+/** The meter's clip label: which side of the equaliser, AGC and gain reached full scale. A source that cannot tell says CLIP. */
+internal fun audioClipLabel(input: Boolean, recorded: Boolean): String = when {
+    input && recorded -> "CLIP IN+REC"
+    input -> "CLIP IN"
+    recorded -> "CLIP REC"
+    else -> "CLIP"
+}
+
+/**
+ * The manual audio sync offset (PLAN-074 decision 12): the slider moves in 10 ms steps, the keys
+ * beside it in 1 ms. A take reads the value at its start, so a change while recording is pending.
+ */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+internal fun AudioSyncOffsetSettings(
+    state: CameraUiState,
+    settings: CameraSettings,
+    onSettingsChange: (CameraSettings) -> Unit,
+) {
+    val state = liveCameraState(state)
+    val offset = settings.audioSyncOffsetMs
+    val range = AUDIO_SYNC_OFFSET_RANGE_MS
+    val valueLabel = when {
+        offset > 0 -> stringResource(R.string.audio_sync_offset_later, offset)
+        offset < 0 -> stringResource(R.string.audio_sync_offset_earlier, -offset)
+        else -> stringResource(R.string.audio_sync_offset_none)
+    }
+    val set: (Int) -> Unit = { onSettingsChange(settings.copy(audioSyncOffsetMs = it.coerceIn(range))) }
+    val offsetInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    @Composable fun StepKey(tag: String, glyph: String, label: String, enabled: Boolean, onClick: () -> Unit) =
+        TextButton(onClick = onClick, enabled = enabled,
+            modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).testTag(tag).semantics { contentDescription = label }) {
+            Text(glyph, Modifier.clearAndSetSemantics {}, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SettingsSectionTitle(stringResource(R.string.audio_sync_offset_title), help = stringResource(R.string.audio_sync_offset_help), helpTag = "audio-sync-offset-help")
+        // As tall as the Reset key, so the row does not move when the key comes and goes.
+        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(valueLabel, Modifier.weight(1f).testTag("audio-sync-offset-value"), color = MaterialTheme.colorScheme.onSurface)
+            if (offset != 0) TextButton(onClick = { set(0) }, modifier = Modifier.heightIn(min = 48.dp).testTag("audio-sync-offset-reset")) {
+                Text(stringResource(R.string.audio_sync_offset_reset))
+            }
+        }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            StepKey("audio-sync-offset-minus", "−", stringResource(R.string.audio_sync_offset_minus), offset > range.first) { set(offset - 1) }
+            CineSlider(value = offset.toFloat(), valueRange = range.first.toFloat()..range.last.toFloat(), steps = 99,
+                onValueChange = { set((it / 10f).roundToInt() * 10) },
+                interactionSource = offsetInteraction,
+                // The same enlarged thumb as the recording gain, so the touch target is the thumb itself.
+                thumb = { androidx.compose.material3.SliderDefaults.Thumb(
+                    interactionSource = offsetInteraction, thumbSize = androidx.compose.ui.unit.DpSize(4.dp, 52.dp)) },
+                track = { androidx.compose.material3.SliderDefaults.Track(sliderState = it) },
+                modifier = Modifier.weight(1f).heightIn(min = 52.dp).testTag("audio-sync-offset-slider").semantics { contentDescription = valueLabel })
+            StepKey("audio-sync-offset-plus", "+", stringResource(R.string.audio_sync_offset_plus), offset < range.last) { set(offset + 1) }
+        }
+        Text(stringResource(R.string.audio_sync_offset_scope), Modifier.testTag("audio-sync-offset-scope"), color = Muted, fontSize = 14.sp)
+        if (state.structuralSettingsFrozen && state.effectiveSettings?.let { it.audioSyncOffsetMs != offset } == true) {
+            Text(stringResource(R.string.audio_sync_offset_pending), Modifier.testTag("audio-sync-offset-pending"), color = Amber, fontSize = 14.sp)
         }
     }
 }
@@ -5260,6 +5467,8 @@ private fun audioSourceLabel(source: com.librestatic.opencinecam.media.audio.Aud
         com.librestatic.opencinecam.media.audio.AudioSourceSelection.UNPROCESSED -> R.string.audio_source_unprocessed
         com.librestatic.opencinecam.media.audio.AudioSourceSelection.VOICE_RECOGNITION -> R.string.audio_source_voice_recognition
         com.librestatic.opencinecam.media.audio.AudioSourceSelection.MIC -> R.string.audio_source_microphone
+        com.librestatic.opencinecam.media.audio.AudioSourceSelection.CAMCORDER -> R.string.audio_source_camcorder
+        com.librestatic.opencinecam.media.audio.AudioSourceSelection.LOW_LATENCY -> R.string.audio_source_low_latency
     },
 )
 

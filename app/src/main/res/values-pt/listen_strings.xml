@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="listen_key">Escuta por fones de ouvido</string>
+    <string name="listen_key_on">ativada</string>
+    <string name="listen_key_connecting">conectando</string>
+    <string name="listen_key_off">desativada</string>
+    <string name="listen_key_open_panel">Saída e volume</string>
+    <string name="listen_panel_title">FONES DE OUVIDO</string>
+    <string name="listen_panel_hint">Você ouve o que é gravado</string>
+    <string name="listen_panel_no_output">Conecte fones USB-C ou Bluetooth</string>
+    <string name="listen_panel_raw_video">No vídeo RAW o microfone só é ouvido quando a tomada começa</string>
+    <string name="listen_exit_title">Continuar ouvindo?</string>
+    <string name="listen_exit_body">A escuta continua ativa (%1$s).</string>
+    <string name="listen_exit_keep">Continuar ouvindo</string>
+    <string name="listen_exit_stop">Parar</string>
+</resources>

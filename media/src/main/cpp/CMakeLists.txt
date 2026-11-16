@@ -30,3 +30,12 @@ if(ANDROID_ABI STREQUAL "arm64-v8a")
 endif()
 # 16 KB page compatibility (Android 15+ devices, Play requirement).
 target_link_options(occ_rawcodec PRIVATE -Wl,--gc-sections -Wl,-z,max-page-size=16384)
+
+# libocc_aaudio.so: the low-latency AAudio microphone input behind AAudioNative
+# (PLAN-074 decision 4). AAudio is API 26 and the input preset API 28, both
+# below minSdk 29, so the library links them directly.
+add_library(occ_aaudio SHARED occ_aaudio_jni.cpp)
+target_compile_options(occ_aaudio PRIVATE
+  -O3 -Wall -Wextra -Werror -fno-exceptions -fno-rtti -fvisibility=hidden)
+target_link_libraries(occ_aaudio PRIVATE aaudio log)
+target_link_options(occ_aaudio PRIVATE -Wl,--gc-sections -Wl,-z,max-page-size=16384)

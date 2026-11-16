@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="audio_sync_offset_title">Deslocamento de sincronia do áudio</string>
+    <string name="audio_sync_offset_help">Desloca o áudio gravado em relação à imagem, para microfones cujo atraso o app não consegue medir, como os Bluetooth e alguns USB. Se o som chega antes da imagem, mova o áudio para mais tarde; se chega depois, para mais cedo. Confira com uma palma ou uma claquete numa tomada de teste.</string>
+    <string name="audio_sync_offset_none">Sem deslocamento</string>
+    <string name="audio_sync_offset_later">Áudio %1$d ms mais tarde</string>
+    <string name="audio_sync_offset_earlier">Áudio %1$d ms mais cedo</string>
+    <string name="audio_sync_offset_minus">1 ms mais cedo</string>
+    <string name="audio_sync_offset_plus">1 ms mais tarde</string>
+    <string name="audio_sync_offset_reset">Redefinir</string>
+    <string name="audio_sync_offset_scope">Vale para o áudio incorporado ao vídeo e para o vídeo RAW. Arquivos WAV e FLAC separados não são deslocados; o deslocamento fica salvo no registro da tomada.</string>
+    <string name="audio_sync_offset_pending">O novo deslocamento vale a partir da próxima tomada. Esta tomada mantém o deslocamento com que começou.</string>
+</resources>

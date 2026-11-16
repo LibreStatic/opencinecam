@@ -79,3 +79,7 @@ Keep least permissions, but allow network and location permissions only when a n
 - Operational: adding a permission requires a new or extended opt-in feature, an amendment to OCC-PRIV-001 and this ADR, and an updated audit test.
 
 The original decision above is retained as history; this amendment governs where they differ.
+
+## Amendment (2026-11-15)
+
+Recording to a USB drive (PLAN-072, ADR-0037 decision 9) declares `.UsbDriveAttachAlias`, an exported activity with no display that handles `USB_DEVICE_ATTACHED` for mass storage; the system can only start an exported handler. It is disabled in the manifest and enabled only while a USB folder is the recording destination. The `SEC-COMPONENTS` audit check therefore accepts an exported component that is the launcher or that a declared opt-in feature names (`OptInFeature.USB_DRIVE_RECORDING`); any other exported component still fails. Exporting another component requires a new or extended opt-in feature, an amendment here and an updated audit test.

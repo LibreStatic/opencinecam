@@ -26,7 +26,7 @@ data class PresetDifference(val key: String, val before: Any?, val after: Any)
 
 /** Flat typed settings schema; never deserialize app/device identifiers or arbitrary file paths. */
 object CameraPresetCodec {
-    const val VERSION = 28
+    const val VERSION = 29
     const val MAX_BYTES = 65_536
     // Explicit V2 registry: adding an application preference never exports it accidentally.
     // A schema revision and privacy review are required before extending this registry.
@@ -142,6 +142,10 @@ object CameraPresetCodec {
     private val portableV27 = portableV26 + setOf("operator-volume-up-long", "operator-volume-down-long", "operator-volume-up-double",
         "operator-volume-down-double", "operator-volume-both", "operator-volume-pair", "operator-volume-pair-inverted")
     private val portableV28 = portableV27 + setOf("slow-motion-take-length-s")
+    // PLAN-074 decision 8: the equaliser curve and the profile it was copied from travel with a look.
+    private val portableV29 = portableV28 + setOf("audio-eq-curve", "audio-eq-profile-id")
+    /** The equaliser curve is a JSON string up to [EqCurve.MAX_POINTS] points; every other string stays short. */
+    private val longStringKeys = mapOf("audio-eq-curve" to 4_096)
     /**
      * The exact key set a payload of [version] must carry. Every published version stays frozen
      * here, so a payload written by an older build keeps decoding without its keys being guessed.
@@ -161,11 +165,12 @@ object CameraPresetCodec {
         version == 25 -> portableV25
         version == 26 -> portableV26
         version == 27 -> portableV27
-        else -> portableV28
+        version == 28 -> portableV28
+        else -> portableV29
     }
     private fun snapshot(settings: CameraSettings): Map<String, Any> {
         val memory = PresetPreferences(); CameraSettingsStore(memory).save(settings)
-        return memory.all.filterKeys { it in portableV28 }.mapValues { requireNotNull(it.value) }.toSortedMap()
+        return memory.all.filterKeys { it in portableV29 }.mapValues { requireNotNull(it.value) }.toSortedMap()
     }
     private val defaults by lazy { snapshot(CameraSettings()) }
     val portableKeys: Set<String> get() = defaults.keys
@@ -201,7 +206,7 @@ object CameraPresetCodec {
             val p = element as? JsonPrimitive ?: error("Settings must be scalar")
             require(p != JsonNull)
             values[key] = when (defaults.getValue(key)) {
-                is String -> p.also { require(it.isString && it.content.length <= 128) }.content
+                is String -> p.also { require(it.isString && it.content.length <= (longStringKeys[key] ?: 128)) }.content
                 is Boolean -> p.also { require(!it.isString) }.boolean
                 is Int -> p.also { require(!it.isString) }.int
                 is Long -> p.also { require(!it.isString) }.long
@@ -246,6 +251,8 @@ object CameraPresetCodec {
         legacyAudioInputDeviceId = current.legacyAudioInputDeviceId,
         // What a lost microphone does is a habit of this rig, not part of a look (ADR-0032 is unchanged).
         audioInputLossPolicy = current.audioInputLossPolicy,
+        // The manual sync offset belongs to this rig's microphone, not to a look (PLAN-074 decision 12).
+        audioSyncOffsetMs = current.audioSyncOffsetMs,
         audioListeningOutputDeviceId = current.audioListeningOutputDeviceId,
         // Not yet a portable preset key (needs a schema revision); keep the device value.
         logGreyReference = current.logGreyReference,

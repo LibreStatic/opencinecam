@@ -9,6 +9,14 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class AudioMeterSettingsTest {
+    @Test fun theClipLabelNamesTheSideThatClipped() {
+        assertEquals("CLIP IN", audioClipLabel(input = true, recorded = false))
+        assertEquals("CLIP REC", audioClipLabel(input = false, recorded = true))
+        assertEquals("CLIP IN+REC", audioClipLabel(input = true, recorded = true))
+        // A recorder that only reports its own peak cannot tell.
+        assertEquals("CLIP", audioClipLabel(input = false, recorded = false))
+    }
+
     private val keys = setOf("audio-meter-visible", "audio-meter-mode", "audio-meter-vu-reference", "audio-meter-peak-hold-ms", "audio-meter-show-values")
     private fun document(settings: CameraSettings = CameraSettings()) = Json.parseToJsonElement(
         CameraPresetCodec.encode(CameraPreset(name = "Meter", settings = settings))).jsonObject
@@ -34,7 +42,7 @@ class AudioMeterSettingsTest {
     @Test fun versionEighteenHas160ExactPortableKeysAndVersionTwelveMigratesFiveDefaults() {
         val source = CameraSettings(audioListening = AudioListeningSettings(true, 36))
         val root = document(source)
-        assertEquals(28, CameraPresetCodec.VERSION); assertEquals(184, CameraPresetCodec.portableKeys.size)
+        assertEquals(29, CameraPresetCodec.VERSION); assertEquals(186, CameraPresetCodec.portableKeys.size)
         assertTrue(CameraPresetCodec.portableKeys.containsAll(keys))
         val historical = root.getValue("settings").jsonObject.filterKeys { it !in PRESET_V20_KEYS && !it.startsWith("slate-") && !it.startsWith("gallery-") && !it.startsWith("media-share-") && !it.startsWith("capture-naming-") && !it.startsWith("playback-") } - keys
         assertEquals(132, historical.size)

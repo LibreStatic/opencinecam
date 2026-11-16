@@ -72,6 +72,12 @@ internal const val DOCKED_SHEET_MAX_WIDTH_DP = 640f
 /** Height of the top bar over the viewfinder in the stacked layout. */
 internal const val STACKED_TOP_BAR_HEIGHT_DP = 56f
 
+/**
+ * The width the top bar's status line keeps beside a labelled destination chip. With less, the chip shows its icon
+ * alone: on a phone that is while the thermal chip is up, or with a third action in the bar and a long label.
+ */
+internal const val DESTINATION_CHIP_STATUS_ROOM_DP = 110f
+
 /** Height of the slim top bar that compact portrait windows use. */
 internal const val SLIM_TOP_BAR_HEIGHT_DP = 48f
 

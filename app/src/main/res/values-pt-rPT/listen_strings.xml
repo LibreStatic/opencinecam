@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="listen_key">Escuta com auscultadores</string>
+    <string name="listen_key_on">ativada</string>
+    <string name="listen_key_connecting">a ligar</string>
+    <string name="listen_key_off">desativada</string>
+    <string name="listen_key_open_panel">Saída e volume</string>
+    <string name="listen_panel_title">AUSCULTADORES</string>
+    <string name="listen_panel_hint">Ouve-se o que fica gravado</string>
+    <string name="listen_panel_no_output">Ligue auscultadores USB-C ou Bluetooth</string>
+    <string name="listen_panel_raw_video">Em vídeo RAW, o microfone só se ouve quando o take começa</string>
+    <string name="listen_exit_title">Continuar a ouvir?</string>
+    <string name="listen_exit_body">A escuta continua ativa (%1$s).</string>
+    <string name="listen_exit_keep">Continuar a ouvir</string>
+    <string name="listen_exit_stop">Parar</string>
+</resources>

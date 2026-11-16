@@ -40,6 +40,31 @@ class PcmCaptureEpoch(private val rate: Int) {
     fun current(): AudioCaptureEpoch? = epoch
 }
 
+/**
+ * Frame zero of an input that publishes no timestamps, from when its reads returned. A blocking read returns as the
+ * last frame it carries arrives, so the return time minus the frames read so far is frame zero plus the delivery
+ * delay; a read that waited for the scheduler or drained a backlog gives a later value, so the earliest one wins.
+ * Only reads in the first [windowNs] count, which keeps the drift between the audio and boot clocks out of it. The
+ * moment the input was started is not frame zero: the first sample arrives tens of milliseconds later.
+ */
+class PcmReadEpochEstimate(private val rate: Int, private val windowNs: Long = 1_000_000_000L) {
+    init { require(rate in 1..384000 && windowNs > 0) }
+    private var firstReturnNs: Long? = null
+    private var zeroNs: Long? = null
+    /** A read returned at [returnedAtNs] (boot time) and the input has delivered [framesRead] frames in all. */
+    fun observeRead(framesRead: Long, returnedAtNs: Long) {
+        if (framesRead <= 0 || returnedAtNs <= 0) return
+        val first = firstReturnNs ?: returnedAtNs.also { firstReturnNs = it }
+        if (returnedAtNs - first > windowNs) return
+        val candidate = returnedAtNs - pcmFrameDurationNs(framesRead, rate)
+        if (candidate > 0 && zeroNs?.let { candidate < it } != false) zeroNs = candidate
+    }
+    /** The estimate, or null before the first read. */
+    fun frameZeroNs(): Long? = zeroNs
+    /** True at [nowNs] once the window after the first read has passed, so [frameZeroNs] no longer changes. */
+    fun settled(nowNs: Long): Boolean = firstReturnNs?.let { nowNs - it > windowNs } == true
+}
+
 data class CaptureEpochReport(
     val policy: String,
     val cameraRealtime: Boolean,
@@ -62,10 +87,20 @@ data class CaptureEpochReport(
     val capturedPcmFrames: Long = 0,
     val sharedPause: SharedCapturePauseReport? = null,
     val audioStorage: String = "EMBEDDED_AAC",
+    /**
+     * The manual sync offset (PLAN-074 decision 12) the placement of this take's audio applied, in
+     * microseconds; positive placed it later. [audioFrameZeroNs] stays the measured anchor.
+     */
+    val audioSyncOffsetUs: Long = 0,
 )
 
-/** The GL video producer and PCM feeder publish their anchors before encoded samples are muxed. */
-class CaptureEpochClock(val cameraRealtime: Boolean, val sampleRateHz: Int? = null) {
+/**
+ * The GL video producer and PCM feeder publish their anchors before encoded samples are muxed.
+ * [audioSyncOffsetNs] is the manual sync offset (PLAN-074 decision 12): it moves where the audio is
+ * placed against the video, never the measured anchor, so the shared pause and the drift
+ * diagnostics keep the audio's own capture clock.
+ */
+class CaptureEpochClock(val cameraRealtime: Boolean, val sampleRateHz: Int? = null, val audioSyncOffsetNs: Long = 0) {
     private var videoNs: Long? = null
     private var audio: AudioCaptureEpoch? = null
     private var readFrames = 0L
@@ -123,12 +158,14 @@ class CaptureEpochClock(val cameraRealtime: Boolean, val sampleRateHz: Int? = nu
     @Synchronized fun ready(): Boolean = !cameraRealtime || videoNs != null && audio != null
     @Synchronized fun offsetUs(video: Boolean): Long {
         check(ready()) { "Capture anchors are pending" }
-        if (!cameraRealtime) return 0
+        // Without comparable anchors both tracks start at zero; the manual offset still moves the audio.
+        if (!cameraRealtime) return if (video) maxOf(0L, -audioSyncOffsetNs) / 1000 else maxOf(0L, audioSyncOffsetNs) / 1000
         val videoOrigin = requireNotNull(videoNs)
-        val audioOrigin = requireNotNull(audio).frameZeroNs
+        val audioOrigin = placedAudioOriginNs(requireNotNull(audio))
         val origin = minOf(videoOrigin, audioOrigin)
         return ((if (video) videoOrigin else audioOrigin) - origin) / 1000
     }
+    private fun placedAudioOriginNs(epoch: AudioCaptureEpoch): Long = Math.addExact(epoch.frameZeroNs, audioSyncOffsetNs)
     @Synchronized fun report(videoEncoderFirstPtsUs: Long?, audioEncoderFirstPtsUs: Long?, encoderDelayFrames: Int?): CaptureEpochReport {
         val known = videoNs != null && audio != null
         return CaptureEpochReport(
@@ -139,11 +176,13 @@ class CaptureEpochClock(val cameraRealtime: Boolean, val sampleRateHz: Int? = nu
                 else -> "BOOTTIME_ESTIMATED_AUDIO_START"
             }, cameraRealtime = cameraRealtime, videoFrameZeroNs = videoNs,
             audioFrameZeroNs = audio?.frameZeroNs,
-            sharedOriginNs = if (cameraRealtime && known) minOf(requireNotNull(videoNs), requireNotNull(audio).frameZeroNs) else null,
+            // The origin offsetUs placed both tracks against, so it moves with the sync offset.
+            sharedOriginNs = if (cameraRealtime && known) minOf(requireNotNull(videoNs), placedAudioOriginNs(requireNotNull(audio))) else null,
             audioTimestampBacked = audio?.timestampBacked == true, audioMaxResidualNs = audio?.takeIf { it.timestampBacked }?.maxResidualNs,
             videoEncoderFirstPtsUs = videoEncoderFirstPtsUs, audioEncoderFirstPtsUs = audioEncoderFirstPtsUs,
             audioEncoderDelayFrames = encoderDelayFrames,
             capturedPcmFrames = readFrames, sharedPause = pause?.report(),
+            audioSyncOffsetUs = audioSyncOffsetNs / 1000,
         )
     }
 }

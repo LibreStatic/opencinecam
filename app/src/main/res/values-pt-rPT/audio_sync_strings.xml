@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="audio_sync_offset_title">Desvio de sincronização do áudio</string>
+    <string name="audio_sync_offset_help">Desloca o áudio gravado em relação à imagem, para microfones cujo atraso a app não consegue medir, como os Bluetooth e alguns USB. Se o som chega antes da imagem, desloque o áudio para mais tarde; se chega depois, para mais cedo. Confirme com uma palma ou uma claquete num take de teste.</string>
+    <string name="audio_sync_offset_none">Sem desvio</string>
+    <string name="audio_sync_offset_later">Áudio %1$d ms mais tarde</string>
+    <string name="audio_sync_offset_earlier">Áudio %1$d ms mais cedo</string>
+    <string name="audio_sync_offset_minus">1 ms mais cedo</string>
+    <string name="audio_sync_offset_plus">1 ms mais tarde</string>
+    <string name="audio_sync_offset_reset">Repor</string>
+    <string name="audio_sync_offset_scope">Aplica-se ao áudio incorporado no vídeo e ao vídeo RAW. Os ficheiros WAV e FLAC separados não são deslocados; o desvio fica guardado no registo do take.</string>
+    <string name="audio_sync_offset_pending">O novo desvio aplica-se a partir do próximo take. Este take mantém o desvio com que começou.</string>
+</resources>

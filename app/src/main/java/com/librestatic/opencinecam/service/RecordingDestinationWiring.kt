@@ -322,15 +322,15 @@ internal class DriveContinuation(private val clock: () -> Long, private val ttlM
 }
 
 /**
- * The warning-line notice of a take that went to the phone because its drive could not be used; null when it did not.
+ * The warning-line notice of a take that went to the phone because its drive could not be used; null when it did not,
+ * and for a drive that is just not connected, which the destination chip already shows.
  * [starting] is for a take that began while the drive was still spinning up, [renamed] for one whose drive is mounted under
  * another volume name ([DestinationFallback.DRIVE_RENAMED]).
  */
-internal fun destinationFallbackNotice(fallback: DestinationFallback?, notConnected: String, permissionLost: String, starting: String,
-    renamed: String): String? =
+internal fun destinationFallbackNotice(fallback: DestinationFallback?, permissionLost: String, starting: String, renamed: String): String? =
     when (fallback) {
-        null -> null
-        DestinationFallback.DRIVE_NOT_CONNECTED -> notConnected
+        // A drive that is simply not plugged in needs no warning: the destination chip already reads the phone.
+        null, DestinationFallback.DRIVE_NOT_CONNECTED -> null
         DestinationFallback.DRIVE_STARTING -> starting
         DestinationFallback.DRIVE_RENAMED -> renamed
         DestinationFallback.PERMISSION_LOST -> permissionLost

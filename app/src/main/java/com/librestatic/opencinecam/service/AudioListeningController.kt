@@ -104,6 +104,8 @@ internal class AudioListeningController(
                 phase = if (!options.enabled) AudioListeningPhase.DISABLED else if (!sameRoute) AudioListeningPhase.NEEDS_CONNECT else old.phase)
             intent.set(next)
             if (!sameRoute) { queue.clear(); emit(next.phase, expectedGeneration = next.generation) }
+            // The requested and bound devices keep their entry in the list (inUseIds), so a change republishes it.
+            if (old.deviceId != id || old.boundDeviceId != next.boundDeviceId) devicesDirty.set(true)
         }
         signal()
     }
@@ -117,6 +119,7 @@ internal class AudioListeningController(
             val next = old.copy(armed = true, boundDeviceId = null, generation = old.generation + 1,
                 phase = AudioListeningPhase.WAITING_PCM)
             intent.set(next)
+            if (old.boundDeviceId != null) devicesDirty.set(true)
             queue.clear()
             emit(AudioListeningPhase.WAITING_PCM, expectedGeneration = next.generation)
         }
@@ -261,34 +264,32 @@ internal class AudioListeningController(
         }
     }
 
-    private fun outputClass(device: AudioDeviceInfo): AudioListeningOutput? = when (device.type) {
-        AudioDeviceInfo.TYPE_WIRED_HEADSET, AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
-        AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_USB_HEADSET, AudioDeviceInfo.TYPE_USB_ACCESSORY -> AudioListeningOutput.WIRED_USB
-        AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
-        AudioDeviceInfo.TYPE_BLE_HEADSET, AudioDeviceInfo.TYPE_BLE_SPEAKER -> AudioListeningOutput.BLUETOOTH
-        AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> AudioListeningOutput.SPEAKER
-        else -> null
-    }
+    private fun outputClass(device: AudioDeviceInfo): AudioListeningOutput? = listeningOutputClass(device.type)
 
     private fun outputs(): List<AudioDeviceInfo> = manager.getDevices(AudioManager.GET_DEVICES_OUTPUTS).filter { it.isSink }
+    private fun candidates(devices: List<AudioDeviceInfo>): List<ListeningCandidate> =
+        devices.map { ListeningCandidate(it.id, it.type, it.productName.toString(), it.address.orEmpty()) }
+
+    /** The bound device and the requested one keep their entry when a sibling of the same headset would be preferred. */
+    private fun inUseIds(): Set<Int> = intent.get().let { setOfNotNull(it.boundDeviceId, it.deviceId) }
+
     private fun publishDevices() {
-        val devices = outputs().mapNotNull { device -> outputClass(device)?.let {
-            AudioListeningDevice(device.id, device.productName.toString().take(160), it)
-        } }.sortedBy { it.id }
+        val devices = listeningDevices(candidates(outputs()), inUseIds())
         callbacks.post { if (!closed.get()) runCatching { onDevices(Collections.unmodifiableList(devices)) } }
     }
 
     /** Device discovery is outside the publication lock and runs once per explicit arm. */
     private fun bindOutput(current: Intent): Intent? {
         val eligible = outputs().filter { outputClass(it) == current.options.output }
+        // Automatic takes the lowest listed entry, so it never lands on a headset's second entry.
         val device = if (current.deviceId != null) eligible.firstOrNull { it.id == current.deviceId }
-            else eligible.minByOrNull { it.id }
+            else listeningDevices(candidates(eligible), inUseIds()).minByOrNull { it.id }?.let { chosen -> eligible.firstOrNull { it.id == chosen.id } }
         if (device == null) { disarm(AudioListeningPhase.NO_OUTPUT, current.generation); return null }
         return synchronized(statusLock) {
             val latest = intent.get()
             if (closed.get() || !latest.armed || latest.generation != current.generation) null
             else if (latest.boundDeviceId != null) latest
-            else latest.copy(boundDeviceId = device.id).also { intent.set(it) }
+            else latest.copy(boundDeviceId = device.id).also { intent.set(it); devicesDirty.set(true) }
         }
     }
 
@@ -425,4 +426,39 @@ internal class AudioListeningController(
         // Cleanup failures never release the last strong native owner reference.
         private val failedOwners = ConcurrentHashMap.newKeySet<AudioListeningController>()
     }
+}
+
+/** An output as Android lists it, reduced to what the listening list needs; [type] is an AudioDeviceInfo type. */
+internal data class ListeningCandidate(val id: Int, val type: Int, val name: String, val address: String = "")
+
+/**
+ * The listening class of an output type, or null when it is not offered. Bluetooth is the media profiles only: the
+ * call profile (SCO) is the same headset's second entry, and a USAGE_MEDIA track is never routed to it, so the route
+ * check would drop it. Hearing aids, HDMI and the earpiece are not offered either.
+ */
+internal fun listeningOutputClass(type: Int): AudioListeningOutput? = when (type) {
+    AudioDeviceInfo.TYPE_WIRED_HEADSET, AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+    AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_USB_HEADSET, AudioDeviceInfo.TYPE_USB_ACCESSORY -> AudioListeningOutput.WIRED_USB
+    AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, AudioDeviceInfo.TYPE_BLE_HEADSET, AudioDeviceInfo.TYPE_BLE_SPEAKER -> AudioListeningOutput.BLUETOOTH
+    AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> AudioListeningOutput.SPEAKER
+    else -> null
+}
+
+/**
+ * The outputs offered for listening, one per headset, sorted by id. A Bluetooth headset can be listed as A2DP and as
+ * LE Audio at once; its entries share an address (the name stands in when Android gives none), and the A2DP one is
+ * kept, unless an entry in [inUseIds] (the bound or requested device) belongs to the headset: that one stays, so a
+ * running or chosen route keeps its id in the list. Ties go to the lowest id.
+ */
+internal fun listeningDevices(candidates: List<ListeningCandidate>, inUseIds: Set<Int> = emptySet()): List<AudioListeningDevice> {
+    val supported = candidates.mapNotNull { candidate -> listeningOutputClass(candidate.type)?.let { candidate to it } }
+    val (bluetooth, others) = supported.partition { it.second == AudioListeningOutput.BLUETOOTH }
+    val headsets = bluetooth
+        .groupBy { (candidate, _) -> if (candidate.address.isNotBlank()) "address:${candidate.address}" else "name:${candidate.name}" }
+        .values.map { group ->
+            group.minWith(compareBy({ it.first.id !in inUseIds }, { it.first.type != AudioDeviceInfo.TYPE_BLUETOOTH_A2DP }, { it.first.id }))
+        }
+    return (others + headsets)
+        .map { (candidate, output) -> AudioListeningDevice(candidate.id, candidate.name.take(160), output) }
+        .sortedBy { it.id }
 }

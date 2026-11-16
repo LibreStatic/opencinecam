@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="audio_sync_offset_title">Audio-Synchronversatz</string>
+    <string name="audio_sync_offset_help">Verschiebt den aufgenommenen Ton gegenüber dem Bild, für Mikrofone, deren Verzögerung die App nicht messen kann, etwa Bluetooth- und manche USB-Mikrofone. Kommt der Ton vor dem Bild, verschiebe ihn nach später; kommt er danach, nach früher. Prüfe es mit einem Klatschen oder einer Klappe in einem Test-Take.</string>
+    <string name="audio_sync_offset_none">Kein Versatz</string>
+    <string name="audio_sync_offset_later">Ton %1$d ms später</string>
+    <string name="audio_sync_offset_earlier">Ton %1$d ms früher</string>
+    <string name="audio_sync_offset_minus">1 ms früher</string>
+    <string name="audio_sync_offset_plus">1 ms später</string>
+    <string name="audio_sync_offset_reset">Zurücksetzen</string>
+    <string name="audio_sync_offset_scope">Gilt für den im Video eingebetteten Ton und für RAW-Video. Separate WAV- und FLAC-Dateien werden nicht verschoben; der Versatz wird im Take-Protokoll gespeichert.</string>
+    <string name="audio_sync_offset_pending">Der neue Versatz gilt ab dem nächsten Take. Dieser Take behält den Versatz, mit dem er begonnen hat.</string>
+</resources>

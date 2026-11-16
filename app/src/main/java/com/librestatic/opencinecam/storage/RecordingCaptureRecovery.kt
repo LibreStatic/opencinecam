@@ -1061,8 +1061,34 @@ class RecordingRecoveryGroup internal constructor(private val journal: Recording
         return true
     }
 
+    /**
+     * PLAN-074 decision 10: [member]'s prepared audio now lives in the take's video file. Its rows go, and the take
+     * publishes and commits without it. False when the first row could not be deleted: the member is as it was and
+     * still publishes. A failure after that throws with the member withdrawn; the row left behind keeps the take from
+     * committing, so it stays pending for recovery, which publishes what is there.
+     */
+    internal fun withdraw(member: RecordingRecoveryMember): Boolean = synchronized(lock) {
+        check(!aborted && !committed && !discarded && !commitUnknown && !handedOff) { "Take has already terminated" }
+        check(member.prepared && member.retired && !member.published && !member.keepBytes) { "Only a prepared, unpublished member withdraws" }
+        var deleted = false
+        // The metadata first, so a row left behind is the audio itself.
+        for (row in member.rows.sortedByDescending { it.metadata }) {
+            try { store.delete(row.uri) } catch (failure: Exception) {
+                if (!deleted) return@synchronized false
+                member.withdrawn = true
+                throw failure
+            }
+            member.rows.remove(row)
+            deleted = true
+        }
+        member.withdrawn = true
+        true
+    }
+
     internal fun abort(member: RecordingRecoveryMember) = synchronized(lock) {
         member.retired = true
+        // A withdrawn member owns nothing: its late cleanup must not discard the rest of the take.
+        if (member.withdrawn) return@synchronized
         // A commit whose marker may be gone leaves the take to recovery, which reads the drive: nothing is deleted here.
         if (committed || discarded || commitUnknown || handedOff) return@synchronized
         if (member.keepBytes) {
@@ -1149,6 +1175,7 @@ internal class RecordingRecoveryMember(internal val group: RecordingRecoveryGrou
     fun deleteOwned(uri: Uri, failure: String) = group.deleteOwned(uri, failure)
     val clipRows: ClipRows<Uri> get() = group.clipRows
     fun abort() = group.abort(this)
+    fun withdraw() = group.withdraw(this)
 }
 
 /**

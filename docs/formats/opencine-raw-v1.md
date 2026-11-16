@@ -54,8 +54,9 @@ RAW frame's 64-byte frame header.
   and comes before any audio chunk. A closing METADATA chunk adds
   `audioDroppedSamples` (sample frames, one sample per channel, lost to a
   full writer queue), `audioTimestampBacked`, `audioMaxResidualNs` when
-  AudioRecord timestamps were available, and `audioError` when capture
-  stopped early. A take without sound has none of these keys and no audio
+  AudioRecord timestamps were available, `audioSyncOffsetNs` (the manual
+  sync offset already added to every audio chunk's timestamp; positive is
+  later, absent in older files) and `audioError` when capture stopped early. A take without sound has none of these keys and no audio
   chunks.
 - Index payloads contain sequence, file offset, and timestamp entries. A final
   index is an optimization, never the sole recovery source.

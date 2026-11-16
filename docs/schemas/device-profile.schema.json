@@ -72,7 +72,9 @@
       "enum": [
         "high-speed-prefer-physical-camera",
         "moto-high-speed-session-keys",
-        "qti-raw-frame-rate-override"
+        "qti-raw-frame-rate-override",
+        "audio-default-low-latency-input",
+        "audio-unprocessed-source-clips"
       ]
     },
     "profileQuirk": {
