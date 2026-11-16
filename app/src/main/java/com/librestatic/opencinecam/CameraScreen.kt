@@ -202,6 +202,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.tooling.preview.Preview
 import com.librestatic.opencinecam.service.CaptureService
+import com.librestatic.opencinecam.service.projectedTakeBytesPerMinute
 import com.librestatic.opencinecam.toSpec
 import com.librestatic.opencinecam.storage.LocalMediaRepository
 import com.librestatic.opencinecam.media.audio.AudioOutputFormat
@@ -3761,7 +3762,9 @@ private fun StatusInfoBar(state: CameraUiState, settings: CameraSettings) {
             add("${settings.videoBitrateMbps} Mbps")
             add(if (silent) stringResource(R.string.status_audio_off)
                 else audioOutputLabel(settings.audioOutputFormat) + " " + formatAudioRate(settings.audioSampleRateHz))
-            recordTimeLeftMs(captureStatusFreeBytes(state), settings.videoBitrateMbps)?.let {
+            // The projection of the take that would start, not the setting's 30 fps reference bitrate.
+            recordTimeLeftMs(captureStatusFreeBytes(state), projectedTakeBytesPerMinute(
+                state.selectedMode, settings, state.targetFps, state.activeVideoProfile?.constrainedHighSpeed == true, !silent))?.let {
                 add(stringResource(R.string.status_time_left, formatRecordTimeLeft(it)))
             }
         }
