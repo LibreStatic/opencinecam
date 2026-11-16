@@ -47,6 +47,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.librestatic.opencinecam.capture.InstrumentNotice
 import com.librestatic.opencinecam.diagnostics.megabytesPerSecond
 import com.librestatic.opencinecam.storage.DestinationFallback
 import com.librestatic.opencinecam.storage.DriveDisconnectPolicy

@@ -3,7 +3,7 @@
 
 package com.librestatic.opencinecam.service
 
-import com.librestatic.opencinecam.audioInputFallbackShown
+import com.librestatic.opencinecam.capture.audioInputFallbackShown
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.Manifest
@@ -16,12 +16,12 @@ import com.librestatic.opencinecam.normalizedFor
 import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.core.model.StableFailure
 import com.librestatic.opencinecam.CaptureNameSnapshot
-import com.librestatic.opencinecam.RawVideoConfigKeys
+import com.librestatic.opencinecam.capture.RawVideoConfigKeys
 import com.librestatic.opencinecam.captureFileStem
 import com.librestatic.opencinecam.continuationFileStem
-import com.librestatic.opencinecam.RawVideoConfigOption
-import com.librestatic.opencinecam.RawVideoLeftOutOption
-import com.librestatic.opencinecam.rawConfigLabelLocalized
+import com.librestatic.opencinecam.capture.RawVideoConfigOption
+import com.librestatic.opencinecam.capture.RawVideoLeftOutOption
+import com.librestatic.opencinecam.capture.rawConfigLabelLocalized
 import com.librestatic.opencinecam.camera.RawVideoConfig
 import com.librestatic.opencinecam.camera.RawVideoQualificationSet
 import com.librestatic.opencinecam.camera.RawVideoReasons
@@ -46,15 +46,15 @@ import com.librestatic.opencinecam.SettingsRepositories
 import kotlinx.coroutines.flow.update
 import org.json.JSONObject
 import com.librestatic.opencinecam.ModeGateState
-import com.librestatic.opencinecam.rawQualificationOutcome
-import com.librestatic.opencinecam.RawQualificationOutcomeKind
-import com.librestatic.opencinecam.rawQualificationShouldPost
-import com.librestatic.opencinecam.rawQualificationStorageBusy
-import com.librestatic.opencinecam.RawQualificationStopReasons
-import com.librestatic.opencinecam.rawQualificationUiOf
-import com.librestatic.opencinecam.rawVideoModeFallback
-import com.librestatic.opencinecam.RawVideoQualificationInfo
-import com.librestatic.opencinecam.RawVideoQualificationUi
+import com.librestatic.opencinecam.capture.rawQualificationOutcome
+import com.librestatic.opencinecam.capture.RawQualificationOutcomeKind
+import com.librestatic.opencinecam.capture.rawQualificationShouldPost
+import com.librestatic.opencinecam.capture.rawQualificationStorageBusy
+import com.librestatic.opencinecam.capture.RawQualificationStopReasons
+import com.librestatic.opencinecam.capture.rawQualificationUiOf
+import com.librestatic.opencinecam.capture.rawVideoModeFallback
+import com.librestatic.opencinecam.capture.RawVideoQualificationInfo
+import com.librestatic.opencinecam.capture.RawVideoQualificationUi
 import com.librestatic.opencinecam.rawvideo.RawQualificationEstimates
 import com.librestatic.opencinecam.rawvideo.RawQualificationPhase
 import com.librestatic.opencinecam.rawvideo.RawQualificationPlan
@@ -65,11 +65,11 @@ import com.librestatic.opencinecam.rawvideo.RawQualificationSpecs
 import com.librestatic.opencinecam.rawvideo.RawQualificationStorageModel
 import com.librestatic.opencinecam.rawvideo.RawVideoQualificationOutcome
 import com.librestatic.opencinecam.rawvideo.RawVideoQualifier
-import com.librestatic.opencinecam.rawQualificationItemsCameraChecked
-import com.librestatic.opencinecam.rawQualificationItemsFinished
-import com.librestatic.opencinecam.rawQualificationItemsOnProgress
-import com.librestatic.opencinecam.rawQualificationItemsWith
-import com.librestatic.opencinecam.rawQualificationRunStatus
+import com.librestatic.opencinecam.capture.rawQualificationItemsCameraChecked
+import com.librestatic.opencinecam.capture.rawQualificationItemsFinished
+import com.librestatic.opencinecam.capture.rawQualificationItemsOnProgress
+import com.librestatic.opencinecam.capture.rawQualificationItemsWith
+import com.librestatic.opencinecam.capture.rawQualificationRunStatus
 import com.librestatic.opencinecam.service.CaptureService.RawTakeSession
 import com.librestatic.opencinecam.service.CaptureService.RawQualificationSession
 import com.librestatic.opencinecam.service.CaptureService.Companion.RAW_QUALIFICATION_CAMERA_KIND

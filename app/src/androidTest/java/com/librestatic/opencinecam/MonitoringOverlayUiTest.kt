@@ -10,6 +10,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.width
 import com.librestatic.opencinecam.camera.*
+import com.librestatic.opencinecam.capture.ProfessionalScopesPanel
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test

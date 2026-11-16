@@ -2,6 +2,9 @@
 package com.librestatic.opencinecam
 
 import com.librestatic.opencinecam.camera.*
+import com.librestatic.opencinecam.capture.OperatorAction
+import com.librestatic.opencinecam.capture.OperatorPreferences
+import com.librestatic.opencinecam.capture.VolumeKeyPair
 import com.librestatic.opencinecam.fold.SubjectDisplayMode
 import com.librestatic.opencinecam.fold.SubjectDisplaySettings
 import com.librestatic.opencinecam.fold.SubjectPreviewGuide

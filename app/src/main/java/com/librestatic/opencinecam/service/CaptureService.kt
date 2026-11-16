@@ -11,18 +11,18 @@ import com.librestatic.opencinecam.camera.TimelapseCapture
 import com.librestatic.opencinecam.fpsLockActive
 import com.librestatic.opencinecam.lowLightFpsActive
 import com.librestatic.opencinecam.subject.reviewBlockedByTake
-import com.librestatic.opencinecam.OperatorAction
-import com.librestatic.opencinecam.forOperatorStartup
-import com.librestatic.opencinecam.startupCaptureMode
-import com.librestatic.opencinecam.operatorActionAvailable
+import com.librestatic.opencinecam.capture.OperatorAction
+import com.librestatic.opencinecam.capture.forOperatorStartup
+import com.librestatic.opencinecam.capture.startupCaptureMode
+import com.librestatic.opencinecam.capture.operatorActionAvailable
 
 import com.librestatic.opencinecam.camera.ExposureMode
 import com.librestatic.opencinecam.camera.ExposureCapabilities
 import com.librestatic.opencinecam.camera.CaptureFrameRate
 import com.librestatic.opencinecam.camera.ShutterUnit
 import com.librestatic.opencinecam.camera.resolve
-import com.librestatic.opencinecam.CaptureActionTicket
-import com.librestatic.opencinecam.CaptureCountdown
+import com.librestatic.opencinecam.capture.CaptureActionTicket
+import com.librestatic.opencinecam.capture.CaptureCountdown
 
 import com.librestatic.opencinecam.subject.SubjectPreviewPort
 import com.librestatic.opencinecam.subject.SubjectSurfaceRegistry
@@ -48,15 +48,15 @@ import com.librestatic.opencinecam.projectLabel
 import com.librestatic.opencinecam.CameraSettings
 import com.librestatic.opencinecam.CameraUiPhase
 import com.librestatic.opencinecam.CameraUiState
-import com.librestatic.opencinecam.HardwareTruthHudState
+import com.librestatic.opencinecam.capture.HardwareTruthHudState
 import com.librestatic.opencinecam.CaptureMode
 import com.librestatic.opencinecam.logProfilesFor
 import com.librestatic.opencinecam.usesLogGraph
 import com.librestatic.opencinecam.TimeLapseLimitMode
 import com.librestatic.opencinecam.normalizedFor
 import com.librestatic.opencinecam.forDevice
-import com.librestatic.opencinecam.toSpec
-import com.librestatic.opencinecam.VideoGeometryPolicy
+import com.librestatic.opencinecam.capture.toSpec
+import com.librestatic.opencinecam.capture.VideoGeometryPolicy
 import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.camera.Camera2PreviewEngine
 import com.librestatic.opencinecam.camera.RecordingWhiteBalancePolicy
@@ -87,7 +87,7 @@ import com.librestatic.opencinecam.core.model.CaptureStateMachine
 import com.librestatic.opencinecam.core.model.SerializedCaptureActor
 import com.librestatic.opencinecam.CaptureNameSnapshot
 import com.librestatic.opencinecam.storage.StillImageSaver
-import com.librestatic.opencinecam.RawVideoConfigKeys
+import com.librestatic.opencinecam.capture.RawVideoConfigKeys
 import com.librestatic.opencinecam.camera.RawVideoConfig
 import com.librestatic.opencinecam.camera.RawVideoQualificationSet
 import com.librestatic.opencinecam.rawvideo.RawVideoRecorder
@@ -144,21 +144,21 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.flow.update
 import org.json.JSONObject
-import com.librestatic.opencinecam.batteryPercentOf
+import com.librestatic.opencinecam.capture.batteryPercentOf
 import com.librestatic.opencinecam.ModeGateState
-import com.librestatic.opencinecam.RawQualificationOutcomeKind
-import com.librestatic.opencinecam.RawQualificationRefusals
-import com.librestatic.opencinecam.rawQualificationRunAbort
-import com.librestatic.opencinecam.rawQualificationGateQualifiable
-import com.librestatic.opencinecam.rawQualificationStartRefusal
-import com.librestatic.opencinecam.RawQualificationStopReasons
-import com.librestatic.opencinecam.RawVideoQualificationInfo
-import com.librestatic.opencinecam.RawVideoQualificationUi
-import com.librestatic.opencinecam.readRawQualificationConditions
+import com.librestatic.opencinecam.capture.RawQualificationOutcomeKind
+import com.librestatic.opencinecam.capture.RawQualificationRefusals
+import com.librestatic.opencinecam.capture.rawQualificationRunAbort
+import com.librestatic.opencinecam.capture.rawQualificationGateQualifiable
+import com.librestatic.opencinecam.capture.rawQualificationStartRefusal
+import com.librestatic.opencinecam.capture.RawQualificationStopReasons
+import com.librestatic.opencinecam.capture.RawVideoQualificationInfo
+import com.librestatic.opencinecam.capture.RawVideoQualificationUi
+import com.librestatic.opencinecam.capture.readRawQualificationConditions
 import com.librestatic.opencinecam.rawvideo.RawQualificationProgress
 import com.librestatic.opencinecam.rawvideo.RawVideoQualifier
-import com.librestatic.opencinecam.RawQualificationItem
-import com.librestatic.opencinecam.rawQualificationPlanItems
+import com.librestatic.opencinecam.capture.RawQualificationItem
+import com.librestatic.opencinecam.capture.rawQualificationPlanItems
 
 const val ACTION_START_RECORDING = "com.librestatic.opencinecam.action.START_RECORDING"
 
@@ -1222,7 +1222,7 @@ class CaptureService : Service() {
                         CaptureMode.RAW_PHOTO to if (preferred.supportsRaw) ModeGateState.AVAILABLE else ModeGateState.UNSUPPORTED,
                         CaptureMode.LOG to if (preferred.supportsOpenCineLog) ModeGateState.AVAILABLE else ModeGateState.UNSUPPORTED,
                         CaptureMode.HLG to if (preferred.supportsOpenCineLog && preferred.logProfilesFor(CaptureMode.HLG).isNotEmpty()) ModeGateState.AVAILABLE else ModeGateState.UNSUPPORTED,
-                        CaptureMode.SLOW_MOTION to if (com.librestatic.opencinecam.supportsSlowMotion(preferred.videoProfiles.map { it.toSpec() })) ModeGateState.AVAILABLE else ModeGateState.UNSUPPORTED,
+                        CaptureMode.SLOW_MOTION to if (com.librestatic.opencinecam.capture.supportsSlowMotion(preferred.videoProfiles.map { it.toSpec() })) ModeGateState.AVAILABLE else ModeGateState.UNSUPPORTED,
                     ),
                     errorCode = null,
                     message = null,
@@ -1489,7 +1489,7 @@ class CaptureService : Service() {
                     CaptureMode.RAW_PHOTO to if (descriptor.supportsRaw) ModeGateState.AVAILABLE else ModeGateState.UNSUPPORTED,
                     CaptureMode.LOG to if (descriptor.supportsOpenCineLog) ModeGateState.AVAILABLE else ModeGateState.UNSUPPORTED,
                     CaptureMode.HLG to if (descriptor.supportsOpenCineLog && descriptor.logProfilesFor(CaptureMode.HLG).isNotEmpty()) ModeGateState.AVAILABLE else ModeGateState.UNSUPPORTED,
-                    CaptureMode.SLOW_MOTION to if (com.librestatic.opencinecam.supportsSlowMotion(descriptor.videoProfiles.map { it.toSpec() })) ModeGateState.AVAILABLE else ModeGateState.UNSUPPORTED,
+                    CaptureMode.SLOW_MOTION to if (com.librestatic.opencinecam.capture.supportsSlowMotion(descriptor.videoProfiles.map { it.toSpec() })) ModeGateState.AVAILABLE else ModeGateState.UNSUPPORTED,
                 ),
             ).let { withRawVideoGate(it, cameraId) }
             refreshLensLockState(cameraId)
@@ -2484,7 +2484,7 @@ class CaptureService : Service() {
             val admissionAudio = current.selectedMode != CaptureMode.TIME_LAPSE && (audioForThisTake ?: settings.audioEnabled)
             val projectedBytesPerMinute = projectedTakeBytesPerMinute(current.selectedMode, settings, current.targetFps,
                 current.activeVideoProfile?.constrainedHighSpeed == true, admissionAudio)
-            val takeLimitMs = com.librestatic.opencinecam.takeLengthLimitMs(current.selectedMode, settings,
+            val takeLimitMs = com.librestatic.opencinecam.capture.takeLengthLimitMs(current.selectedMode, settings,
                 current.activeVideoProfile?.constrainedHighSpeed == true)
             admissionWarning = null
             takeSoftwareEncoder = null
@@ -2636,7 +2636,7 @@ class CaptureService : Service() {
                     previewEngine.captureStill(selectedStillPhotoFormat(), settings.photoFlash, settings.photoQuality, aspect = settings.photoAspect,
                         zeroShutterLag = settings.zeroShutterLag && current.selectedMode == CaptureMode.PHOTO).also { accepted ->
                         if (!accepted) {
-                            if (com.librestatic.opencinecam.stillFormatLostRaw(selectedStillPhotoFormat(), cameraState.value.previewGraphLoss)) finishStillFailure(owner, "still-raw-unavailable", getString(R.string.graph_fallback_raw))
+                            if (com.librestatic.opencinecam.capture.stillFormatLostRaw(selectedStillPhotoFormat(), cameraState.value.previewGraphLoss)) finishStillFailure(owner, "still-raw-unavailable", getString(R.string.graph_fallback_raw))
                             else finishStillFailure(owner, "still-capture-not-ready", getString(R.string.capture_still_not_ready))
                         }
                     }

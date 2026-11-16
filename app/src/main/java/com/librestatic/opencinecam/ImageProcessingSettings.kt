@@ -17,6 +17,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.camera.*
+import com.librestatic.opencinecam.capture.CameraReportsLine
+import com.librestatic.opencinecam.capture.imageProcessingReadbackDifferences
+import com.librestatic.opencinecam.capture.pictureControlReadbackDifferences
 
 @Composable
 internal fun ImageProcessingSettings(state: CameraUiState, settings: CameraSettings, onChange: (CameraSettings) -> Unit) {

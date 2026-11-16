@@ -3,7 +3,7 @@ package com.librestatic.opencinecam.subject
 
 import android.view.Surface
 import com.librestatic.opencinecam.camera.SubjectPreviewStatus
-import com.librestatic.opencinecam.rotationDegrees
+import com.librestatic.opencinecam.capture.rotationDegrees
 import com.librestatic.opencinecam.CaptureMode
 import kotlinx.coroutines.flow.StateFlow
 

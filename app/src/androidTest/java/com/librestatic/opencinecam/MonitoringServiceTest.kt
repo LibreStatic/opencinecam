@@ -21,6 +21,9 @@ import com.librestatic.opencinecam.camera.MonitorColor
 import com.librestatic.opencinecam.camera.MonitoringOptions
 import com.librestatic.opencinecam.camera.MonitoringScopeFrame
 import com.librestatic.opencinecam.camera.MonitoringSignalDomain
+import com.librestatic.opencinecam.capture.CaptureActionTicket
+import com.librestatic.opencinecam.capture.OperatorPreferences
+import com.librestatic.opencinecam.capture.StartupMode
 import com.librestatic.opencinecam.service.CaptureService
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executor

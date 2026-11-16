@@ -2,6 +2,7 @@
 package com.librestatic.opencinecam
 
 import com.librestatic.opencinecam.camera.*
+import com.librestatic.opencinecam.capture.OperatorPreferences
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Test

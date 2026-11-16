@@ -24,6 +24,15 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.camera.AnalysisSuspension
 import com.librestatic.opencinecam.camera.MonitoringOptions
 import com.librestatic.opencinecam.camera.MonitoringSignalDomain
+import com.librestatic.opencinecam.capture.AnalysisSuspensionNotice
+import com.librestatic.opencinecam.capture.OperatorAction
+import com.librestatic.opencinecam.capture.operatorActionAvailable
+import com.librestatic.opencinecam.capture.OperatorActions
+import com.librestatic.opencinecam.capture.OperatorButtonRow
+import com.librestatic.opencinecam.capture.OperatorPreferences
+import com.librestatic.opencinecam.capture.ProfessionalScopesPanel
+import com.librestatic.opencinecam.capture.StartupMode
+import com.librestatic.opencinecam.capture.ThermalHudChip
 import com.librestatic.opencinecam.camera.analyzeMonitoringRgb
 import com.librestatic.opencinecam.service.CaptureService
 import java.util.concurrent.atomic.AtomicReference

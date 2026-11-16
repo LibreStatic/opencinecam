@@ -1,6 +1,9 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam
 
+import com.librestatic.opencinecam.capture.operatorErrorText
+import com.librestatic.opencinecam.capture.RecordButtonState
+import com.librestatic.opencinecam.capture.recordButtonState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

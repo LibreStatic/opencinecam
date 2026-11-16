@@ -7,6 +7,8 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
+import com.librestatic.opencinecam.capture.CaptureButton
+import com.librestatic.opencinecam.capture.SelfCaptureChrome
 import com.librestatic.opencinecam.fold.SubjectDisplaySettings
 import com.librestatic.opencinecam.subject.SubjectDisplayScreen
 import org.junit.Rule

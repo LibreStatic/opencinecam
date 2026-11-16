@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam
 
+import com.librestatic.opencinecam.capture.ShortcutAction
 import com.librestatic.opencinecam.playback.*
 import com.librestatic.opencinecam.ui.AdaptiveWindow
 import java.util.Locale

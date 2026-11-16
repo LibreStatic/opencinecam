@@ -16,6 +16,13 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.camera.*
+import com.librestatic.opencinecam.capture.CameraReportsLine
+import com.librestatic.opencinecam.capture.exposureAvailability
+import com.librestatic.opencinecam.capture.exposureReadbackDifferences
+import com.librestatic.opencinecam.capture.ExposureReading
+import com.librestatic.opencinecam.capture.isoReading
+import com.librestatic.opencinecam.capture.timeReading
+import com.librestatic.opencinecam.capture.whiteBalanceReadbackDifferences
 import com.librestatic.opencinecam.diagnostics.shutter
 import java.util.Locale
 import kotlin.math.log10

@@ -2,12 +2,12 @@
 package com.librestatic.opencinecam.service
 
 import com.librestatic.opencinecam.ModeGateState
-import com.librestatic.opencinecam.RAW_QUALIFICATION_SPACE_SKIP
-import com.librestatic.opencinecam.RAW_QUALIFICATION_THERMAL_SKIP
-import com.librestatic.opencinecam.RawQualificationItemStatus
-import com.librestatic.opencinecam.RawVideoConfigKeys
-import com.librestatic.opencinecam.RawVideoConfigOption
-import com.librestatic.opencinecam.RawVideoLeftOutReason
+import com.librestatic.opencinecam.capture.RAW_QUALIFICATION_SPACE_SKIP
+import com.librestatic.opencinecam.capture.RAW_QUALIFICATION_THERMAL_SKIP
+import com.librestatic.opencinecam.capture.RawQualificationItemStatus
+import com.librestatic.opencinecam.capture.RawVideoConfigKeys
+import com.librestatic.opencinecam.capture.RawVideoConfigOption
+import com.librestatic.opencinecam.capture.RawVideoLeftOutReason
 import com.librestatic.opencinecam.camera.RawThroughputBenchmark
 import com.librestatic.opencinecam.rawvideo.RawQualificationFrameRate
 import com.librestatic.opencinecam.rawvideo.RawQualificationStaging

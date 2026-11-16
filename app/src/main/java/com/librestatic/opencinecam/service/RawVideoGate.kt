@@ -4,12 +4,12 @@
 package com.librestatic.opencinecam.service
 
 import com.librestatic.opencinecam.ModeGateState
-import com.librestatic.opencinecam.RawQualificationItemStatus
-import com.librestatic.opencinecam.RawVideoConfigKeys
-import com.librestatic.opencinecam.RawVideoConfigOption
-import com.librestatic.opencinecam.RawVideoLeftOutOption
-import com.librestatic.opencinecam.RawVideoLeftOutReason
-import com.librestatic.opencinecam.rawQualificationRunStatus
+import com.librestatic.opencinecam.capture.RawQualificationItemStatus
+import com.librestatic.opencinecam.capture.RawVideoConfigKeys
+import com.librestatic.opencinecam.capture.RawVideoConfigOption
+import com.librestatic.opencinecam.capture.RawVideoLeftOutOption
+import com.librestatic.opencinecam.capture.RawVideoLeftOutReason
+import com.librestatic.opencinecam.capture.rawQualificationRunStatus
 import com.librestatic.opencinecam.camera.RawThroughputBenchmark
 import com.librestatic.opencinecam.camera.RawVideoConfig
 import com.librestatic.opencinecam.camera.RawVideoQualificationRecord

@@ -3,7 +3,7 @@
 
 package com.librestatic.opencinecam.service
 
-import com.librestatic.opencinecam.audioInputFallbackShown
+import com.librestatic.opencinecam.capture.audioInputFallbackShown
 import android.content.pm.PackageManager
 import android.Manifest
 import android.os.Looper

@@ -7,7 +7,7 @@ import com.librestatic.opencinecam.CaptureMode
 import com.librestatic.opencinecam.CaptureNameSnapshot
 import com.librestatic.opencinecam.CaptureNamingSettings
 import com.librestatic.opencinecam.ProductionSlateSettings
-import com.librestatic.opencinecam.RawQualificationTarget
+import com.librestatic.opencinecam.capture.RawQualificationTarget
 import com.librestatic.opencinecam.RecordingDestinationStatus
 import com.librestatic.opencinecam.storage.ClipContinuation
 import com.librestatic.opencinecam.storage.DestinationFallback

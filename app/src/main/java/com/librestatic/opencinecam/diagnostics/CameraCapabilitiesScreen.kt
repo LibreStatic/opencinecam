@@ -66,8 +66,8 @@ import com.librestatic.opencinecam.camera.Main10FileCheck
 import com.librestatic.opencinecam.camera.PRECISION_REQUIRES_CONTROLLED_CAPTURE
 import com.librestatic.opencinecam.camera.QualificationStatus
 import com.librestatic.opencinecam.CameraUiState
-import com.librestatic.opencinecam.discrepancyLines
-import com.librestatic.opencinecam.requestedReportedLines
+import com.librestatic.opencinecam.capture.discrepancyLines
+import com.librestatic.opencinecam.capture.requestedReportedLines
 import com.librestatic.opencinecam.core.model.JsonReportRedactor
 import com.librestatic.opencinecam.core.model.QuirkResolution
 import com.librestatic.opencinecam.gallery.label

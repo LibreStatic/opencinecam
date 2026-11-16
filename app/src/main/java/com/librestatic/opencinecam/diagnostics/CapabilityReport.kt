@@ -6,7 +6,7 @@ package com.librestatic.opencinecam.diagnostics
 import com.librestatic.opencinecam.camera.Camera2CameraDescriptor
 import com.librestatic.opencinecam.camera.CameraInventory
 import com.librestatic.opencinecam.CameraUiState
-import com.librestatic.opencinecam.requestedReportedLines
+import com.librestatic.opencinecam.capture.requestedReportedLines
 import com.librestatic.opencinecam.core.model.CapabilityReportDocument
 import com.librestatic.opencinecam.core.model.QuirkResolution
 import com.librestatic.opencinecam.core.model.SchemaEvidence

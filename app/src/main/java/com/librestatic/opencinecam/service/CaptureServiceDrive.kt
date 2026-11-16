@@ -24,7 +24,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.update
-import com.librestatic.opencinecam.RawQualificationStopReasons
+import com.librestatic.opencinecam.capture.RawQualificationStopReasons
 import com.librestatic.opencinecam.service.CaptureService.TakeStartRefused
 import com.librestatic.opencinecam.service.CaptureService.RecordingLutIntent
 import com.librestatic.opencinecam.service.CaptureService.Companion.DRIVE_ADMISSION_WAIT_MS

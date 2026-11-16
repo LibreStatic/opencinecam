@@ -20,6 +20,8 @@ import com.librestatic.opencinecam.storage.*
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.camera.*
+import com.librestatic.opencinecam.capture.OperatorPreferences
+import com.librestatic.opencinecam.capture.StartupMode
 import com.librestatic.opencinecam.gallery.GallerySettings
 import com.librestatic.opencinecam.gallery.MediaPlaybackDialog
 import com.librestatic.opencinecam.gallery.MediaReviewSelection
