@@ -289,7 +289,9 @@ internal fun AdaptiveCaptureChrome(
         }
         val pipelineMode = plan.pipelineMode
         val targetFps = plan.targetFps
+        val targetSize = plan.targetSize
         if (pipelineMode != null) binder?.selectMode(pipelineMode)
+        else if (targetSize != null && targetFps != null) binder?.selectVideoResolution(targetSize.first, targetSize.second, targetFps)
         else if (targetFps != null) binder?.selectTargetFps(targetFps)
     }
     // A cutout can leave the safe area shorter than the status bar; the top bar starts below both.
