@@ -1542,12 +1542,17 @@ class RawVideoQualifier(
         try {
             var openError: String? = null
             val opened = CountDownLatch(1)
-            manager.openCamera(camera.id, object : CameraDevice.StateCallback() {
-                override fun onOpened(d: CameraDevice) { device = d; opened.countDown() }
-                override fun onDisconnected(d: CameraDevice) { openError = "camera-disconnected"; d.close(); opened.countDown() }
-                override fun onError(d: CameraDevice, error: Int) { openError = "camera-open-error-$error"; d.close(); opened.countDown() }
-                override fun onClosed(d: CameraDevice) { closed.countDown() }
-            }, cameraHandler)
+            try {
+                manager.openCamera(camera.id, object : CameraDevice.StateCallback() {
+                    override fun onOpened(d: CameraDevice) { device = d; opened.countDown() }
+                    override fun onDisconnected(d: CameraDevice) { openError = "camera-disconnected"; d.close(); opened.countDown() }
+                    override fun onError(d: CameraDevice, error: Int) { openError = "camera-open-error-$error"; d.close(); opened.countDown() }
+                    override fun onClosed(d: CameraDevice) { closed.countDown() }
+                }, cameraHandler)
+            } catch (_: SecurityException) {
+                // The camera permission was revoked while the qualification ran.
+                return LiveOutcome(skipped(run, "camera-permission-denied"), null)
+            }
             if (!awaitCancellable(opened, TIMEOUT_SECONDS)) return LiveOutcome(skipped(run, "camera-open-timeout"), null)
             openError?.let { return LiveOutcome(skipped(run, it), null) }
             val openedDevice = requireNotNull(device)
