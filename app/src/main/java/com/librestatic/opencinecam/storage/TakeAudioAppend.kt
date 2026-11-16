@@ -15,6 +15,7 @@ import com.librestatic.opencinecam.media.mux.Mp4VideoTiming
 import com.librestatic.opencinecam.media.mux.readMp4VideoTiming
 import java.io.EOFException
 import java.io.FileDescriptor
+import java.io.IOException
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.CancellationException
@@ -96,7 +97,7 @@ internal fun appendWavAsAac(
     startOffsetUs: (Mp4VideoTiming) -> Long,
     isCancelled: () -> Boolean = { false },
 ): AppendedTakeAudio {
-    val wavSize = try { Os.fstat(wav).st_size } catch (e: ErrnoException) { throw e.rethrowAsIOException() }
+    val wavSize = try { Os.fstat(wav).st_size } catch (e: ErrnoException) { throw IOException(e) }
     val header = ByteBuffer.allocate(PCM16_WAV_HEADER_BYTES)
     preadFully(wav, header, 0)
     header.flip()
@@ -219,7 +220,7 @@ private fun checkNotCancelled(isCancelled: () -> Boolean) {
 private fun preadFully(descriptor: FileDescriptor, buffer: ByteBuffer, position: Long) {
     var at = position
     while (buffer.hasRemaining()) {
-        val read = try { Os.pread(descriptor, buffer, at) } catch (e: ErrnoException) { throw e.rethrowAsIOException() }
+        val read = try { Os.pread(descriptor, buffer, at) } catch (e: ErrnoException) { throw IOException(e) }
         if (read <= 0) throw EOFException("The WAV ends at $at, ${buffer.remaining()} bytes short")
         at += read
     }

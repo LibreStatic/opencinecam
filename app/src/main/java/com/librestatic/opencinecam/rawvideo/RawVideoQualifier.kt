@@ -1542,14 +1542,19 @@ class RawVideoQualifier(
         try {
             var openError: String? = null
             val opened = CountDownLatch(1)
-            manager.openCamera(camera.id, object : CameraDevice.StateCallback() {
-                override fun onOpened(d: CameraDevice) { device = d; opened.countDown() }
-                override fun onDisconnected(d: CameraDevice) { openError = "camera-disconnected"; d.close(); opened.countDown() }
-                override fun onError(d: CameraDevice, error: Int) { openError = "camera-open-error-$error"; d.close(); opened.countDown() }
-                override fun onClosed(d: CameraDevice) { closed.countDown() }
-            }, cameraHandler)
-            if (!awaitCancellable(opened, TIMEOUT_SECONDS)) return LiveOutcome(skipped(run, "camera-open-timeout"), null)
-            openError?.let { return LiveOutcome(skipped(run, it), null) }
+            try {
+                manager.openCamera(camera.id, object : CameraDevice.StateCallback() {
+                    override fun onOpened(d: CameraDevice) { device = d; opened.countDown() }
+                    override fun onDisconnected(d: CameraDevice) { openError = "camera-disconnected"; d.close(); opened.countDown() }
+                    override fun onError(d: CameraDevice, error: Int) { openError = "camera-open-error-$error"; d.close(); opened.countDown() }
+                    override fun onClosed(d: CameraDevice) { closed.countDown() }
+                }, cameraHandler)
+            } catch (_: SecurityException) {
+                // The camera permission was revoked while the qualification ran.
+                return LiveOutcome(skipped(run, "camera-permission-denied", kind), null)
+            }
+            if (!awaitCancellable(opened, TIMEOUT_SECONDS)) return LiveOutcome(skipped(run, "camera-open-timeout", kind), null)
+            openError?.let { return LiveOutcome(skipped(run, it, kind), null) }
             val openedDevice = requireNotNull(device)
             val aeRanges = characteristics.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES).orEmpty().toList()
             // A QTI_RAW_FRAME_RATE_OVERRIDE camera (the Razr) delivers nothing with an AE range past the
@@ -1586,8 +1591,8 @@ class RawVideoQualifier(
                 }.build()
             }
             openedDevice.createCaptureSession(sessionConfiguration)
-            if (!awaitCancellable(configured, TIMEOUT_SECONDS)) return LiveOutcome(skipped(run, "session-timeout"), null)
-            if (configureFailed) return LiveOutcome(skipped(run, "session-configure-failed"), null)
+            if (!awaitCancellable(configured, TIMEOUT_SECONDS)) return LiveOutcome(skipped(run, "session-timeout", kind), null)
+            if (configureFailed) return LiveOutcome(skipped(run, "session-configure-failed", kind), null)
 
             var qtiFrameRateOverride = false
             val request = openedDevice.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {

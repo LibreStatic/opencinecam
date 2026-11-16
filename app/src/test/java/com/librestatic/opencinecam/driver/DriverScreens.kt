@@ -562,9 +562,21 @@ fun CaptureRawVideoStatus() {
     remember {
         val battery = context.getSystemService(android.content.Context.BATTERY_SERVICE) as android.os.BatteryManager
         org.robolectric.Shadows.shadowOf(battery).setIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY, 72)
+        battery
     }
     CaptureChrome(driverRawVideoState().copy(timecodeDisplay = "01:02:03:04"), DriverRawVideoSettings)
 }
+
+/**
+ * RAW video on the near-lossless twin of 4080×3060 · 30 fps: the status line reads the RAW rate, the time left
+ * at the compressed capacity rate, then the estimated written rate ("≈N MB/s written") last, so a narrow
+ * phone's ellipsis cuts it before the time left.
+ */
+@Composable
+fun CaptureRawVideoCompressed() = CaptureChrome(
+    driverRawVideoState(compressed = true).copy(rawVideoSelectedKey = "full@30+bp"),
+    DriverRawVideoSettings.copy(rawVideoConfig = "full@30+bp"),
+)
 
 /**
  * The RAW configuration chooser open (what RES or FPS opens in RAW video): Automatic, full sensor, crops,
