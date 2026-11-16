@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam.service
 
-import com.librestatic.opencinecam.HardwareTruthHudState
-import com.librestatic.opencinecam.ROUTE_KEY
+import com.librestatic.opencinecam.capture.HardwareTruthHudState
+import com.librestatic.opencinecam.capture.ROUTE_KEY
 import com.librestatic.opencinecam.camera.OpenCineLogRecordingEvidence
 import com.librestatic.opencinecam.camera.SharedCapturePauseReport
 import com.librestatic.opencinecam.core.model.QuirkResolution

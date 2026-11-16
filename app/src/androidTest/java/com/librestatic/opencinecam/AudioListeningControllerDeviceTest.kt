@@ -9,6 +9,11 @@ import android.os.SystemClock
 import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.camera.PcmMeterEncoding
 import com.librestatic.opencinecam.service.AudioListeningController
+import com.librestatic.opencinecam.settings.AudioListeningDevice
+import com.librestatic.opencinecam.settings.AudioListeningOutput
+import com.librestatic.opencinecam.settings.AudioListeningPhase
+import com.librestatic.opencinecam.settings.AudioListeningSettings
+import com.librestatic.opencinecam.settings.AudioListeningStatus
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.TimeUnit

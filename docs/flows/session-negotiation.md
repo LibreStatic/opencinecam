@@ -4,7 +4,7 @@ This page explains how the engine picks a camera, decides which streams to ask f
 
 ## Where it lives
 
-- [Camera2PreviewEngine.kt](../../camera/src/main/java/com/librestatic/opencinecam/camera/Camera2PreviewEngine.kt): `descriptors`, `startPreview`, `lensLockPlan`, `preferredHighSpeedPhysicalId`, `startNightExtension`, the `configure*Session` functions, `startRepeating`, `previewCaptureCallback` and `auditCaptureResult`. The file is large; search for these names.
+- [Camera2PreviewEngine.kt](../../camera/src/main/java/com/librestatic/opencinecam/camera/Camera2PreviewEngine.kt): `descriptors` and `startPreview`; `lensLockPlan` in [Camera2ZoomAndLens.kt](../../camera/src/main/java/com/librestatic/opencinecam/camera/Camera2ZoomAndLens.kt), `preferredHighSpeedPhysicalId` in [Camera2Descriptors.kt](../../camera/src/main/java/com/librestatic/opencinecam/camera/Camera2Descriptors.kt), `startNightExtension` in [Camera2StillCapture.kt](../../camera/src/main/java/com/librestatic/opencinecam/camera/Camera2StillCapture.kt), and the `configure*Session` functions, `startRepeating`, `previewCaptureCallback` and `auditCaptureResult` in [Camera2SessionGraphs.kt](../../camera/src/main/java/com/librestatic/opencinecam/camera/Camera2SessionGraphs.kt). The file is large; search for these names.
 - [GraphNegotiation.kt](../../camera/src/main/java/com/librestatic/opencinecam/camera/GraphNegotiation.kt): `previewGraphRequest`, `GraphNegotiator.fallbackGraphs`, `PREVIEW_GRAPH_DROP_ORDER` and `PreviewGraphFallback`.
 - [StreamProbe.kt](../../camera/src/main/java/com/librestatic/opencinecam/camera/StreamProbe.kt) (`StreamCapabilityProbe`, `sessionConfigurationSupport`, `skipBySessionPreCheck`) and [StreamUseCases.kt](../../camera/src/main/java/com/librestatic/opencinecam/camera/StreamUseCases.kt).
 - [LensLock.kt](../../camera/src/main/java/com/librestatic/opencinecam/camera/LensLock.kt): `LensLockBinding`, `LensLockCandidate`, `LensLockUnavailable`, `LensLockMapping`, `LensLockCrop` and `LensSwitchDebounce`.
@@ -12,7 +12,7 @@ This page explains how the engine picks a camera, decides which streams to ask f
 - [CaptureRequestComposition.kt](../../camera/src/main/java/com/librestatic/opencinecam/camera/CaptureRequestComposition.kt) (`EngineRequestMode`, `composeEngineRequest`) and [CaptureResultAuditing.kt](../../camera/src/main/java/com/librestatic/opencinecam/camera/CaptureResultAuditing.kt) (`CaptureResultAuditor`).
 - [CaptureOwnerAdmission.kt](../../camera/src/main/java/com/librestatic/opencinecam/camera/CaptureOwnerAdmission.kt): one native owner at a time.
 - [CaptureService.kt](../../app/src/main/java/com/librestatic/opencinecam/service/CaptureService.kt) (`prepare`, `attachPreview`, `detachPreview`, `recoverPreview`, `desiredGpuViewfinder`), [CaptureStartup.kt](../../app/src/main/java/com/librestatic/opencinecam/service/CaptureStartup.kt) and [LensLockGate.kt](../../app/src/main/java/com/librestatic/opencinecam/service/LensLockGate.kt).
-- [CaptureRecovery.kt](../../app/src/main/java/com/librestatic/opencinecam/CaptureRecovery.kt): `KnownGoodCapture`, the last configuration that reached a live preview.
+- [CaptureRecovery.kt](../../app/src/main/java/com/librestatic/opencinecam/capture/CaptureRecovery.kt): `KnownGoodCapture`, the last configuration that reached a live preview.
 
 ## Enumeration and routing
 

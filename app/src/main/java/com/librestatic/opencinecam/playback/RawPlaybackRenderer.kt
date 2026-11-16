@@ -14,7 +14,7 @@ import android.os.SystemClock
 import android.view.Surface
 import com.librestatic.opencinecam.camera.GpuEglDisplayLease
 import com.librestatic.opencinecam.media.ocraw.OcrawFrameHeader
-import com.librestatic.opencinecam.zoomedQuad
+import com.librestatic.opencinecam.gallery.zoomedQuad
 import java.io.Closeable
 import java.nio.ByteBuffer
 import java.nio.ByteOrder

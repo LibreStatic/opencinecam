@@ -3,6 +3,7 @@
 
 package com.librestatic.opencinecam
 
+import com.librestatic.opencinecam.diagnostics.ProbeLayoutMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test

@@ -1,0 +1,636 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
+package com.librestatic.opencinecam.gallery
+
+import android.content.Context
+import android.content.Intent
+import android.graphics.Bitmap
+import android.media.MediaFormat
+import android.os.Build
+import android.provider.MediaStore
+import android.util.Size
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.LoadingIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.core.net.toUri
+import com.librestatic.opencinecam.capture.ShortcutAction
+import com.librestatic.opencinecam.capture.ShortcutHandler
+import com.librestatic.opencinecam.playback.RawThumbnails
+import com.librestatic.opencinecam.R
+import com.librestatic.opencinecam.settings.SettingsCard
+import com.librestatic.opencinecam.settings.SettingsHelpText
+import com.librestatic.opencinecam.settings.SettingsMuted
+import com.librestatic.opencinecam.settings.SettingsPill
+import com.librestatic.opencinecam.playback.probeClipMetadata
+import com.librestatic.opencinecam.storage.*
+import com.librestatic.opencinecam.subject.SubjectReviewOperatorBar
+import com.librestatic.opencinecam.ui.CineIcon
+import com.librestatic.opencinecam.ui.CineIconButton
+import com.librestatic.opencinecam.ui.listEntrance
+import com.librestatic.opencinecam.ui.theme.LocalReducedMotion
+import com.librestatic.opencinecam.ui.windowHeightClass
+import com.librestatic.opencinecam.ui.windowWidthClass
+import java.time.LocalDate
+import java.time.ZoneId
+import kotlin.math.roundToInt
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import com.librestatic.opencinecam.export.CinemaDngExportControl
+import com.librestatic.opencinecam.export.CinemaDngExportDialog
+import com.librestatic.opencinecam.export.CinemaDngExportNotice
+import com.librestatic.opencinecam.export.CinemaDngExportProgressRow
+import com.librestatic.opencinecam.export.CinemaDngExportRuntime
+import com.librestatic.opencinecam.export.CinemaDngExportState
+import com.librestatic.opencinecam.export.rememberCinemaDngExportEnvironment
+import com.librestatic.opencinecam.fold.FoldDisplayState
+import com.librestatic.opencinecam.fold.foldPanes
+import com.librestatic.opencinecam.fold.LocalFoldDisplayCoordinator
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
+
+/** A small injectable boundary for cancellable UI tests; production uses the real MediaStore repository. */
+internal interface MediaCatalogSource {
+    suspend fun page(settings: GallerySettings, query: String, cursor: LocalMediaCursor?, limit: Int): LocalMediaPage
+    suspend fun thumbnail(artifact: LocalMediaArtifact): Bitmap?
+    /** Duration, frame size and HDR transfer for the card badges; null when unknown. */
+    suspend fun facts(artifact: LocalMediaArtifact): GalleryFacts? = null
+    /** Proxy state of the loaded takes, by take id; takes with no proxy are absent. */
+    fun proxyStates(ids: Set<String>): Flow<Map<String, TakeProxyState>> = flowOf(emptyMap())
+    /** The codec of a video whose sidecar declares none, read from the file itself; null when unknown. */
+    suspend fun probedCodec(artifact: LocalMediaArtifact): CodecBadge? = null
+    /** The inspector's grouped file, video, colour, audio, camera, RAW and recording facts; null when unknown. */
+    suspend fun details(take: LocalMediaTake): TakeTechnicalDetails? = null
+    /**
+     * A token that changes whenever the catalog may have: a list read under an equal, non-null token is still current,
+     * so reopening the gallery reuses it. Null when the source cannot tell, which reads the catalog again every time.
+     */
+    suspend fun freshness(): Any? = null
+}
+
+@Composable
+internal fun MediaCatalogScreen(settings: GallerySettings, onSettings: (GallerySettings) -> Unit,
+    sharingSettings: MediaSharingSettings = MediaSharingSettings(), onSharingSettings: (MediaSharingSettings) -> Unit = {},
+    playbackSettings: PlaybackSettings = PlaybackSettings(), onPlaybackSettings: (PlaybackSettings) -> Unit = {},
+    proxySettings: ProxySettings = ProxySettings(), onProxySettings: (ProxySettings) -> Unit = {}) {
+    val context = LocalContext.current
+    var review by remember { mutableStateOf<MediaReviewSelection?>(null) }
+    var sharingTake by remember { mutableStateOf<LocalMediaTake?>(null) }
+    var deletingTake by remember { mutableStateOf<LocalMediaTake?>(null) }
+    var proxyCatalog by remember { mutableStateOf(false) }
+    var proxyTake by remember { mutableStateOf<LocalMediaTake?>(null) }
+    var renamingTake by remember { mutableStateOf<LocalMediaTake?>(null) }
+    var exportingTake by remember { mutableStateOf<LocalMediaTake?>(null) }
+    val exportEnvironment = rememberCinemaDngExportEnvironment()
+    var deletionRefresh by remember { mutableIntStateOf(0) }
+    var deletedTakeIds by remember { mutableStateOf(emptySet<String>()) }
+    val scope = rememberCoroutineScope()
+    // PLAN-072: a removable drive plugged in or pulled out reloads the catalog, so its takes come and go in place.
+    val volumes = remember(context.applicationContext) {
+        runCatching { RecordingVolumeMonitor(context.applicationContext) }.onFailure { android.util.Log.w("MediaCatalog", "No volume monitor", it) }.getOrNull()
+    }
+    DisposableEffect(volumes) { onDispose { volumes?.close() } }
+    LaunchedEffect(volumes) { volumes?.events?.collect { deletionRefresh++ } }
+    val source = remember(context.applicationContext) {
+        val app = context.applicationContext
+        val repository = LocalMediaRepository(app)
+        val queue by lazy { MediaProxyQueue.get(app) }
+        object : MediaCatalogSource {
+            override suspend fun page(settings: GallerySettings, query: String, cursor: LocalMediaCursor?, limit: Int) =
+                withContext(Dispatchers.IO) { repository.page(settings, query, cursor, limit) }
+            override suspend fun thumbnail(artifact: LocalMediaArtifact): Bitmap? =
+                if (!artifact.name.endsWith(RAW_VIDEO_EXTENSION, ignoreCase = true)) withContext(Dispatchers.IO) { galleryThumbnail(app, artifact) }
+                // One RAW frame in memory at a time; a tile scrolled away while it waits never reads its take.
+                else RawThumbnailGate.withLock { withContext(Dispatchers.IO) { rawGalleryThumbnail(app, artifact) } }
+            override suspend fun facts(artifact: LocalMediaArtifact) = withContext(Dispatchers.IO) { galleryFacts(app, artifact) }
+            override suspend fun probedCodec(artifact: LocalMediaArtifact) = withContext(Dispatchers.IO) {
+                probeClipMetadata(app, artifact.uri, log = null)?.let { probedCodecBadge(it.codec, it.bitDepth) }
+            }
+            override suspend fun details(take: LocalMediaTake) = withContext(Dispatchers.IO) { readTakeDetails(app, take) }
+            override suspend fun freshness(): Any? = withContext(Dispatchers.IO) { repository.freshness() }
+            // The queue for work in flight, the receipts (listed once per page load) for proxies already made.
+            override fun proxyStates(ids: Set<String>): Flow<Map<String, TakeProxyState>> = if (ids.isEmpty()) flowOf(emptyMap())
+                else combine(queue.states, flow { emit(committedProxyTakes(app, ids)) }.flowOn(Dispatchers.IO)) { state, committed ->
+                    takeProxyStates(ids, state.jobs, committed)
+                }
+        }
+    }
+    // A RAW take is one opaque file outside the media collections: it goes straight to the share sheet.
+    MediaCatalogContent(settings, onSettings, source, onShare = { take -> if (take.kind == LocalMediaKind.RAW_VIDEO) shareRawTake(context, take) else sharingTake = take },
+        onDelete = { deletingTake = it }, onRename = { renamingTake = it }, refreshGeneration = deletionRefresh,
+        onReview = { deletedTakeIds = emptySet(); review = it }, onProxy = { proxyTake = it }, onProxyCatalog = { proxyCatalog = true },
+        exports = CinemaDngExportRuntime, onExport = { exportingTake = it }, cache = GalleryCatalogCache.shared) { artifact ->
+        context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(artifact.uri.toUri(), artifact.mimeType)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+    if (proxyCatalog) ProxyCatalogDialog(onDismiss = { proxyCatalog = false })
+    // Mounted before the share/delete dialogs so those open above the review window.
+    review?.let { selected -> MediaPlaybackDialog(selected, playbackSettings, onPlaybackSettings,
+        onDismiss = { review = null }, onPage = { cursor -> source.page(selected.settings, selected.query, cursor, 60) },
+        onShare = { sharingTake = it }, onDelete = { deletingTake = it }, deleted = deletedTakeIds) }
+    sharingTake?.let { MediaShareDialog(it, sharingSettings, onSharingSettings, onDismiss = { sharingTake = null }) }
+    deletingTake?.let { take -> MediaDeleteDialog(take, onDismiss = { deletingTake = null },
+        onCompleted = {
+            deletionRefresh++
+            // The dialog reports completion, not success: the review drops the take only once its originals are gone.
+            scope.launch { if (withContext(Dispatchers.IO) { take.originals.all { artifactGone(context, it.uri) } }) deletedTakeIds = deletedTakeIds + take.id }
+        }) }
+    proxyTake?.let { MediaProxyDialog(it, proxySettings, onProxySettings, onDismiss = { proxyTake = null }) }
+    renamingTake?.let { MediaRenameDialog(it, onDismiss = { renamingTake = null }, onCompleted = { deletionRefresh++ }) }
+    exportingTake?.let { CinemaDngExportDialog(it, exportEnvironment, onDismiss = { exportingTake = null }) }
+}
+
+/** Shares a RAW take's `.ocraw` as it is, through its MediaStore Uri (PLAN-071: conversion happens on a computer). */
+private fun shareRawTake(context: Context, take: LocalMediaTake) {
+    val send = Intent(Intent.ACTION_SEND).setType(take.primary.mimeType)
+        .putExtra(Intent.EXTRA_STREAM, take.primary.uri.toUri())
+        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    runCatching {
+        context.startActivity(Intent.createChooser(send, take.primary.name).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+}
+
+private fun artifactGone(context: Context, uri: String): Boolean =
+    runCatching { context.contentResolver.openFileDescriptor(uri.toUri(), "r")?.use { false } ?: true }
+        .getOrElse { it is java.io.FileNotFoundException }
+
+/**
+ * Grid cards reach 260 dp, so the picture is asked for at twice the catalog's old 256 px. MediaStore has no
+ * thumbnail for a file on the recording drive: that one is decoded from the file and cached (PLAN-072).
+ */
+private fun galleryThumbnail(context: Context, artifact: LocalMediaArtifact): Bitmap? = runCatching {
+    if (isDriveUri(artifact.uri)) driveThumbnail(context, artifact, 512)
+    else context.contentResolver.loadThumbnail(artifact.uri.toUri(), Size(512, 512), null)
+}.getOrNull()
+
+/** Serialises [rawGalleryThumbnail]: each holds a full-resolution frame buffer while it develops. */
+private val RawThumbnailGate = Mutex()
+
+/** A RAW take, which MediaStore cannot decode, gets its first frame developed by [RawThumbnails]; null on any failure. */
+private fun rawGalleryThumbnail(context: Context, artifact: LocalMediaArtifact): Bitmap? = runCatching {
+    // The stream owns the descriptor, so closing the channel closes it once.
+    context.contentResolver.openFileDescriptor(artifact.uri.toUri(), "r")?.let { descriptor ->
+        android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor).channel.use { channel -> RawThumbnails.render(channel) }
+    }?.let { Bitmap.createBitmap(it.argb, it.width, it.height, Bitmap.Config.ARGB_8888) }
+}.getOrNull()
+
+/**
+ * One MediaStore row read by URI: no file is opened, decoded or probed for the badges, except a RAW
+ * take, whose encoding only its file says (its first chunk, a few hundred bytes).
+ */
+private fun galleryFacts(context: Context, artifact: LocalMediaArtifact): GalleryFacts? {
+    if (artifact.name.endsWith(RAW_VIDEO_EXTENSION, ignoreCase = true)) return rawGalleryFacts(context, artifact)
+    val video = artifact.mimeType.startsWith("video/")
+    if (!video && !artifact.mimeType.startsWith("audio/")) return null
+    if (isDriveUri(artifact.uri)) return driveGalleryFacts(context, artifact, video)
+    val transfer = video && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+    val columns = buildList {
+        add(MediaStore.MediaColumns.DURATION)
+        if (video) { add(MediaStore.MediaColumns.WIDTH); add(MediaStore.MediaColumns.HEIGHT) }
+        if (transfer) add(MediaStore.Video.VideoColumns.COLOR_TRANSFER)
+    }.toTypedArray()
+    return runCatching {
+        context.contentResolver.query(artifact.uri.toUri(), columns, null, null, null)?.use { cursor ->
+            if (!cursor.moveToFirst()) return@use null
+            fun long(column: String): Long? = cursor.getColumnIndex(column).takeIf { it >= 0 && !cursor.isNull(it) }?.let(cursor::getLong)
+            val colorTransfer = if (transfer) long(MediaStore.Video.VideoColumns.COLOR_TRANSFER) else null
+            GalleryFacts(long(MediaStore.MediaColumns.DURATION), if (video) long(MediaStore.MediaColumns.WIDTH)?.toInt() else null,
+                if (video) long(MediaStore.MediaColumns.HEIGHT)?.toInt() else null,
+                colorTransfer == MediaFormat.COLOR_TRANSFER_ST2084.toLong() || colorTransfer == MediaFormat.COLOR_TRANSFER_HLG.toLong())
+        }
+    }.getOrNull()
+}
+
+/** A drive file has no MediaStore row: its container is read instead, which opens the file but decodes nothing. */
+private fun driveGalleryFacts(context: Context, artifact: LocalMediaArtifact, video: Boolean): GalleryFacts? = runCatching {
+    val retriever = android.media.MediaMetadataRetriever()
+    try {
+        retriever.setDataSource(context, artifact.uri.toUri())
+        fun long(key: Int): Long? = retriever.extractMetadata(key)?.toLongOrNull()
+        val transfer = if (video && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
+            long(android.media.MediaMetadataRetriever.METADATA_KEY_COLOR_TRANSFER) else null
+        GalleryFacts(long(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION),
+            if (video) long(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toInt() else null,
+            if (video) long(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toInt() else null,
+            transfer == MediaFormat.COLOR_TRANSFER_ST2084.toLong() || transfer == MediaFormat.COLOR_TRANSFER_HLG.toLong())
+    } finally {
+        retriever.release()
+    }
+}.getOrNull()
+
+private fun rawGalleryFacts(context: Context, artifact: LocalMediaArtifact): GalleryFacts? = runCatching {
+    context.contentResolver.openFileDescriptor(artifact.uri.toUri(), "r")?.use { descriptor ->
+        java.io.FileInputStream(descriptor.fileDescriptor).channel.use { channel ->
+            com.librestatic.opencinecam.media.ocraw.OcrawStreamReader(channel, scratchBytes = 0).leadingMetadata()
+        }
+    }?.let { GalleryFacts(codec = rawCodecBadge(it["encoding"])) }
+}.getOrNull()
+
+/** [this] with its unknown values taken from [other]. */
+internal fun GalleryFacts?.mergedWith(other: GalleryFacts?): GalleryFacts? = when {
+    this == null -> other
+    other == null -> this
+    else -> GalleryFacts(durationMs ?: other.durationMs, width ?: other.width, height ?: other.height, hdr || other.hdr, codec ?: other.codec)
+}
+
+/** A RAW take's codec as its file says, once read, over the kind's placeholder. */
+private fun TakeBadges.withFacts(facts: GalleryFacts?): TakeBadges = facts?.codec?.let { copy(codec = it) } ?: this
+
+private data class GalleryRequest(val key: GalleryCatalogCache.Key, val generation: Int)
+/** [paging] is a read of the next page under takes already listed; [token] is the source's freshness when the read began. */
+private data class GalleryLoad(val request: GalleryRequest? = null, val takes: List<LocalMediaTake> = emptyList(),
+    val next: LocalMediaCursor? = null, val loading: Boolean = true, val failed: Boolean = false,
+    val encodings: Map<String, LocalMediaEncoding> = emptyMap(), val paging: Boolean = false, val token: Any? = null)
+
+@Composable
+internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (GallerySettings) -> Unit,
+    source: MediaCatalogSource, onShare: ((LocalMediaTake) -> Unit)? = null,
+    onDelete: ((LocalMediaTake) -> Unit)? = null, refreshGeneration: Int = 0,
+    onRename: ((LocalMediaTake) -> Unit)? = null, onReview: ((MediaReviewSelection) -> Unit)? = null,
+    onProxy: ((LocalMediaTake) -> Unit)? = null, onProxyCatalog: (() -> Unit)? = null,
+    initialSelection: String? = null, exports: CinemaDngExportControl? = null, onExport: ((LocalMediaTake) -> Unit)? = null,
+    cache: GalleryCatalogCache = remember(source) { GalleryCatalogCache() },
+    onOpen: (LocalMediaArtifact) -> Unit) {
+    val reducedMotion = LocalReducedMotion.current
+    val idleExports = remember { MutableStateFlow<CinemaDngExportState>(CinemaDngExportState.Idle) }
+    val exportState by (exports?.states ?: idleExports).collectAsState()
+    /** The running CinemaDNG export's progress and Cancel, on the take it reads. */
+    fun exportProgress(take: LocalMediaTake): (@Composable () -> Unit)? {
+        val running = (exportState as? CinemaDngExportState.Running)?.takeIf { it.takeUri == take.primary.uri } ?: return null
+        return { CinemaDngExportProgressRow(running, onCancel = { exports?.cancel() }) }
+    }
+    var query by rememberSaveable { mutableStateOf("") }
+    // What the operator typed, which is not always what we search for. Keeping it lets the field
+    // show a rejected edit long enough to explain it: a controlled field that silently discards the
+    // edit calls onValueChange a second time with the reverted text, and a flag set on the first
+    // call would be cleared by that second one before anything could be drawn.
+    var typedQuery by rememberSaveable { mutableStateOf("") }
+    var filters by rememberSaveable { mutableStateOf(false) }
+    var help by rememberSaveable { mutableStateOf(false) }
+    var batch by remember { mutableIntStateOf(0) }
+    var load by remember(source) { mutableStateOf(GalleryLoad()) }
+    var openFailed by remember { mutableStateOf(false) }
+    // A delete, rename or drive event while the gallery is open; the value it had on arrival changed nothing.
+    val seenRefresh = remember { intArrayOf(refreshGeneration) }
+    LaunchedEffect(refreshGeneration) {
+        if (refreshGeneration != seenRefresh[0]) { seenRefresh[0] = refreshGeneration; cache.invalidate() }
+    }
+    val key = GalleryCatalogCache.Key(settings.kind, settings.newestFirst, settings.goodTakesOnly, query)
+    val request = GalleryRequest(key, cache.generation)
+    val task = request to batch
+    val currentTask by rememberUpdatedState(task)
+    val cached = cache[key]
+    val reading = load.request == request && load.loading
+    val readFailed = load.request == request && load.failed
+    // This request's list once it has takes or has finished; until then the last list read for this search, shown
+    // while it is read again (as it is unless a newer generation or the source's token says otherwise); else nothing yet.
+    // A read that failed before its first page keeps that last list up, under the error, rather than an empty one; a
+    // retry reads from the first page again, so the list it shows never mixes the two reads.
+    val visible = load.takeIf { it.request == request && (it.takes.isNotEmpty() || (!it.loading && !(it.failed && cached != null))) }
+        ?: cached?.let { GalleryLoad(request, it.takes, it.next, loading = reading || (!readFailed && it.generation != request.generation),
+            failed = readFailed && !reading, encodings = it.encodings) }
+        ?: GalleryLoad(request)
+    LaunchedEffect(source, task) {
+        val previous = load.takeIf { it.request == request } ?: run {
+            val token = try { source.freshness() } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { null }
+            val entry = cache[key]
+            if (entry != null && entry.generation == request.generation && token != null && token == entry.token) {
+                load = GalleryLoad(request, entry.takes, entry.next, loading = false, encodings = entry.encodings, token = token)
+                return@LaunchedEffect
+            }
+            GalleryLoad(request = request, token = token)
+        }
+        load = previous.copy(loading = true, failed = false, paging = previous.takes.isNotEmpty())
+        var cursor = previous.next
+        try {
+            var page: LocalMediaPage
+            do {
+                currentCoroutineContext().ensureActive()
+                page = source.page(settings, query, cursor, 60)
+                currentCoroutineContext().ensureActive()
+                check(page.next == null || page.next !== cursor) { "Catalog continuation did not advance" }
+                cursor = page.next
+                if (page.takes.isEmpty() && cursor != null) yield()
+            } while (page.takes.isEmpty() && cursor != null)
+            if (currentTask != task) return@LaunchedEffect
+            val merged = linkedMapOf<String, LocalMediaTake>()
+            previous.takes.forEach { merged[it.id] = it }
+            page.takes.forEach { merged[it.id] = it }
+            load = GalleryLoad(request, merged.values.toList(), cursor, loading = false, encodings = previous.encodings + page.encodings,
+                token = previous.token)
+            cache[key] = GalleryCatalogCache.Entry(load.takes, load.next, load.encodings, previous.token, request.generation)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            if (currentTask == task) {
+                android.util.Log.w("MediaCatalog", "Catalog read failed; existing results retained", failure)
+                // A read that has listed nothing yet retries from its first page: a take that appeared before the
+                // empty pages it skipped would otherwise be missed. A list already shown carries on where it stopped.
+                load = previous.copy(next = if (previous.takes.isEmpty()) null else cursor, loading = false, failed = true, paging = false)
+            }
+        }
+    }
+
+    // The take the inspector shows. While a refresh reads again it keeps the last copy; once a read
+    // has finished without it (deleted, renamed away by a filter) the selection goes.
+    // [initialSelection] opens a take's details on arrival (the Compose Driver review uses it).
+    var selectedId by rememberSaveable { mutableStateOf(initialSelection) }
+    var detailsOpen by rememberSaveable { mutableStateOf(initialSelection != null) }
+    var lastSelected by remember { mutableStateOf<LocalMediaTake?>(null) }
+    val selectedTake = selectedId?.let { id -> visible.takes.firstOrNull { it.id == id } ?: lastSelected?.takeIf { it.id == id && visible.loading } }
+    SideEffect { if (selectedTake != null) lastSelected = selectedTake }
+    LaunchedEffect(selectedId, visible.loading, visible.failed, visible.takes) {
+        if (selectedId != null && !visible.loading && !visible.failed && visible.takes.none { it.id == selectedId }) {
+            selectedId = null; detailsOpen = false
+        }
+    }
+    val facts = cache.facts
+    val probedCodecs = cache.probedCodecs
+    val takeDetails = cache.takeDetails
+    val proxies by remember(source, visible.takes) { source.proxyStates(visible.takes.mapTo(HashSet()) { it.id }) }
+        .collectAsState(emptyMap())
+    fun badges(take: LocalMediaTake) = TakeBadges(codecBadge(take, visible.encodings[take.id]), proxies[take.id] ?: TakeProxyState.NONE,
+        visible.encodings[take.id]?.incompleteReasons.orEmpty(), onDrive = take.onDrive)
+    val thumbnails = cache.thumbnails
+    val groups = remember(visible.takes) { groupByTakeDay(visible.takes, ZoneId.systemDefault()) { it.primary.modifiedSeconds } }
+    val gridState = rememberLazyGridState()
+
+    fun open(artifact: LocalMediaArtifact) {
+        try {
+            if (onReview != null && opensInReview(artifact, visible.takes))
+                onReview(MediaReviewSelection(visible.takes.filter { it.kind.opensInApp() }, artifact, settings, query, visible.next))
+            else onOpen(artifact)
+            openFailed = false
+        }
+        catch (_: Exception) { openFailed = true }
+    }
+    /** [before] runs ahead of every action, so an on-demand sheet can get out of the way first. */
+    fun actions(take: LocalMediaTake, before: () -> Unit = {}): GalleryTakeActions = GalleryTakeActions(
+        play = if (take.kind.opensInApp()) { { before(); open(take.primary) } } else null,
+        details = { selectedId = take.id; detailsOpen = true },
+        share = onShare?.let { action -> { before(); action(take) } },
+        // Rename and delete re-observe a take through the media collections, which a RAW take is not in. A drive take
+        // is never renamed here: a renamed document gets a new id, which would stale every URI its sidecars hold.
+        rename = onRename?.takeIf { take.kind.renamesAndDeletes() && !take.onDrive }?.let { action -> { before(); action(take) } },
+        proxy = onProxy?.takeIf { take.kind == LocalMediaKind.VIDEO }?.let { action -> { before(); action(take) } },
+        delete = onDelete?.takeIf { take.kind.renamesAndDeletes() }?.let { action -> { before(); action(take) } },
+        export = onExport?.takeIf { take.kind == LocalMediaKind.RAW_VIDEO }?.let { action -> { before(); action(take) } },
+    )
+
+    val controls: @Composable () -> Unit = {
+        Column(Modifier.widthIn(max = 840.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            // One header row: the title and the catalog actions as icon keys, instead of a
+            // stack of full-width buttons above the first take.
+            Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Text(stringResource(R.string.media_tab), Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                onProxyCatalog?.let { action -> CineIconButton("gallery-proxy-catalog", CineIcon.PROXY, R.string.proxy_catalog_title, onClick = action) }
+                CineIconButton("gallery-filters", CineIcon.FILTER, R.string.gallery_filters, selected = filters) { filters = !filters }
+                // Reading the catalog again under a list already shown: the refresh key turns into the spinner.
+                if (visible.loading && !visible.paging && visible.takes.isNotEmpty()) GalleryBusy("gallery-refreshing", Modifier.size(48.dp), 28.dp)
+                else CineIconButton("gallery-refresh", CineIcon.REFRESH, R.string.gallery_refresh) { cache.invalidate(); openFailed = false }
+                CineIconButton("gallery-help-toggle", CineIcon.INFO, if (help) R.string.settings_help_hide else R.string.settings_help_show,
+                    selected = help) { help = !help }
+            }
+            if (help) SettingsHelpText(stringResource(R.string.gallery_help), "gallery-help")
+            SubjectReviewOperatorBar()
+            val queryInvalid = !validGalleryQuery(typedQuery)
+            OutlinedTextField(typedQuery, { candidate ->
+                typedQuery = galleryQueryInput(candidate)
+                // Only a query we would actually accept reaches the loader.
+                if (validGalleryQuery(candidate)) query = candidate
+            }, label = { Text(stringResource(R.string.gallery_search), Modifier.fillMaxWidth().testTag("gallery-search-label")) },
+                singleLine = true, shape = RoundedCornerShape(12.dp),
+                isError = queryInvalid, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("gallery-search"))
+            if (queryInvalid) Text(stringResource(R.string.gallery_search_invalid), Modifier.fillMaxWidth().testTag("gallery-search-invalid"))
+            // The media type is the filter used most, so it stays one tap away above the list.
+            // One line, never wrapped: a narrow window scrolls the row sideways instead.
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).testTag("gallery-types"),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)) { for (kind in GalleryMediaKind.entries) {
+                SettingsPill(stringResource(galleryKindLabel(kind)), "gallery-type-$kind", settings.kind == kind,
+                    icon = galleryKindIcon(kind)) {
+                    onSettings(settings.copy(kind = kind))
+                }
+            } }
+            if (filters) SettingsCard { GallerySettingsControls(settings, onSettings, showKinds = false) }
+            if (openFailed) Text(stringResource(R.string.gallery_open_failed), Modifier.fillMaxWidth().testTag("gallery-open-failed"),
+                color = GalleryWarning, fontSize = 13.sp)
+            (exportState as? CinemaDngExportState.Finished)?.let { CinemaDngExportNotice(it, onDismiss = { exports?.acknowledge() }) }
+        }
+    }
+    val status: @Composable () -> Unit = {
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            when {
+                visible.failed -> {
+                    Text(stringResource(R.string.gallery_load_failed), Modifier.fillMaxWidth().testTag("gallery-error"), color = GalleryWarning)
+                    GalleryButton("retry", R.string.gallery_retry) { load = load.copy(loading = true); batch++ }
+                }
+                // Only a finished read says there is nothing: while reading, the spinner holds the list's place.
+                !visible.loading && visible.takes.isEmpty() ->
+                    Text(stringResource(R.string.gallery_empty), Modifier.fillMaxWidth().testTag("gallery-empty"), color = SettingsMuted)
+            }
+            if (visible.loading && visible.paging) {
+                Box(Modifier.fillMaxWidth().heightIn(min = 48.dp), contentAlignment = Alignment.Center) {
+                    GalleryBusy("gallery-loading-more", Modifier.size(48.dp))
+                }
+            } else if (!visible.loading && !visible.failed && visible.next != null) {
+                GalleryButton("more", R.string.gallery_more) { load = load.copy(loading = true); batch++ }
+            } else if (!visible.loading && !visible.failed && visible.takes.isNotEmpty()) {
+                Text(stringResource(R.string.gallery_no_more), Modifier.fillMaxWidth().testTag("gallery-end"),
+                    color = SettingsMuted, fontSize = 12.sp, textAlign = TextAlign.Center)
+            }
+        }
+    }
+    val details: @Composable (LocalMediaTake, Modifier, () -> Unit, Boolean) -> Unit = { take, modifier, close, onDemand ->
+        // A plain recording declares no codec; only the take in the inspector is probed for one, never the cards.
+        val shown = badges(take).let {
+            if (it.codec == null && take.kind == LocalMediaKind.VIDEO) it.copy(codec = rememberProbedCodec(take, source, probedCodecs)) else it
+        }
+        val technical = rememberTakeDetails(take, source, takeDetails)
+        // A RAW take's MediaStore row has no duration or size: the file's own facts fill the chips.
+        val takeFacts = rememberGalleryFacts(take.primary, source, facts).mergedWith(technical.facts)
+        MediaTakeDetails(take, settings, source, thumbnails, takeFacts, shown.withFacts(takeFacts),
+            if (onDemand) actions(take, close) else actions(take), onOpen = { open(it) }, onClose = close, modifier,
+            progress = exportProgress(take), technical = technical)
+    }
+
+    // Nothing to show yet: one spinner where the list will be, never the empty message.
+    val busy = visible.loading && visible.takes.isEmpty()
+    val coordinator = LocalFoldDisplayCoordinator.current
+    val foldFallback = remember { MutableStateFlow(FoldDisplayState()) }
+    val fold by (coordinator?.states ?: foldFallback).collectAsState()
+    var origin by remember { mutableStateOf(Offset.Zero) }
+    BoxWithConstraints(Modifier.fillMaxSize().onGloballyPositioned { origin = it.positionInWindow() }) {
+        val areaWidth = maxWidth.value
+        val widthClass = windowWidthClass(areaWidth)
+        val heightClass = windowHeightClass(maxHeight.value)
+        val landscape = maxWidth > maxHeight
+        val density = LocalDensity.current
+        // Half-opened on a hinge: the grid on one side, the inspector on the other, never across it.
+        val panes = with(density) {
+            foldPanes(constraints.maxWidth, constraints.maxHeight, origin.x.roundToInt(), origin.y.roundToInt(), fold.hinge,
+                gutter = 16.dp.roundToPx(), minimum = 280.dp.roundToPx(), swap = false)
+        }
+        val side = panes != null || mediaInspectorSide(widthClass, heightClass, landscape)
+        LaunchedEffect(side) { if (side) detailsOpen = false }
+        ShortcutHandler(enabled = side && selectedId != null) { action ->
+            if (action == ShortcutAction.DISMISS) { selectedId = null; true } else false
+        }
+        val card: @Composable (LocalMediaTake, Modifier) -> Unit = { take, modifier ->
+            val takeFacts = rememberGalleryFacts(take.primary, source, facts)
+            GalleryTakeCard(take, settings, source, thumbnails, takeFacts, badges(take).withFacts(takeFacts),
+                selected = side && take.id == selectedId,
+                clickLabel = stringResource(if (side || !take.kind.opensInApp()) R.string.media_action_details else take.kind.primaryActionLabel()),
+                actions = actions(take), modifier = modifier, footer = exportProgress(take)) {
+                // Beside an inspector a tap shows the take; on its own the grid plays it.
+                if (side) selectedId = take.id
+                else if (take.kind.opensInApp()) open(take.primary)
+                else { selectedId = take.id; detailsOpen = true }
+            }
+        }
+        val inspector: @Composable (Modifier) -> Unit = { modifier ->
+            MediaInspectorPane(selectedTake, modifier) { take, contentModifier -> details(take, contentModifier, { selectedId = null }, false) }
+        }
+        when {
+            panes != null -> with(density) {
+                val grid = panes.preview
+                val pane = panes.controls
+                val gridWidth = grid.width.toDp().value
+                GalleryGrid(Modifier.absoluteOffset(grid.left.toDp(), grid.top.toDp()).size(grid.width.toDp(), grid.height.toDp()),
+                    galleryColumns(gridWidth, windowWidthClass(gridWidth), windowHeightClass(grid.height.toDp().value)),
+                    gridState, groups, controls, status, card, busy)
+                inspector(Modifier.absoluteOffset(pane.left.toDp(), pane.top.toDp()).size(pane.width.toDp(), pane.height.toDp()).padding(12.dp))
+            }
+            side -> Row(Modifier.fillMaxSize()) {
+                val inspectorWidth = mediaInspectorWidthDp(areaWidth)
+                GalleryGrid(Modifier.weight(1f).fillMaxHeight(), galleryColumns(areaWidth - inspectorWidth, widthClass, heightClass),
+                    gridState, groups, controls, status, card, busy)
+                inspector(Modifier.width(inspectorWidth.dp).padding(top = 12.dp, end = 12.dp, bottom = 12.dp))
+            }
+            else -> GalleryGrid(Modifier.fillMaxSize(), galleryColumns(areaWidth, widthClass, heightClass), gridState, groups,
+                controls, status, card, busy)
+        }
+        if (!side && detailsOpen) selectedTake?.let { take ->
+            MediaInspectorSheet(take, mediaDetailsAsBottomSheet(widthClass, landscape), onDismiss = { detailsOpen = false }) { shown, modifier, close ->
+                details(shown, modifier, close, true)
+            }
+        }
+    }
+}
+
+/** Controls, then the takes under a header per shooting day, then the paging status; [busy] centres a spinner under the controls. */
+@Composable
+private fun GalleryGrid(modifier: Modifier, columns: Int, state: LazyGridState, groups: List<Pair<LocalDate, List<LocalMediaTake>>>,
+    controls: @Composable () -> Unit, status: @Composable () -> Unit, card: @Composable (LocalMediaTake, Modifier) -> Unit,
+    busy: Boolean) {
+    val entrance = rememberGridEntrance(state, columns) { groups.isNotEmpty() }
+    val reducedMotion = LocalReducedMotion.current
+    Box(modifier) {
+    LazyVerticalGrid(GridCells.Fixed(columns), Modifier.fillMaxSize().testTag("gallery-list"), state,
+        contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        item(key = "controls", span = { GridItemSpan(maxLineSpan) }, contentType = "controls") { controls() }
+        // The controls are item 0; every header and take after it counts toward the entrance order.
+        var index = 1
+        for ((day, takes) in groups) {
+            item(key = "day-$day-${takes.first().id}", span = { GridItemSpan(maxLineSpan) }, contentType = "day") { GalleryDayHeader(day) }
+            val first = index + 1
+            itemsIndexed(takes, key = { _, take -> take.id }, contentType = { _, _ -> "take" }) { offset, take ->
+                card(take, Modifier.listEntrance(entrance, first + offset))
+            }
+            index = first + takes.size
+        }
+        item(key = "status", span = { GridItemSpan(maxLineSpan) }, contentType = "status") { status() }
+    }
+    AnimatedVisibility(busy, Modifier.align(Alignment.Center).offset {
+        // The middle of the space under the controls, kept on screen when they fill most of it.
+        val viewport = state.layoutInfo.viewportSize.height
+        val controlsBottom = state.layoutInfo.visibleItemsInfo.firstOrNull { it.key == "controls" }
+            ?.let { it.offset.y + it.size.height } ?: 0
+        IntOffset(0, (controlsBottom / 2).coerceAtMost(viewport / 2 - 48.dp.roundToPx()).coerceAtLeast(0))
+    }, enter = if (reducedMotion) EnterTransition.None else fadeIn(), exit = if (reducedMotion) ExitTransition.None else fadeOut()) {
+        GalleryBusy("gallery-loading", Modifier.size(72.dp))
+    }
+    }
+}
+
+/** The shape-morphing indicator for a catalog read, announced as one; still under reduced motion. */
+@Composable
+private fun GalleryBusy(tag: String, modifier: Modifier = Modifier, size: Dp = Dp.Unspecified) {
+    val label = stringResource(R.string.gallery_loading)
+    Box(modifier.semantics { contentDescription = label }.testTag(tag), contentAlignment = Alignment.Center) {
+        val indicator = if (size == Dp.Unspecified) Modifier.fillMaxSize() else Modifier.size(size)
+        if (LocalReducedMotion.current) LoadingIndicator({ 0.6f }, indicator, color = MaterialTheme.colorScheme.primary)
+        else LoadingIndicator(indicator, color = MaterialTheme.colorScheme.primary)
+    }
+}
+
+internal fun validGalleryQuery(query: String): Boolean = query.length <= 128 && query.none { it.isISOControl() }
+/** Saveable-state memory bound, like the rename fields. Anything cut here is already invalid (>128),
+ * so the bound never turns a paste into a different accepted query. */
+internal fun galleryQueryInput(candidate: String): String = candidate.take(512)
+
+@Composable
+private fun GalleryButton(tag: String, label: Int, enabled: Boolean = true, action: () -> Unit) {
+    OutlinedButton(action, enabled = enabled, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("gallery-$tag")) {
+        Text(stringResource(label), Modifier.weight(1f).testTag("gallery-$tag-label"), textAlign = TextAlign.Center)
+    }
+}
+
+/**
+ * Whether [artifact] opens in the app's review rather than another app: video, audio and images by their type, and a RAW
+ * take's `.ocraw` file, whose octet-stream type says nothing, by its take's kind (PLAN-071 §7).
+ */
+internal fun opensInReview(artifact: LocalMediaArtifact, takes: List<LocalMediaTake>): Boolean =
+    artifact.mimeType.substringBefore('/') in setOf("video", "audio", "image") ||
+        takes.any { it.kind == LocalMediaKind.RAW_VIDEO && it.primary.uri == artifact.uri }

@@ -3,6 +3,7 @@
 
 package com.librestatic.opencinecam
 
+import com.librestatic.opencinecam.ui.AdaptiveWindow
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

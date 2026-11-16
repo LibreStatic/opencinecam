@@ -79,7 +79,7 @@ internal fun xmlEscape(text: String): String {
         '"' -> out.append("&quot;")
         '\'' -> out.append("&apos;")
         // Characters XML 1.0 cannot carry at all; the tree never offers such names.
-        else -> if (c.code < 0x20 && c != '\t' && c != '\n' && c != '\r' || c == '￾' || c == '￿') out.append('�') else out.append(c)
+        else -> if (c.code < 0x20 && c != '\t' && c != '\n' && c != '\r' || c == '\uFFFE' || c == '\uFFFF') out.append('\uFFFD') else out.append(c)
     }
     return out.toString()
 }

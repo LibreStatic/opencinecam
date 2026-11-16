@@ -17,7 +17,7 @@ import com.librestatic.opencinecam.camera.GpuEglDisplayLease
 import com.librestatic.opencinecam.camera.OpenCineLogYcbcrConversion
 import com.librestatic.opencinecam.storage.PreciseLogSignal
 import com.librestatic.opencinecam.storage.PreciseLogView
-import com.librestatic.opencinecam.zoomedQuad
+import com.librestatic.opencinecam.gallery.zoomedQuad
 import java.io.Closeable
 import java.nio.ByteBuffer
 import java.nio.ByteOrder

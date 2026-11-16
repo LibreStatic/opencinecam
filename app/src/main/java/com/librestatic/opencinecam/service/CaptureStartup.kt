@@ -7,7 +7,7 @@ import android.content.Context
 import android.os.Process
 import android.os.SystemClock
 import android.util.Log
-import com.librestatic.opencinecam.DeviceQuirksProvider
+import com.librestatic.opencinecam.diagnostics.DeviceQuirksProvider
 import com.librestatic.opencinecam.camera.Camera2CameraDescriptor
 import com.librestatic.opencinecam.camera.Camera2PreviewEngine
 import java.util.concurrent.FutureTask

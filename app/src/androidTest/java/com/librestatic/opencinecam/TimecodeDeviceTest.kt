@@ -2,6 +2,7 @@
 package com.librestatic.opencinecam
 import android.os.SystemClock
 import com.librestatic.opencinecam.camera.*
+import com.librestatic.opencinecam.metadata.recordingTimecodeJson
 import org.junit.Assert.*
 import org.junit.Test
 

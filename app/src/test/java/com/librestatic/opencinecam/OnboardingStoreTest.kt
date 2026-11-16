@@ -3,6 +3,8 @@
 
 package com.librestatic.opencinecam
 
+import com.librestatic.opencinecam.onboarding.onboardingExitTarget
+import com.librestatic.opencinecam.onboarding.OnboardingPage
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test

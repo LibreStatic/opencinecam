@@ -11,6 +11,8 @@ import com.librestatic.opencinecam.core.model.ProfileBuildCheck
 import com.librestatic.opencinecam.core.model.ProfileStatus
 import com.librestatic.opencinecam.core.model.ProfileTrust
 import com.librestatic.opencinecam.core.model.QuirkEffect
+import com.librestatic.opencinecam.diagnostics.BUNDLED_PROFILE_DIRECTORY
+import com.librestatic.opencinecam.diagnostics.BundledDeviceQuirks
 import java.io.File
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject

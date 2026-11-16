@@ -7,7 +7,7 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.Build
-import com.librestatic.opencinecam.FoldCloseDetector
+import com.librestatic.opencinecam.fold.FoldCloseDetector
 
 /** Runs with the capture service, not the Activity. No fold is inferred from a disappearing layout feature. */
 internal class FoldClosureTracker(context: Context, private val onClosed: () -> Unit) : AutoCloseable {

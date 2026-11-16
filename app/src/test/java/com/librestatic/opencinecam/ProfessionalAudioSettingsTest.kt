@@ -6,6 +6,11 @@ import com.librestatic.opencinecam.media.audio.AudioOutputFormat
 import com.librestatic.opencinecam.media.audio.AudioSourceSelection
 import com.librestatic.opencinecam.media.audio.PcmAudioConfiguration
 import com.librestatic.opencinecam.media.audio.ProfessionalAudioCapabilities
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettingsStore
+import com.librestatic.opencinecam.settings.normalizedFor
+import com.librestatic.opencinecam.settings.pcmChoices
+import com.librestatic.opencinecam.settings.PresetPreferences
 import org.junit.Assert.assertEquals
  import org.junit.Assert.assertFalse
  import org.junit.Assert.assertTrue
@@ -43,6 +48,18 @@ class ProfessionalAudioSettingsTest {
         assertEquals(48_000, normalized.audioSampleRateHz)
         assertEquals(AudioBitDepth.PCM_24, normalized.audioBitDepth)
         assertEquals(2, normalized.audioChannels)
+    }
+
+    @Test
+    fun flacRowsOfferOnly16BitTuplesWhileWavKeepsEveryOne() {
+        val configurations = listOf(
+            PcmAudioConfiguration(48_000, AudioBitDepth.PCM_16, 2),
+            PcmAudioConfiguration(96_000, AudioBitDepth.PCM_24, 2),
+        )
+        val flac = pcmChoices(AudioOutputFormat.FLAC, configurations)
+        assertEquals(listOf(48_000), flac.map { it.sampleRate }.distinct())
+        assertTrue(flac.all { it.bitDepth == AudioBitDepth.PCM_16 })
+        assertEquals(configurations, pcmChoices(AudioOutputFormat.WAV_PCM, configurations))
     }
 
     @Test

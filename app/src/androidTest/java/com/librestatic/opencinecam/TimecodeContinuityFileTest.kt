@@ -2,6 +2,7 @@
 package com.librestatic.opencinecam
 import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.camera.*
+import com.librestatic.opencinecam.metadata.TimecodeContinuationFile
 import java.io.File
 import org.junit.Assert.*
 import org.junit.Test

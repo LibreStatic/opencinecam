@@ -16,11 +16,26 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.camera.AudioLevelSnapshot
 import com.librestatic.opencinecam.camera.Camera2PreviewEngine
 import com.librestatic.opencinecam.camera.DigitalRecordingGain
+import com.librestatic.opencinecam.capture.OperatorPreferences
+import com.librestatic.opencinecam.capture.StartupMode
+import com.librestatic.opencinecam.gallery.GalleryMediaKind
+import com.librestatic.opencinecam.gallery.GallerySettings
+import com.librestatic.opencinecam.gallery.MediaShareContent
+import com.librestatic.opencinecam.gallery.MediaShareMetadata
+import com.librestatic.opencinecam.gallery.MediaSharingSettings
 import com.librestatic.opencinecam.media.audio.AudioBitDepth
 import com.librestatic.opencinecam.media.audio.AudioSourceSelection
 import com.librestatic.opencinecam.service.CaptureService
 import com.librestatic.opencinecam.service.PreviewAudioMonitor
 import com.librestatic.opencinecam.service.PreviewAudioMonitorCreationFailure
+import com.librestatic.opencinecam.settings.AudioListeningOutput
+import com.librestatic.opencinecam.settings.AudioListeningPhase
+import com.librestatic.opencinecam.settings.AudioListeningSettings
+import com.librestatic.opencinecam.settings.AudioMeterMode
+import com.librestatic.opencinecam.settings.AudioMeterSettings
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
+import com.librestatic.opencinecam.settings.SettingsRepositories
 import com.librestatic.opencinecam.storage.AudioRetirementGate
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CountDownLatch
@@ -270,7 +285,7 @@ class PreviewAudioRetirementDeviceTest {
             assertTrue(bound); compose.waitUntil(10_000) { binder.get() != null }
             val owner = requireNotNull(binder.get())
             service = field(owner, "this\$0") as CaptureService
-            engine = CaptureService::class.java.getDeclaredMethod("getPreviewEngine").apply { isAccessible = true }.invoke(service) as Camera2PreviewEngine
+            engine = CaptureService::class.java.getDeclaredMethod("getPreviewEngine\$app").apply { isAccessible = true }.invoke(service) as Camera2PreviewEngine
             val executor = field(engine, "cameraExecutor") as Executor
             compose.runOnUiThread { owner.prepare(640, 480); owner.selectMode(CaptureMode.VIDEO, reopen = false) }
             val descriptor = requireNotNull(owner.cameraStates.value.descriptor)

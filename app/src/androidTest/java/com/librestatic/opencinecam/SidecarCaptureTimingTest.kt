@@ -7,6 +7,7 @@ import android.provider.MediaStore
 import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.media.audio.AudioBitDepth
 import com.librestatic.opencinecam.media.audio.AudioSourceSelection
+import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.storage.*
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger

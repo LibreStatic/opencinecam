@@ -183,5 +183,4 @@ object GeometrySolver {
         for (x in v) s += (x - m) * (x - m)
         return sqrt(s / v.size).toFloat()
     }
-
 }

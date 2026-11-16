@@ -2,6 +2,11 @@
 package com.librestatic.opencinecam.storage
 
 import com.librestatic.opencinecam.*
+import com.librestatic.opencinecam.gallery.MediaShareContent
+import com.librestatic.opencinecam.gallery.MediaShareMetadata
+import com.librestatic.opencinecam.gallery.MediaSharingSettings
+import com.librestatic.opencinecam.metadata.productionSlateJson
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Test
@@ -196,5 +201,4 @@ class MediaSharePlanTest {
         rejected { requirePortableShareNames(listOf("Café.mp4", "Cafe\u0301.mp4")) }
         requirePortableShareNames(listOf("Original video.mp4", "original audio.wav", "relationships.json"))
     }
-
 }

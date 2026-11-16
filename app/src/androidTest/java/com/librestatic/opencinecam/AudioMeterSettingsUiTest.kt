@@ -18,6 +18,12 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.camera.AudioChannelLevel
 import com.librestatic.opencinecam.camera.AudioLevelSnapshot
 import com.librestatic.opencinecam.camera.DigitalRecordingGain
+import com.librestatic.opencinecam.capture.AudioMeterHud
+import com.librestatic.opencinecam.settings.AudioListeningSettings
+import com.librestatic.opencinecam.settings.AudioMeterMode
+import com.librestatic.opencinecam.settings.AudioMeterSettings
+import com.librestatic.opencinecam.settings.AudioMeterSettingsControls
+import com.librestatic.opencinecam.settings.CameraSettings
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test

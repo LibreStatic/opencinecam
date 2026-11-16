@@ -6,8 +6,8 @@ package com.librestatic.opencinecam.storage
 import android.content.Context
 import android.net.Uri
 import android.os.ParcelFileDescriptor
-import com.librestatic.opencinecam.CaptureNameSnapshot
-import com.librestatic.opencinecam.captureFileStem
+import com.librestatic.opencinecam.settings.CaptureNameSnapshot
+import com.librestatic.opencinecam.settings.captureFileStem
 import com.librestatic.opencinecam.rawvideo.RawVideoTakeOutput
 import java.nio.channels.FileChannel
 import java.util.UUID

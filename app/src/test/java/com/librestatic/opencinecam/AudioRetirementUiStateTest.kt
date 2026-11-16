@@ -2,6 +2,8 @@
 package com.librestatic.opencinecam
 
 import com.librestatic.opencinecam.camera.RecordingWhiteBalanceStatus
+import com.librestatic.opencinecam.capture.OperatorPreferences
+import com.librestatic.opencinecam.settings.CameraSettings
 import org.junit.Assert.*
 import org.junit.Test
 

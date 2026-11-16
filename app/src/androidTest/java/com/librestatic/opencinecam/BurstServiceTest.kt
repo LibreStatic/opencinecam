@@ -15,7 +15,11 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.camera.*
+import com.librestatic.opencinecam.capture.OperatorPreferences
+import com.librestatic.opencinecam.capture.StartupMode
 import com.librestatic.opencinecam.service.CaptureService
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.SettingsRepositories
 import java.security.MessageDigest
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -50,7 +54,7 @@ class BurstServiceTest {
         val release=CountDownLatch(1);val firstFrame=CountDownLatch(1)
         val delivered=AtomicReference<CapturedBurst?>()
         val collections=listOf(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,MediaStore.Downloads.EXTERNAL_CONTENT_URI)
-        fun rows():Set<Uri> = collections.flatMap {collection -> requireNotNull(context.contentResolver.query(collection,arrayOf(MediaStore.MediaColumns._ID),
+        fun rows(): Set<Uri> = collections.flatMap {collection -> requireNotNull(context.contentResolver.query(collection,arrayOf(MediaStore.MediaColumns._ID),
             "${MediaStore.MediaColumns.OWNER_PACKAGE_NAME} = ?",arrayOf(context.packageName),null)).use { c -> buildList {while(c.moveToNext()) add(ContentUris.withAppendedId(collection,c.getLong(0)))}}}.toSet()
         val initial=rows()
         val connection=object:ServiceConnection {
@@ -69,7 +73,7 @@ class BurstServiceTest {
             compose.runOnUiThread {owner.prepare(640,480);owner.selectMode(CaptureMode.BURST,reopen=false)}
             val d=requireNotNull(owner.cameraStates.value.descriptor)
             val outer=owner.javaClass.getDeclaredField("this\$0").apply {isAccessible=true}.get(owner)
-            val engine=CaptureService::class.java.getDeclaredMethod("getPreviewEngine").apply {isAccessible=true}.invoke(outer) as Camera2PreviewEngine
+            val engine=CaptureService::class.java.getDeclaredMethod("getPreviewEngine\$app").apply {isAccessible=true}.invoke(outer) as Camera2PreviewEngine
             val executor=Camera2PreviewEngine::class.java.getDeclaredField("cameraExecutor").apply {isAccessible=true}.get(engine) as java.util.concurrent.Executor
             val writer=CaptureService::class.java.getDeclaredField("storageExecutor").apply {isAccessible=true}.get(outer) as java.util.concurrent.ThreadPoolExecutor
             cameraExecutor=executor;storageWriter=writer

@@ -4,6 +4,7 @@
 package com.librestatic.opencinecam
 
 import androidx.compose.ui.geometry.Offset
+import com.librestatic.opencinecam.capture.HorizonRollMath
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test

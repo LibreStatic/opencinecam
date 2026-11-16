@@ -23,7 +23,12 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.net.toUri
 import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.camera.*
+import com.librestatic.opencinecam.capture.OperatorPreferences
+import com.librestatic.opencinecam.capture.StartupMode
 import com.librestatic.opencinecam.service.CaptureService
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.LutLibraries
+import com.librestatic.opencinecam.settings.SettingsRepositories
 import com.librestatic.opencinecam.storage.StillPublication
 import java.security.MessageDigest
 import java.util.UUID
@@ -100,7 +105,7 @@ class PhotoLutServiceTest {
             compose.runOnUiThread { owner.selectMode(mode, reopen = false) }
             assertEquals(mode, owner.cameraStates.value.selectedMode)
             val outer = owner.javaClass.getDeclaredField("this\$0").apply { isAccessible = true }.get(owner)
-            val engine = CaptureService::class.java.getDeclaredMethod("getPreviewEngine").apply { isAccessible = true }.invoke(outer) as Camera2PreviewEngine
+            val engine = CaptureService::class.java.getDeclaredMethod("getPreviewEngine\$app").apply { isAccessible = true }.invoke(outer) as Camera2PreviewEngine
             val executor = Camera2PreviewEngine::class.java.getDeclaredField("cameraExecutor").apply { isAccessible = true }.get(engine) as Executor
             val writer = CaptureService::class.java.getDeclaredField("storageExecutor").apply { isAccessible = true }.get(outer) as ThreadPoolExecutor
             cameraExecutor = executor; storageWriter = writer

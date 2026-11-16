@@ -1,10 +1,10 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam.storage
 
-import com.librestatic.opencinecam.MediaSharingSettings
-import com.librestatic.opencinecam.MediaShareContent
-import com.librestatic.opencinecam.MediaShareMetadata
-import com.librestatic.opencinecam.productionSlateJson
+import com.librestatic.opencinecam.gallery.MediaSharingSettings
+import com.librestatic.opencinecam.gallery.MediaShareContent
+import com.librestatic.opencinecam.gallery.MediaShareMetadata
+import com.librestatic.opencinecam.metadata.productionSlateJson
 import kotlinx.serialization.json.*
 import java.util.concurrent.CancellationException
 import java.text.Normalizer

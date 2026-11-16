@@ -160,7 +160,6 @@ class RawVideoSessionTest {
         assertEquals(RawVideoTakeState.FrameOutcome.Discarded, take.onFrame(1L) { true })
     }
 
-
     private fun takeWithFrames(vararg timestamps: Long) = RawVideoTakeState().apply {
         begin()
         timestamps.forEach { onFrame(it) { true } }

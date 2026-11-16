@@ -10,6 +10,10 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import androidx.test.platform.app.InstrumentationRegistry
+import com.librestatic.opencinecam.gallery.MediaPlaybackSession
+import com.librestatic.opencinecam.gallery.PlaybackObservation
+import com.librestatic.opencinecam.gallery.PlaybackPhase
+import com.librestatic.opencinecam.gallery.PlaybackSettings
 import com.librestatic.opencinecam.storage.*
 import java.io.File
 import java.security.MessageDigest

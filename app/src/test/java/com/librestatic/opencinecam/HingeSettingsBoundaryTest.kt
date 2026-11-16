@@ -1,6 +1,10 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam
 
+import com.librestatic.opencinecam.fold.FoldHinge
+import com.librestatic.opencinecam.fold.FoldPane
+import com.librestatic.opencinecam.fold.foldPanes
+import com.librestatic.opencinecam.settings.hingeSettingsPaneBounds
 import org.junit.Assert.*
 import org.junit.Test
 

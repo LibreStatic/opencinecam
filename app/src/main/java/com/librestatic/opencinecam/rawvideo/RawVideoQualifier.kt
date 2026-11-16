@@ -33,8 +33,8 @@ import android.util.Log
 import android.util.Range
 import android.util.Size
 import android.view.Surface
-import com.librestatic.opencinecam.DeviceQuirksProvider
-import com.librestatic.opencinecam.RawVideoConfigKeys
+import com.librestatic.opencinecam.diagnostics.DeviceQuirksProvider
+import com.librestatic.opencinecam.capture.RawVideoConfigKeys
 import com.librestatic.opencinecam.camera.DeviceQuirks
 import com.librestatic.opencinecam.camera.QtiRawFrameRate
 import com.librestatic.opencinecam.camera.RAW_VIDEO_MAX_IMAGES

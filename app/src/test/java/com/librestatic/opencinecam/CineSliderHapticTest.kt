@@ -1,6 +1,9 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam
 
+import com.librestatic.opencinecam.ui.HapticEvent
+import com.librestatic.opencinecam.ui.sliderHapticFor
+import com.librestatic.opencinecam.ui.zoomHapticFor
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test

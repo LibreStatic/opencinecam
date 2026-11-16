@@ -7,7 +7,6 @@ import android.media.MediaCodec
 import android.media.MediaFormat
 import android.media.MediaMuxer
 import androidx.test.platform.app.InstrumentationRegistry
-import com.librestatic.opencinecam.camera.AacCalibrationConfig
 import com.librestatic.opencinecam.camera.AacCodecCalibrator
 import java.io.File
 import java.nio.ByteBuffer

@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam.service
 
-import com.librestatic.opencinecam.AUDIO_METER_FRESHNESS_MS
+import com.librestatic.opencinecam.settings.AUDIO_METER_FRESHNESS_MS
 import com.librestatic.opencinecam.media.audio.AudioBitDepth
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue

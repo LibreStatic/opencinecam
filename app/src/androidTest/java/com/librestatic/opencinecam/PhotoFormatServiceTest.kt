@@ -20,7 +20,23 @@ import com.librestatic.opencinecam.storage.*
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.camera.*
+import com.librestatic.opencinecam.capture.OperatorPreferences
+import com.librestatic.opencinecam.capture.StartupMode
+import com.librestatic.opencinecam.gallery.GallerySettings
+import com.librestatic.opencinecam.gallery.MediaPlaybackDialog
+import com.librestatic.opencinecam.gallery.MediaReviewSelection
+import com.librestatic.opencinecam.metadata.parseProductionSlateJson
 import com.librestatic.opencinecam.service.CaptureService
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.captureFileStem
+import com.librestatic.opencinecam.settings.CaptureLocationSnapshot
+import com.librestatic.opencinecam.settings.CaptureLocationStatus
+import com.librestatic.opencinecam.settings.CaptureNameSnapshot
+import com.librestatic.opencinecam.settings.CaptureNamingSettings
+import com.librestatic.opencinecam.settings.ProductionSlateLocation
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
+import com.librestatic.opencinecam.settings.ProductionSlateTimeOfDay
+import com.librestatic.opencinecam.settings.SettingsRepositories
 import java.security.MessageDigest
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -100,7 +116,7 @@ class PhotoFormatServiceTest {
         val storageWriter=AtomicReference<java.util.concurrent.ThreadPoolExecutor?>()
         var expectedAspect=aspect
         val collections=listOf(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,MediaStore.Downloads.EXTERNAL_CONTENT_URI)
-        fun rows(collection:Uri):Set<Uri> = requireNotNull(context.contentResolver.query(collection,arrayOf(MediaStore.MediaColumns._ID),
+        fun rows(collection:Uri): Set<Uri> = requireNotNull(context.contentResolver.query(collection,arrayOf(MediaStore.MediaColumns._ID),
             "${MediaStore.MediaColumns.OWNER_PACKAGE_NAME} = ?",arrayOf(context.packageName),null)).use { c -> buildSet { while(c.moveToNext()) add(ContentUris.withAppendedId(collection,c.getLong(0))) } }
         fun rows()=collections.flatMap(::rows).toSet()
         val initial=rows()
@@ -125,7 +141,7 @@ class PhotoFormatServiceTest {
             compose.runOnUiThread {owner.prepare(640,480);owner.selectMode(CaptureMode.PHOTO,reopen=false)}
             val d=requireNotNull(owner.cameraStates.value.descriptor)
             val outer=owner.javaClass.getDeclaredField("this\$0").apply {isAccessible=true}.get(owner)
-            val engine=CaptureService::class.java.getDeclaredMethod("getPreviewEngine").apply {isAccessible=true}.invoke(outer) as Camera2PreviewEngine
+            val engine=CaptureService::class.java.getDeclaredMethod("getPreviewEngine\$app").apply {isAccessible=true}.invoke(outer) as Camera2PreviewEngine
             cameraEngine.set(engine)
             engineExecutor.set(Camera2PreviewEngine::class.java.getDeclaredField("cameraExecutor").apply {isAccessible=true}.get(engine) as java.util.concurrent.Executor)
             storageWriter.set(CaptureService::class.java.getDeclaredField("storageExecutor").apply {isAccessible=true}.get(outer) as java.util.concurrent.ThreadPoolExecutor)
@@ -427,7 +443,7 @@ class PhotoFormatServiceTest {
     private fun reviewPublishedPhoto(context:Context,publication:StillPublication,show:(MediaReviewSelection?)->Unit) {
         val media=LocalMediaRepository(context)
         val name=publication.images.first().displayName
-        fun lookup():LocalMediaTake {
+        fun lookup(): LocalMediaTake {
             var cursor:LocalMediaCursor?=null
             var selected:LocalMediaTake?=null
             var pages=0
@@ -531,5 +547,4 @@ class PhotoFormatServiceTest {
             compose.waitUntil(30_000) {(readers()-beforeReaders).isEmpty()}
         }
     }
-
 }

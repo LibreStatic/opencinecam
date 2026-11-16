@@ -21,6 +21,7 @@ import com.librestatic.opencinecam.media.audio.AudioOutputFormat
 import com.librestatic.opencinecam.media.audio.AudioSourceSelection
 import com.librestatic.opencinecam.service.CaptureService
 import com.librestatic.opencinecam.service.PreviewAudioMonitor
+import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.storage.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.json.JSONObject
@@ -114,7 +115,7 @@ class AudioRecordingGainDeviceTest {
             audioBitDepth = depth, audioSampleRateHz = 48000, audioChannels = channels,
             audioSource = AudioSourceSelection.MIC, automaticGainControlEnabled = true,
             audioRecordingGain = gain, noiseSuppressorEnabled = false, acousticEchoCancelerEnabled = false)
-        val stem = "E15_${if (flac) "FLAC" else "WAV"}_${depth.name}_${channels}"
+        val stem = "E15_${if (flac) "FLAC" else "WAV"}_${depth.name}_$channels"
         val videoName = "${stem}_${UUID.randomUUID()}.mp4"
         val levels = CopyOnWriteArrayList<AudioLevelSnapshot>()
         val observed = CountDownLatch(3)
@@ -162,7 +163,7 @@ class AudioRecordingGainDeviceTest {
         fun field(name: String) = CaptureService::class.java.getDeclaredField(name).apply { isAccessible = true }
         @Suppress("UNCHECKED_CAST")
         val state = field("cameraState").get(service) as MutableStateFlow<CameraUiState>
-        val newConsumer = CaptureService::class.java.getDeclaredMethod("newAudioLevelConsumer").apply { isAccessible = true }
+        val newConsumer = Class.forName("com.librestatic.opencinecam.service.CaptureServiceAudioKt").getDeclaredMethod("newAudioLevelConsumer", CaptureService::class.java).apply { isAccessible = true }
         val old = AudioLevelSnapshot(listOf(AudioChannelLevel(-1f, -6f)), true, 1, appliedRecordingGain = DigitalRecordingGain(true, 24))
         val observedOff = com.librestatic.opencinecam.camera.AudioEffectObservation(true,
             com.librestatic.opencinecam.camera.AudioEffectState.DISABLED,
@@ -171,9 +172,9 @@ class AudioRecordingGainDeviceTest {
             effects = com.librestatic.opencinecam.camera.AudioEffectsSnapshot(observedOff, observedOff, observedOff))
         try {
             instrumentation.runOnMainSync {
-                @Suppress("UNCHECKED_CAST") val stale = newConsumer.invoke(service) as (AudioLevelSnapshot) -> Unit
+                @Suppress("UNCHECKED_CAST") val stale = newConsumer.invoke(null, service) as (AudioLevelSnapshot) -> Unit
                 stale(old)
-                @Suppress("UNCHECKED_CAST") val current = newConsumer.invoke(service) as (AudioLevelSnapshot) -> Unit
+                @Suppress("UNCHECKED_CAST") val current = newConsumer.invoke(null, service) as (AudioLevelSnapshot) -> Unit
                 current(fresh)
             }
             instrumentation.waitForIdleSync()
@@ -182,7 +183,7 @@ class AudioRecordingGainDeviceTest {
             lateinit var current: (AudioLevelSnapshot) -> Unit
             instrumentation.runOnMainSync {
                 @Suppress("UNCHECKED_CAST")
-                val next = newConsumer.invoke(service) as (AudioLevelSnapshot) -> Unit
+                val next = newConsumer.invoke(null, service) as (AudioLevelSnapshot) -> Unit
                 current = next
                 assertNull("Replacement has no applied PCM before its first receipt", state.value.audioLevels)
                 assertFalse(state.value.audioMonitoringActive)
@@ -190,17 +191,17 @@ class AudioRecordingGainDeviceTest {
             }
             instrumentation.waitForIdleSync()
             assertEquals(fresh, state.value.audioLevels)
-            val retire = CaptureService::class.java.getDeclaredMethod("retireAudioLevelConsumer", Boolean::class.javaPrimitiveType).apply { isAccessible = true }
+            val retire = Class.forName("com.librestatic.opencinecam.service.CaptureServiceAudioKt").getDeclaredMethod("retireAudioLevelConsumer", CaptureService::class.java, Boolean::class.javaPrimitiveType).apply { isAccessible = true }
             instrumentation.runOnMainSync {
                 current(old)
-                retire.invoke(service, false)
+                retire.invoke(null, service, false)
             }
             instrumentation.waitForIdleSync()
             assertEquals(fresh, state.value.audioLevels)
             assertFalse("Retired producer without a successor stays inactive", state.value.audioMonitoringActive)
             assertFalse(state.value.audioClipLatched)
             instrumentation.runOnMainSync {
-                @Suppress("UNCHECKED_CAST") val after = newConsumer.invoke(service) as (AudioLevelSnapshot) -> Unit
+                @Suppress("UNCHECKED_CAST") val after = newConsumer.invoke(null, service) as (AudioLevelSnapshot) -> Unit
                 after(old)
                 field("serviceDestroyed").setBoolean(service, true)
             }

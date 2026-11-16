@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam.playback
 
-import com.librestatic.opencinecam.AdaptiveWindow
-import com.librestatic.opencinecam.ShortcutAction
+import com.librestatic.opencinecam.ui.AdaptiveWindow
+import com.librestatic.opencinecam.capture.ShortcutAction
 import java.util.Locale
 
 /** How the review arranges the picture, its timeline and the take facts. */

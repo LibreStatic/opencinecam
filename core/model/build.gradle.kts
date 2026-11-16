@@ -4,6 +4,7 @@
 plugins {
     id("org.jetbrains.kotlin.jvm")
     id("org.jetbrains.kotlin.plugin.serialization")
+    id("org.jetbrains.kotlinx.kover")
 }
 
 kotlin {
@@ -21,4 +22,13 @@ tasks.test {
     inputs.file(rootProject.file("app/src/main/AndroidManifest.xml"))
         .withPropertyName("appManifest")
         .withPathSensitivity(PathSensitivity.RELATIVE)
+}
+
+// Coverage of the unit tests, merged by the root project's koverHtmlReportUnit.
+kover {
+    currentProject {
+        createVariant("unit") {
+            add("jvm")
+        }
+    }
 }

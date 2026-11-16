@@ -15,12 +15,12 @@ break.
 | Activity entry, splash hold and release | [`MainActivity.kt`](../../app/src/main/java/com/librestatic/opencinecam/MainActivity.kt) |
 | Camera pre-open and engine hand-over | [`service/CaptureStartup.kt`](../../app/src/main/java/com/librestatic/opencinecam/service/CaptureStartup.kt) |
 | Root screen, service binding, wizard-to-app handoff | [`CameraScreen.kt`](../../app/src/main/java/com/librestatic/opencinecam/CameraScreen.kt) (`CameraRootScreen`, `rememberCaptureServiceBinder`, `PermissionScreen`) |
-| First-run wizard and its permission page | [`OnboardingScreen.kt`](../../app/src/main/java/com/librestatic/opencinecam/OnboardingScreen.kt) (`OnboardingStore`, `OnboardingPage`, `onboardingExitTarget`) |
-| Runtime permission state and "blocked" detection | [`PermissionAccess.kt`](../../app/src/main/java/com/librestatic/opencinecam/PermissionAccess.kt) |
+| First-run wizard and its permission page | [`OnboardingScreen.kt`](../../app/src/main/java/com/librestatic/opencinecam/onboarding/OnboardingScreen.kt) (`OnboardingStore`, `OnboardingPage`, `onboardingExitTarget`) |
+| Runtime permission state and "blocked" detection | [`PermissionAccess.kt`](../../app/src/main/java/com/librestatic/opencinecam/ui/PermissionAccess.kt) |
 | Theme choice and colour schemes | [`ui/theme/OpenCineCamTheme.kt`](../../app/src/main/java/com/librestatic/opencinecam/ui/theme/OpenCineCamTheme.kt) (`AppTheme`, `AppThemeStore`, `rememberAppTheme`, `CaptureTheme`) |
 | Splash themes | [`res/values/themes.xml`](../../app/src/main/res/values/themes.xml) (`Theme.OpenCineCam.Starting`, `Theme.OpenCineCam.Starting.You`) |
 | Capture service start-up | [`service/CaptureService.kt`](../../app/src/main/java/com/librestatic/opencinecam/service/CaptureService.kt) (`onCreate`, `LocalBinder.prepare`, `LocalBinder.attachPreview`) |
-| Settings and presets | [`SettingsRepository.kt`](../../app/src/main/java/com/librestatic/opencinecam/SettingsRepository.kt), [`CameraSettings.kt`](../../app/src/main/java/com/librestatic/opencinecam/CameraSettings.kt) (`CameraSettingsStore`), [`OperatorPreferences.kt`](../../app/src/main/java/com/librestatic/opencinecam/OperatorPreferences.kt) (`forOperatorStartup`), [`PresetRepository.kt`](../../app/src/main/java/com/librestatic/opencinecam/PresetRepository.kt) |
+| Settings and presets | [`SettingsRepository.kt`](../../app/src/main/java/com/librestatic/opencinecam/settings/SettingsRepository.kt), [`CameraSettings.kt`](../../app/src/main/java/com/librestatic/opencinecam/settings/CameraSettings.kt) (`CameraSettingsStore`), [`OperatorPreferences.kt`](../../app/src/main/java/com/librestatic/opencinecam/capture/OperatorPreferences.kt) (`forOperatorStartup`), [`PresetRepository.kt`](../../app/src/main/java/com/librestatic/opencinecam/settings/PresetRepository.kt) |
 | Baseline profile | [`app/src/main/generated/baselineProfiles/`](../../app/src/main/generated/baselineProfiles/), [`baselineprofile/`](../../baselineprofile/src/main/java/com/librestatic/opencinecam/baselineprofile/) |
 
 ## Cold start with permissions granted

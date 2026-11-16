@@ -15,7 +15,13 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.camera.*
+import com.librestatic.opencinecam.capture.OperatorPreferences
+import com.librestatic.opencinecam.capture.StartupMode
+import com.librestatic.opencinecam.fold.SubjectDisplayMode
 import com.librestatic.opencinecam.service.CaptureService
+import com.librestatic.opencinecam.settings.CameraPreset
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.SettingsRepositories
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
@@ -100,7 +106,7 @@ class PhotoFlashServiceTest {
             val mode = if (manual || queuedManual) ExposureMode.MANUAL else ExposureMode.AUTO
             val expected = selection.resolve(d.photoFlashCapabilities, mode)
             val outer = owner.javaClass.getDeclaredField("this\$0").apply { isAccessible = true }.get(owner)
-            val engine = CaptureService::class.java.getDeclaredMethod("getPreviewEngine").apply { isAccessible = true }.invoke(outer) as Camera2PreviewEngine
+            val engine = CaptureService::class.java.getDeclaredMethod("getPreviewEngine\$app").apply { isAccessible = true }.invoke(outer) as Camera2PreviewEngine
             if (exteriorLease) {
                 auxiliary = android.media.ImageReader.newInstance(128, 96, android.graphics.PixelFormat.RGBA_8888, 2)
                 compose.runOnUiThread {

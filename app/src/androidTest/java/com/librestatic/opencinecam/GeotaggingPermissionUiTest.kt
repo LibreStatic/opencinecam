@@ -11,6 +11,11 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.core.content.ContextCompat
 import androidx.test.platform.app.InstrumentationRegistry
+import com.librestatic.opencinecam.onboarding.OnboardingStore
+import com.librestatic.opencinecam.settings.CaptureLocations
+import com.librestatic.opencinecam.settings.locationPermission
+import com.librestatic.opencinecam.settings.LocationPermissionPrecision
+import com.librestatic.opencinecam.settings.SettingsRepositories
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test

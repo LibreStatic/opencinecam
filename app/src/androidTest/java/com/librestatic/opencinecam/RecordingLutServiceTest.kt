@@ -20,7 +20,13 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.net.toUri
 import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.camera.*
+import com.librestatic.opencinecam.capture.OperatorPreferences
+import com.librestatic.opencinecam.capture.StartupMode
 import com.librestatic.opencinecam.service.CaptureService
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.LutLibraries
+import com.librestatic.opencinecam.settings.SettingsRepositories
+import com.librestatic.opencinecam.settings.TimeLapseLimitMode
 import com.librestatic.opencinecam.storage.CaptureArtifactRole
 import com.librestatic.opencinecam.transfers.*
 import java.io.File
@@ -186,7 +192,7 @@ class RecordingLutServiceTest {
             compose.waitUntil(10_000) { binder.get() != null }
             owner = requireNotNull(binder.get())
             service = field(owner, "this\$0")
-            engine = CaptureService::class.java.getDeclaredMethod("getPreviewEngine").apply { isAccessible = true }.invoke(service) as Camera2PreviewEngine
+            engine = CaptureService::class.java.getDeclaredMethod("getPreviewEngine\$app").apply { isAccessible = true }.invoke(service) as Camera2PreviewEngine
             CaptureService::class.java.getDeclaredField("transferRuntime").apply { isAccessible = true }.set(service, runtime)
             runtime.refresh()
             assertTrue(entered.await(10, TimeUnit.SECONDS))

@@ -12,7 +12,13 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.camera.*
+import com.librestatic.opencinecam.capture.OperatorPreferences
+import com.librestatic.opencinecam.capture.StartupMode
+import com.librestatic.opencinecam.fold.SubjectDisplayMode
 import com.librestatic.opencinecam.service.CaptureService
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.LutLibraries
+import com.librestatic.opencinecam.settings.SettingsRepositories
 import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.*
 import org.junit.Rule
@@ -67,7 +73,7 @@ class OperatorLutServiceTest {
             connected = context.bindService(Intent(context,CaptureService::class.java),connection,Context.BIND_AUTO_CREATE)
             assertTrue(connected); compose.waitUntil(10_000) { bound.get()!=null }
             val owner = requireNotNull(bound.get())
-            engine = CaptureService::class.java.getDeclaredMethod("getPreviewEngine").apply { isAccessible = true }
+            engine = CaptureService::class.java.getDeclaredMethod("getPreviewEngine\$app").apply { isAccessible = true }
                 .invoke(field<CaptureService>(owner, "this$0")) as Camera2PreviewEngine
             compose.runOnUiThread { owner.prepare(640,480); owner.selectMode(CaptureMode.VIDEO,reopen=false) }
             compose.setContent { AndroidView(factory={ host -> SurfaceView(host).apply {

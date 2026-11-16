@@ -7,6 +7,7 @@ import android.util.Size
 import com.librestatic.opencinecam.camera.Camera2CameraDescriptor
 import com.librestatic.opencinecam.camera.Camera2LogProfile
 import com.librestatic.opencinecam.camera.OpenCineLogSourcePath
+import com.librestatic.opencinecam.settings.offersHdr10Video
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

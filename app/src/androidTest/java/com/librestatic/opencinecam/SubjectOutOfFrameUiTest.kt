@@ -18,6 +18,10 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.Density
 import com.librestatic.opencinecam.camera.FramingEdge
 import com.librestatic.opencinecam.camera.SubjectFramingStatus
+import com.librestatic.opencinecam.fold.SubjectDisplaySettings
+import com.librestatic.opencinecam.fold.SubjectStateForwarder
+import com.librestatic.opencinecam.subject.SubjectDisplayScreen
+import com.librestatic.opencinecam.subject.SubjectOutOfFrameSettings
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Rule
 import org.junit.Test
@@ -85,4 +89,3 @@ class SubjectOutOfFrameUiTest {
         compose.onAllNodesWithTag("subject-out-of-frame").assertCountEquals(0)
     }
 }
-

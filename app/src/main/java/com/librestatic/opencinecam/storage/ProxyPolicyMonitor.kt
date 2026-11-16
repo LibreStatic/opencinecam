@@ -8,6 +8,10 @@ import android.os.BatteryManager
 import android.os.storage.StorageManager
 import androidx.core.net.toUri
 import com.librestatic.opencinecam.*
+import com.librestatic.opencinecam.gallery.ProxyConditions
+import com.librestatic.opencinecam.gallery.ProxyPolicies
+import com.librestatic.opencinecam.gallery.ProxyWaitReason
+import com.librestatic.opencinecam.gallery.proxyWaitReason
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collectLatest
 

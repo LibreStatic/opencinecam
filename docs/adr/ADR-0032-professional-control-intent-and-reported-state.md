@@ -88,7 +88,7 @@ Visual inspection also found default light-theme control labels on the dark sett
 
 ### Context
 
-The decision defines preset schema V3 (the 80 V2 keys plus nine operator preferences) as the export format. ADR-0033 later introduced version 4 with 93 portable keys (rational timelapse and off-speed), and the registry has kept growing: `CameraPresetCodec.VERSION` in `app/src/main/java/com/librestatic/opencinecam/CameraPreset.kt` is now 23.
+The decision defines preset schema V3 (the 80 V2 keys plus nine operator preferences) as the export format. ADR-0033 later introduced version 4 with 93 portable keys (rational timelapse and off-speed), and the registry has kept growing: `CameraPresetCodec.VERSION` in `app/src/main/java/com/librestatic/opencinecam/settings/CameraPreset.kt` is now 23.
 
 ### Decision
 

@@ -19,6 +19,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
+import com.librestatic.opencinecam.settings.WebDavTransferSettingsSection
 import com.librestatic.opencinecam.transfers.*
 import org.junit.Assert.*
 import org.junit.Rule

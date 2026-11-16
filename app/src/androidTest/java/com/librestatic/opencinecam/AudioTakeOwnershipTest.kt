@@ -7,6 +7,7 @@ import android.provider.MediaStore
 import android.media.MediaExtractor
 import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.media.audio.AudioBitDepth
+import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.storage.*
 import org.junit.Assert.*
 import org.junit.Test

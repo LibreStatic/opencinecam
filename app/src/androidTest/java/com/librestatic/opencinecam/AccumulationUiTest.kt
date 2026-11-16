@@ -12,6 +12,9 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.unit.dp
 import com.librestatic.opencinecam.camera.*
+import com.librestatic.opencinecam.settings.AccumulationCaptureProgress
+import com.librestatic.opencinecam.settings.AccumulationSettings
+import com.librestatic.opencinecam.settings.CameraSettings
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test

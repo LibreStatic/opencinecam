@@ -1,6 +1,10 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam
 
+import com.librestatic.opencinecam.gallery.playbackFitScale
+import com.librestatic.opencinecam.gallery.PlaybackObservation
+import com.librestatic.opencinecam.gallery.PlaybackPhase
+import com.librestatic.opencinecam.gallery.withPlayerGeometry
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -33,5 +37,4 @@ class MediaPlaybackGeometryTest {
         assertEquals(126, playing.videoWidth); assertEquals(64, playing.videoHeight)
         assertSame(playing, playing.withPlayerGeometry(0, 0))
     }
-
 }

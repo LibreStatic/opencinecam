@@ -19,10 +19,10 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.DebugTraceUtil
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
-import com.librestatic.opencinecam.GallerySettings
+import com.librestatic.opencinecam.gallery.GallerySettings
 import com.librestatic.opencinecam.galleryMenuAction
 import com.librestatic.opencinecam.MainActivity
-import com.librestatic.opencinecam.ProxySettings
+import com.librestatic.opencinecam.gallery.ProxySettings
 import com.librestatic.opencinecam.R
 import java.io.File
 import java.nio.ByteBuffer

@@ -5,7 +5,7 @@ import android.content.Context
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.net.Uri
-import com.librestatic.opencinecam.ProxySettings
+import com.librestatic.opencinecam.gallery.ProxySettings
 import java.nio.ByteBuffer
 import java.security.MessageDigest
 import kotlinx.coroutines.currentCoroutineContext

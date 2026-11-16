@@ -1,6 +1,14 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam
 
+import com.librestatic.opencinecam.settings.AUDIO_SYNC_OFFSET_RANGE_MS
+import com.librestatic.opencinecam.settings.AUDIO_SYNC_OFFSET_SETTING_ID
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettingsStore
+import com.librestatic.opencinecam.settings.PresetPreferences
+import com.librestatic.opencinecam.settings.SettingsCatalog
+import com.librestatic.opencinecam.settings.SettingsCategory
+import com.librestatic.opencinecam.settings.withLivePreferencesFrom
 import org.junit.Assert.*
 import org.junit.Test
 

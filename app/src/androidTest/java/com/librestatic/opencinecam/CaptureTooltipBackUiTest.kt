@@ -13,6 +13,7 @@ import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.librestatic.opencinecam.capture.CaptureTooltip
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch

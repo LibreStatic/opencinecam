@@ -37,6 +37,14 @@ import com.librestatic.opencinecam.camera.AudioChannelLevel
 import com.librestatic.opencinecam.camera.AudioLevelSnapshot
 import com.librestatic.opencinecam.camera.LockState
 import com.librestatic.opencinecam.camera.ZoomAnchor
+import com.librestatic.opencinecam.capture.AdaptiveCaptureChrome
+import com.librestatic.opencinecam.capture.CompositionGridMode
+import com.librestatic.opencinecam.settings.AboutScreen
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.HistogramMode
+import com.librestatic.opencinecam.settings.loadThirdPartyComponents
+import com.librestatic.opencinecam.settings.ModeSelectorStyle
+import com.librestatic.opencinecam.settings.SettingsScreen
 import org.junit.Rule
 import org.junit.Test
 import org.junit.Assert.assertFalse

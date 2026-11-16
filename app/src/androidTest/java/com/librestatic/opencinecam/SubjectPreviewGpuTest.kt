@@ -14,6 +14,7 @@ import com.librestatic.opencinecam.camera.OpenCineLogGpuPipeline
 import com.librestatic.opencinecam.camera.OpenCineLogSourcePath
 import com.librestatic.opencinecam.camera.SubjectPreviewOptions
 import com.librestatic.opencinecam.camera.SubjectPreviewStatus
+import com.librestatic.opencinecam.metadata.captureEpochJson
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -594,5 +595,4 @@ class SubjectPreviewGpuTest {
             } finally { resume.countDown(); descriptor.close(); file.delete() }
         }
     }
-
 }

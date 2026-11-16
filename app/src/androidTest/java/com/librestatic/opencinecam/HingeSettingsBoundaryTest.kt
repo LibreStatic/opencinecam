@@ -25,6 +25,8 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.LayoutDirection
+import com.librestatic.opencinecam.fold.FoldHinge
+import com.librestatic.opencinecam.settings.HingeSafeSettingsPane
 import androidx.compose.ui.unit.dp
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue

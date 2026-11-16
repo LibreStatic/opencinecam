@@ -7,6 +7,7 @@ import android.os.IBinder
 import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.camera.StillPhotoFormat
 import com.librestatic.opencinecam.service.CaptureService
+import com.librestatic.opencinecam.settings.CameraSettings
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -63,7 +64,7 @@ class ProfessionalStateRaceDeviceTest {
                     set(value) {flow.value=value}
             }
             stateField.set(service,probe)
-            val apply=CaptureService::class.java.getDeclaredMethod("applyProfessionalSettings").apply {isAccessible=true}
+            val apply=CaptureService::class.java.getDeclaredMethod("applyProfessionalSettings\$app").apply {isAccessible=true}
             val worker=Thread({
                 try {apply.invoke(service)} catch(failure:Throwable) {threadFailure.set(failure)} finally {done.countDown()}
             },"E7-professional-state-race")
@@ -132,5 +133,4 @@ class ProfessionalStateRaceDeviceTest {
             executor?.let { if(it.isShutdown) assertTrue(it.awaitTermination(15,TimeUnit.SECONDS)) }
         }
     }
-
 }

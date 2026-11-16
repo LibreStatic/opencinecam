@@ -21,7 +21,13 @@ import com.librestatic.opencinecam.camera.MonitorColor
 import com.librestatic.opencinecam.camera.MonitoringOptions
 import com.librestatic.opencinecam.camera.MonitoringScopeFrame
 import com.librestatic.opencinecam.camera.MonitoringSignalDomain
+import com.librestatic.opencinecam.capture.CaptureActionTicket
+import com.librestatic.opencinecam.capture.OperatorPreferences
+import com.librestatic.opencinecam.capture.StartupMode
 import com.librestatic.opencinecam.service.CaptureService
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettingsStore
+import com.librestatic.opencinecam.settings.SettingsRepositories
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executor
 import java.util.concurrent.TimeUnit
@@ -69,7 +75,7 @@ class MonitoringServiceTest {
             val descriptor = requireNotNull(owner.cameraStates.value.descriptor)
             assertNotNull("This fixture requires the actual YUV analysis output", descriptor.analysisSize)
             val outer = owner.javaClass.getDeclaredField("this\$0").apply { isAccessible = true }.get(owner)
-            val engine = CaptureService::class.java.getDeclaredMethod("getPreviewEngine").apply { isAccessible = true }
+            val engine = CaptureService::class.java.getDeclaredMethod("getPreviewEngine\$app").apply { isAccessible = true }
                 .invoke(outer) as Camera2PreviewEngine
             val executor = field(engine, "cameraExecutor") as Executor
             cameraExecutor = executor
@@ -187,7 +193,7 @@ class MonitoringServiceTest {
             val descriptor = requireNotNull(owner.cameraStates.value.descriptor)
             assertNotNull("This regression requires the actual YUV analysis output", descriptor.analysisSize)
             val outer = owner.javaClass.getDeclaredField("this\$0").apply { isAccessible = true }.get(owner)
-            val engine = CaptureService::class.java.getDeclaredMethod("getPreviewEngine").apply { isAccessible = true }
+            val engine = CaptureService::class.java.getDeclaredMethod("getPreviewEngine\$app").apply { isAccessible = true }
                 .invoke(outer) as Camera2PreviewEngine
             val executor = field(engine, "cameraExecutor") as Executor
             cameraExecutor = executor

@@ -14,9 +14,29 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.test.espresso.Espresso
 import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.camera.*
+import com.librestatic.opencinecam.capture.CaptureActionTicket
+import com.librestatic.opencinecam.capture.OperatorAction
+import com.librestatic.opencinecam.capture.OperatorPreferences
+import com.librestatic.opencinecam.capture.StartupMode
+import com.librestatic.opencinecam.gallery.GallerySettings
+import com.librestatic.opencinecam.gallery.takeTitleText
 import com.librestatic.opencinecam.media.audio.AudioBitDepth
 import com.librestatic.opencinecam.media.audio.AudioOutputFormat
+import com.librestatic.opencinecam.metadata.parseProductionSlateJson
+import com.librestatic.opencinecam.onboarding.OnboardingStore
 import com.librestatic.opencinecam.service.CaptureService
+import com.librestatic.opencinecam.settings.CameraPreset
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.captureFileStem
+import com.librestatic.opencinecam.settings.CaptureLocationSnapshot
+import com.librestatic.opencinecam.settings.CaptureLocationStatus
+import com.librestatic.opencinecam.settings.CaptureNameSnapshot
+import com.librestatic.opencinecam.settings.CaptureNamingSettings
+import com.librestatic.opencinecam.settings.locationPermission
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
+import com.librestatic.opencinecam.settings.projectLabel
+import com.librestatic.opencinecam.settings.SettingsRepositories
+import com.librestatic.opencinecam.settings.TimeLapseLimitMode
 import com.librestatic.opencinecam.transfers.*
 import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.*
@@ -87,9 +107,9 @@ class OperatorServiceTest {
         Assume.assumeTrue("Analysis suspended for heat", state.analysisSuspension != AnalysisSuspension.THERMAL)
 
     private fun verifyGpuReattachment(owner: CaptureService.LocalBinder) {
-        fun field(target:Any,name:String):Any?=target.javaClass.getDeclaredField(name).apply {isAccessible=true}.get(target)
+        fun field(target:Any,name:String): Any?=target.javaClass.getDeclaredField(name).apply {isAccessible=true}.get(target)
         val service=requireNotNull(field(owner,"this\$0"))
-        val engine=requireNotNull(CaptureService::class.java.getDeclaredMethod("getPreviewEngine").apply {isAccessible=true}.invoke(service))
+        val engine=requireNotNull(CaptureService::class.java.getDeclaredMethod("getPreviewEngine\$app").apply {isAccessible=true}.invoke(service))
         val executor=field(engine,"cameraExecutor") as java.util.concurrent.Executor
         val pipeline=requireNotNull(field(engine,"logPipeline"))
         val gpuHandler=field(pipeline,"handler") as android.os.Handler
@@ -259,7 +279,7 @@ class OperatorServiceTest {
             android.util.Log.i("TimecodeTakeProbe", "mode=$timecodeMode take=${tc.getLong("takeId")} frames=3 first=$first last=$last pts=0,33333,66666 sidecarPublished=true")
             return tc.getLong("takeId")
         }
-        if (recreateOwner) com.librestatic.opencinecam.TimecodeContinuationFile(java.io.File(context.filesDir, "timecode-continuation.json")).clear()
+        if (recreateOwner) com.librestatic.opencinecam.metadata.TimecodeContinuationFile(java.io.File(context.filesDir, "timecode-continuation.json")).clear()
         fun ownedAudioRows(): Set<Long> = requireNotNull(context.contentResolver.query(
             android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
             arrayOf(android.provider.MediaStore.Audio.Media._ID),
@@ -910,5 +930,4 @@ class OperatorServiceTest {
         }
         } finally { compose.mainClock.autoAdvance = true }
     }
-
 }

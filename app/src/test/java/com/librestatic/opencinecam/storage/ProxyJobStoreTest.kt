@@ -2,6 +2,10 @@
 package com.librestatic.opencinecam.storage
 
 import com.librestatic.opencinecam.*
+import com.librestatic.opencinecam.gallery.ProxySettings
+import com.librestatic.opencinecam.settings.ProductionSlateLocation
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
+import com.librestatic.opencinecam.settings.ProductionSlateTimeOfDay
 import java.io.File
 import java.nio.file.Files
 import java.util.UUID

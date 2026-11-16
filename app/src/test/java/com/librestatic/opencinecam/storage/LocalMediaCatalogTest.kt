@@ -2,11 +2,11 @@
 package com.librestatic.opencinecam.storage
 
 import com.librestatic.opencinecam.camera.*
-import com.librestatic.opencinecam.GalleryMediaKind
-import com.librestatic.opencinecam.GallerySettings
-import com.librestatic.opencinecam.HARDWARE_TRUTH_SCHEMA
-import com.librestatic.opencinecam.ProductionSlateSettings
-import com.librestatic.opencinecam.productionSlateJson
+import com.librestatic.opencinecam.gallery.GalleryMediaKind
+import com.librestatic.opencinecam.gallery.GallerySettings
+import com.librestatic.opencinecam.metadata.HARDWARE_TRUTH_SCHEMA
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
+import com.librestatic.opencinecam.metadata.productionSlateJson
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Test
@@ -253,7 +253,6 @@ class LocalMediaCatalogTest {
         assertEquals(LocalMediaRelationStatus.DECLARED,
             catalogTake(still, images, listOf(document(stillJson(images))))?.relationStatus)
     }
-
 
     @Test fun aSidecarMarkedIncompleteSurfacesAsIncompleteWithItsReasons() {
         val video = row(9, LocalMediaKind.VIDEO, recording)

@@ -3,7 +3,7 @@
 
 package com.librestatic.opencinecam.service
 
-import com.librestatic.opencinecam.appliedAudioEqCurve
+import com.librestatic.opencinecam.settings.appliedAudioEqCurve
 import com.librestatic.opencinecam.media.audio.AudioCapturePath
 import com.librestatic.opencinecam.media.audio.AudioInputRouteGuard
 import android.Manifest
@@ -28,7 +28,7 @@ import android.media.audiofx.AudioEffect
 import android.media.audiofx.AutomaticGainControl
 import android.media.audiofx.NoiseSuppressor
 import android.os.SystemClock
-import com.librestatic.opencinecam.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.camera.PcmListeningSink
 import com.librestatic.opencinecam.camera.offerListening
 import com.librestatic.opencinecam.camera.AudioLevelMeter

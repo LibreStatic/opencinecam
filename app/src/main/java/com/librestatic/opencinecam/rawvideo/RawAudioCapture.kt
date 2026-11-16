@@ -3,14 +3,14 @@
 
 package com.librestatic.opencinecam.rawvideo
 
-import com.librestatic.opencinecam.appliedAudioEqCurve
-import com.librestatic.opencinecam.appliedAudioEqProfileId
+import com.librestatic.opencinecam.settings.appliedAudioEqCurve
+import com.librestatic.opencinecam.settings.appliedAudioEqProfileId
 import android.annotation.SuppressLint
 import android.content.Context
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.os.SystemClock
-import com.librestatic.opencinecam.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.camera.AudioLevelMeter
 import com.librestatic.opencinecam.camera.AudioLevelSnapshot
 import com.librestatic.opencinecam.camera.PcmCaptureEpoch

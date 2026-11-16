@@ -8,9 +8,14 @@ import android.location.LocationListener
 import android.location.LocationManager
 import android.os.SystemClock
 import androidx.activity.ComponentActivity
-import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
+import com.librestatic.opencinecam.settings.CaptureLocations
+import com.librestatic.opencinecam.settings.CaptureLocationSnapshot
+import com.librestatic.opencinecam.settings.CaptureLocationStatus
+import com.librestatic.opencinecam.settings.locationPermission
+import com.librestatic.opencinecam.settings.LocationPermissionPrecision
+import com.librestatic.opencinecam.settings.SettingsRepositories
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -68,7 +73,7 @@ internal class GeotagTestProvider(private val context:Context) : AutoCloseable {
             time=System.currentTimeMillis()-ageMillis;elapsedRealtimeNanos=SystemClock.elapsedRealtimeNanos()-ageMillis*1_000_000
         })
     }
-    fun waitFor(predicate:(CaptureLocationSnapshot?)->Boolean):CaptureLocationSnapshot? {
+    fun waitFor(predicate:(CaptureLocationSnapshot?)->Boolean): CaptureLocationSnapshot? {
         val end=SystemClock.elapsedRealtime()+15_000
         while(SystemClock.elapsedRealtime()<end) {val value=runtime.snapshot();if(predicate(value)) return value;Thread.sleep(20)}
         error("Location snapshot condition timed out: ${runtime.snapshot()?.status}")

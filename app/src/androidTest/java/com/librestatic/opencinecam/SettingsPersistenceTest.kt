@@ -4,6 +4,17 @@ package com.librestatic.opencinecam
 import android.content.Context
 import android.content.ContextWrapper
 import androidx.test.platform.app.InstrumentationRegistry
+import com.librestatic.opencinecam.fold.SubjectDisplayMode
+import com.librestatic.opencinecam.fold.SubjectDisplaySettings
+import com.librestatic.opencinecam.gallery.PlaybackSettings
+import com.librestatic.opencinecam.settings.CameraSettingsStore
+import com.librestatic.opencinecam.settings.CaptureNamingSettings
+import com.librestatic.opencinecam.settings.HapticLevel
+import com.librestatic.opencinecam.settings.HapticPreferences
+import com.librestatic.opencinecam.settings.MAX_CHROME_OPACITY
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
+import com.librestatic.opencinecam.settings.SettingsRepository
+import com.librestatic.opencinecam.settings.ViewfinderScale
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.After
@@ -16,7 +27,7 @@ class SettingsPersistenceTest {
     private val target=InstrumentationRegistry.getInstrumentation().targetContext
     private val context = object : ContextWrapper(target) {
         override fun getApplicationContext(): Context = this
-        override fun getSharedPreferences(name:String,mode:Int):android.content.SharedPreferences {
+        override fun getSharedPreferences(name:String,mode:Int): android.content.SharedPreferences {
             check(name=="camera-settings")
             return super.getSharedPreferences(preferencesName,mode)
         }

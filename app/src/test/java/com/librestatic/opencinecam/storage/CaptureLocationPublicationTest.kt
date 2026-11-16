@@ -3,6 +3,15 @@ package com.librestatic.opencinecam.storage
 
 import com.librestatic.opencinecam.*
 import com.librestatic.opencinecam.camera.*
+import com.librestatic.opencinecam.metadata.productionSlateJson
+import com.librestatic.opencinecam.settings.CaptureLocationFix
+import com.librestatic.opencinecam.settings.captureLocationJson
+import com.librestatic.opencinecam.settings.CaptureLocationSnapshot
+import com.librestatic.opencinecam.settings.CaptureLocationStatus
+import com.librestatic.opencinecam.settings.CaptureNameSnapshot
+import com.librestatic.opencinecam.settings.CaptureNamingSettings
+import com.librestatic.opencinecam.settings.LocationPermissionPrecision
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Test

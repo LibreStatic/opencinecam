@@ -194,7 +194,7 @@ Add a zero-argument `@Composable fun` to `DriverScreens.kt`. Follow these rules:
 - Pass fake state (`CameraUiState(...)`, `CameraSettings(...)`, a fake `MediaCatalogSource`) and no-op callbacks. Leave `binder = null`.
 - When a screen builds its own repository or service, render the stateless content composable it delegates to, as `Gallery` does with `MediaCatalogContent`. If no such seam exists, extract one in production code; that is the only production refactor this tooling justifies.
 - Fakes stay in the test source set; never add them to `main`.
-- `start <Fqn>` (or `reset <Fqn>`) also accepts any fully qualified zero-argument top-level composable, private `@Preview`s included, e.g. `com.librestatic.opencinecam.CameraScreenKt.LandscapeChromePreview`. Previews that do not apply `OpenCineCamTheme` themselves render with plain Material light defaults, so for real review add a `DriverScreens.kt` entry instead.
+- `start <Fqn>` (or `reset <Fqn>`) also accepts any fully qualified zero-argument top-level composable, private `@Preview`s included, e.g. `com.librestatic.opencinecam.capture.AdaptiveCaptureChromeKt.CaptureSlotsPreview`. Previews that do not apply `OpenCineCamTheme` themselves render with plain Material light defaults, so for real review add a `DriverScreens.kt` entry instead.
 
 ### Known limits
 
@@ -207,6 +207,21 @@ Add a zero-argument `@Composable fun` to `DriverScreens.kt`. Follow these rules:
 - Endless frame loops (`while (true) withFrameNanos`) never let the test clock go idle, and requests fail after 60 s. Render those screens with `LocalReducedMotion provides true`, as `Onboarding` does.
 - Robolectric lacks a few framework services. `ShadowThermalPowerManager` covers the thermal listener the capture HUD registers; add similar test-only shadows rather than changing production code.
 - Fonts, shadows and blur come from Robolectric's native graphics. They are close to a device but not pixel-identical, so do final visual sign-off on a device.
+
+## Code layout
+
+- `:app` groups code by feature under `com.librestatic.opencinecam`. Keep the root package to the application and activity classes the manifest names (`OpenCineCamApplication`, `MainActivity`, `UsbDriveAttachAlias`), the root screen (`CameraScreen.kt`), its navigation state (`CameraRootState.kt`, `AppNavigation.kt`), `CameraUiState`, `LiveCameraState` and `ActivityContinuity`. New code goes into the feature package it belongs to: `capture` (the capture chrome, its panes, dials, HUD and operator keys), `settings` (`CameraSettings`, the repository, presets and settings screens), `gallery` (the media catalog, playback, sharing and proxies), `subject` and `fold` (cover-screen modes and the fold display coordinator), `calibration` (lens calibration), `onboarding` (the first-run wizard and splash art), `diagnostics` (capability report, storage benchmark, device profiles), `metadata` (sidecar JSON fragments) or `ui` (shared widgets), next to `service`, `storage`, `transfers`, `playback`, `rawvideo`, `export` and `share`. Tests mirror the package of what they test.
+- Put UI logic that decides something (navigation, mode switches, settings rules) in a plain state holder or a pure function beside the composable, and test it there; `CameraRootNavigation` and `planModeSwitch` are the examples.
+- `Camera2PreviewEngine` and `CaptureService` keep their state, lifecycle and public API in their own file; their internal steps live in extension files grouped by responsibility (`Camera2*.kt` in `:camera`, `CaptureService*.kt` in `service`). Add a step to the file that matches it rather than to the class.
+- After moving or splitting code that runs at startup or in the capture chrome, the baseline profile names classes that no longer exist; regenerate it (see below).
+
+## Static analysis and coverage
+
+- `./gradlew staticAnalysis` runs ktlint and detekt, as CI does. Both run their command-line jars from the root project (`build.gradle.kts`), so they need no plugin support from AGP.
+- ktlint reads `.editorconfig`. It enforces hygiene (blank lines, spacing around types and `then`, string templates, naming of non-composable functions) and leaves layout alone: the wrapping and spacing rules are disabled because the project's dense layout would otherwise be rewritten everywhere. `./gradlew ktlintFormat` fixes what it reports. Do not re-enable a layout rule without reformatting in its own commit.
+- detekt reads `config/detekt/detekt.yml` on top of its defaults and watches size, complexity, likely bugs and unused imports (ktlint 1.x no longer checks those). `config/detekt/baseline.xml` lists the findings that predate it; new code must not add findings. When you remove one, run `./gradlew detektBaseline` and commit the smaller baseline; never regenerate it to absorb new findings.
+- `./gradlew koverHtmlReportUnit` writes the merged coverage of the debug unit tests of `:app`, `:camera`, `:media` and `:core:model` to `build/reports/kover/htmlUnit/index.html` (CI keeps the XML and prints a summary). Instrumented tests are not counted.
+- New Gradle dependencies, including these tools, need checksums in `gradle/verification-metadata.xml`: run the build once with `--write-verification-metadata sha256` and review the added entries.
 
 ## Baseline profile and startup benchmarks
 
