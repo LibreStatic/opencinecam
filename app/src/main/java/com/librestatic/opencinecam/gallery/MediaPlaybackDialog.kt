@@ -75,11 +75,11 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.librestatic.opencinecam.media.ocraw.OcrawMissingReason
 import com.librestatic.opencinecam.playback.*
 import com.librestatic.opencinecam.R
-import com.librestatic.opencinecam.SettingsBorder
-import com.librestatic.opencinecam.SettingsCard
-import com.librestatic.opencinecam.SettingsMuted
-import com.librestatic.opencinecam.SettingsPill
-import com.librestatic.opencinecam.SettingsSurface
+import com.librestatic.opencinecam.settings.SettingsBorder
+import com.librestatic.opencinecam.settings.SettingsCard
+import com.librestatic.opencinecam.settings.SettingsMuted
+import com.librestatic.opencinecam.settings.SettingsPill
+import com.librestatic.opencinecam.settings.SettingsSurface
 import com.librestatic.opencinecam.storage.*
 import com.librestatic.opencinecam.subject.SubjectReviewShowAction
 import com.librestatic.opencinecam.ui.AdaptiveWindow

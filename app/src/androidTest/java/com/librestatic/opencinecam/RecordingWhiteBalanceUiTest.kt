@@ -14,6 +14,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.camera.*
 import com.librestatic.opencinecam.capture.CaptureButton
 import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.RecordingWhiteBalanceSettings
 import com.librestatic.opencinecam.settings.SettingsCatalog
 import org.junit.Assert.*
 import org.junit.Rule

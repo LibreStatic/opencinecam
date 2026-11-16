@@ -43,7 +43,7 @@ import com.librestatic.opencinecam.fold.FoldSlider
 import com.librestatic.opencinecam.fold.FoldToggle
 import com.librestatic.opencinecam.fold.SubjectDisplaySettings
 import com.librestatic.opencinecam.R
-import com.librestatic.opencinecam.SettingsHelp
+import com.librestatic.opencinecam.settings.SettingsHelp
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 

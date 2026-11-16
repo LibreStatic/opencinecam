@@ -23,6 +23,9 @@ import com.librestatic.opencinecam.gallery.MediaCatalogSource
 import com.librestatic.opencinecam.gallery.takeNeedsAttention
 import com.librestatic.opencinecam.gallery.takeTitleText
 import com.librestatic.opencinecam.gallery.title
+import com.librestatic.opencinecam.settings.ProductionSlateLocation
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
+import com.librestatic.opencinecam.settings.ProductionSlateTimeOfDay
 import com.librestatic.opencinecam.storage.*
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.NonCancellable

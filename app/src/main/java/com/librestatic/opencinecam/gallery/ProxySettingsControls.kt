@@ -19,10 +19,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.librestatic.opencinecam.R
-import com.librestatic.opencinecam.SettingsChips
-import com.librestatic.opencinecam.SettingsHelp
-import com.librestatic.opencinecam.SettingsSectionTitle
-import com.librestatic.opencinecam.SettingsSwitchRow
+import com.librestatic.opencinecam.settings.SettingsChips
+import com.librestatic.opencinecam.settings.SettingsHelp
+import com.librestatic.opencinecam.settings.SettingsSectionTitle
+import com.librestatic.opencinecam.settings.SettingsSwitchRow
 
 /** Settings and the manual proxy dialog share the same caller-owned local preferences. */
 @Composable

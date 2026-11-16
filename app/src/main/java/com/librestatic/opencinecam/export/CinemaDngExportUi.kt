@@ -52,11 +52,11 @@ import com.librestatic.opencinecam.gallery.GalleryWarning
 import com.librestatic.opencinecam.gallery.MediaDialogFrame
 import com.librestatic.opencinecam.gallery.MediaDialogTake
 import com.librestatic.opencinecam.R
-import com.librestatic.opencinecam.SettingsAccent
-import com.librestatic.opencinecam.SettingsMuted
-import com.librestatic.opencinecam.SettingsPill
-import com.librestatic.opencinecam.SettingsPillRow
-import com.librestatic.opencinecam.SettingsSwitchRow
+import com.librestatic.opencinecam.settings.SettingsAccent
+import com.librestatic.opencinecam.settings.SettingsMuted
+import com.librestatic.opencinecam.settings.SettingsPill
+import com.librestatic.opencinecam.settings.SettingsPillRow
+import com.librestatic.opencinecam.settings.SettingsSwitchRow
 import com.librestatic.opencinecam.media.raw.NativeRawCodec
 import com.librestatic.opencinecam.storage.CINEMADNG_EXPORT_PATH
 import com.librestatic.opencinecam.storage.CINEMADNG_EXPORT_PREFS

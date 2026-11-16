@@ -9,8 +9,8 @@ import com.librestatic.opencinecam.CameraUiPhase
 import com.librestatic.opencinecam.CaptureMode
 import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.core.model.StableFailure
-import com.librestatic.opencinecam.CaptureNameSnapshot
-import com.librestatic.opencinecam.ProductionSlateSettings
+import com.librestatic.opencinecam.settings.CaptureNameSnapshot
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
 import com.librestatic.opencinecam.storage.RawVideoQualificationStore
 import com.librestatic.opencinecam.storage.VideoOutput
 import com.librestatic.opencinecam.storage.DriveDisconnectPolicy

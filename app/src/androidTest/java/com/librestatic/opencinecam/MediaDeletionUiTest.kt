@@ -17,6 +17,7 @@ import com.librestatic.opencinecam.gallery.MediaCatalogSource
 import com.librestatic.opencinecam.gallery.MediaDeleteDialogContent
 import com.librestatic.opencinecam.gallery.MediaDeleteSource
 import com.librestatic.opencinecam.gallery.takeTitleText
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
 import com.librestatic.opencinecam.storage.*
 import java.io.IOException
 import java.util.concurrent.CountDownLatch

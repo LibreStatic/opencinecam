@@ -15,10 +15,10 @@ import com.librestatic.opencinecam.CaptureMode
 import com.librestatic.opencinecam.settings.normalizedFor
 import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.core.model.StableFailure
-import com.librestatic.opencinecam.CaptureNameSnapshot
+import com.librestatic.opencinecam.settings.CaptureNameSnapshot
 import com.librestatic.opencinecam.capture.RawVideoConfigKeys
-import com.librestatic.opencinecam.captureFileStem
-import com.librestatic.opencinecam.continuationFileStem
+import com.librestatic.opencinecam.settings.captureFileStem
+import com.librestatic.opencinecam.settings.continuationFileStem
 import com.librestatic.opencinecam.capture.RawVideoConfigOption
 import com.librestatic.opencinecam.capture.RawVideoLeftOutOption
 import com.librestatic.opencinecam.capture.rawConfigLabelLocalized

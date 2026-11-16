@@ -6,6 +6,12 @@ import com.librestatic.opencinecam.gallery.MediaShareContent
 import com.librestatic.opencinecam.gallery.MediaShareMetadata
 import com.librestatic.opencinecam.gallery.MediaSharingSettings
 import com.librestatic.opencinecam.metadata.productionSlateJson
+import com.librestatic.opencinecam.settings.CaptureLocationFix
+import com.librestatic.opencinecam.settings.captureLocationJson
+import com.librestatic.opencinecam.settings.CaptureLocationSnapshot
+import com.librestatic.opencinecam.settings.CaptureLocationStatus
+import com.librestatic.opencinecam.settings.LocationPermissionPrecision
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Test

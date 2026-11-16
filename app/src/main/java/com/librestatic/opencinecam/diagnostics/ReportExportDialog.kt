@@ -33,7 +33,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.R
-import com.librestatic.opencinecam.SettingsMuted
+import com.librestatic.opencinecam.settings.SettingsMuted
 
 /** What the user asked the export dialog to do with the report. */
 internal enum class ReportExportAction { SAVE, SHARE, COPY }

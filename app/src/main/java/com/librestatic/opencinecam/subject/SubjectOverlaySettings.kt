@@ -13,7 +13,7 @@ import com.librestatic.opencinecam.fold.FoldToggle
 import com.librestatic.opencinecam.fold.SubjectDisplaySettings
 import com.librestatic.opencinecam.fold.SubjectPreviewGuide
 import com.librestatic.opencinecam.R
-import com.librestatic.opencinecam.SettingsChips
+import com.librestatic.opencinecam.settings.SettingsChips
 
 /** OCC-PLAN-068 U1: what the subject sees over its own preview. Never reaches the encoder. */
 @Composable

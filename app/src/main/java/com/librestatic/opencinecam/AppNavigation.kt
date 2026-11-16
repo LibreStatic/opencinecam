@@ -42,6 +42,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.librestatic.opencinecam.fold.FoldHinge
+import com.librestatic.opencinecam.settings.HingeSafeSettingsPane
 import com.librestatic.opencinecam.ui.AdaptiveWindow
 import com.librestatic.opencinecam.ui.CineGlyph
 import com.librestatic.opencinecam.ui.CineIcon

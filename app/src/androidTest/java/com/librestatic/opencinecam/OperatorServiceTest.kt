@@ -27,6 +27,14 @@ import com.librestatic.opencinecam.onboarding.OnboardingStore
 import com.librestatic.opencinecam.service.CaptureService
 import com.librestatic.opencinecam.settings.CameraPreset
 import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.captureFileStem
+import com.librestatic.opencinecam.settings.CaptureLocationSnapshot
+import com.librestatic.opencinecam.settings.CaptureLocationStatus
+import com.librestatic.opencinecam.settings.CaptureNameSnapshot
+import com.librestatic.opencinecam.settings.CaptureNamingSettings
+import com.librestatic.opencinecam.settings.locationPermission
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
+import com.librestatic.opencinecam.settings.projectLabel
 import com.librestatic.opencinecam.settings.SettingsRepositories
 import com.librestatic.opencinecam.settings.TimeLapseLimitMode
 import com.librestatic.opencinecam.transfers.*

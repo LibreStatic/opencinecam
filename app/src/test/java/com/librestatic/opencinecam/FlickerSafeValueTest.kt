@@ -4,6 +4,7 @@ package com.librestatic.opencinecam
 import com.librestatic.opencinecam.camera.ExposureMode
 import com.librestatic.opencinecam.camera.ExposureSelection
 import com.librestatic.opencinecam.camera.ShutterUnit
+import com.librestatic.opencinecam.settings.flickerSafeValue
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

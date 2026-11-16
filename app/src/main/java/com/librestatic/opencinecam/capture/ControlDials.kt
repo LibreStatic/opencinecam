@@ -28,10 +28,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.service.CaptureService
 import com.librestatic.opencinecam.settings.CameraSettings
-import com.librestatic.opencinecam.projectLabel
+import com.librestatic.opencinecam.settings.projectLabel
 import com.librestatic.opencinecam.settings.SLOW_MOTION_TAKE_LENGTHS
-import com.librestatic.opencinecam.TimelapseSettings
-import com.librestatic.opencinecam.videoProjectRate
+import com.librestatic.opencinecam.settings.TimelapseSettings
+import com.librestatic.opencinecam.settings.videoProjectRate
 import com.librestatic.opencinecam.ui.CineSlider
 import com.librestatic.opencinecam.usesLogGraph
 import com.librestatic.opencinecam.camera.OpenCineLogSourcePath

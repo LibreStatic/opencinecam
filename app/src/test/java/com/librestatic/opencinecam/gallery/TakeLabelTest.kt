@@ -2,7 +2,7 @@
 package com.librestatic.opencinecam.gallery
 
 import com.librestatic.opencinecam.R
-import com.librestatic.opencinecam.ProductionSlateSettings
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
 import com.librestatic.opencinecam.storage.*
 import org.junit.Assert.*
 import org.junit.Test

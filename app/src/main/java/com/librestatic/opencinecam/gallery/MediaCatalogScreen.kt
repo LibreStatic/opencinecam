@@ -60,10 +60,10 @@ import com.librestatic.opencinecam.capture.ShortcutAction
 import com.librestatic.opencinecam.capture.ShortcutHandler
 import com.librestatic.opencinecam.playback.RawThumbnails
 import com.librestatic.opencinecam.R
-import com.librestatic.opencinecam.SettingsCard
-import com.librestatic.opencinecam.SettingsHelpText
-import com.librestatic.opencinecam.SettingsMuted
-import com.librestatic.opencinecam.SettingsPill
+import com.librestatic.opencinecam.settings.SettingsCard
+import com.librestatic.opencinecam.settings.SettingsHelpText
+import com.librestatic.opencinecam.settings.SettingsMuted
+import com.librestatic.opencinecam.settings.SettingsPill
 import com.librestatic.opencinecam.playback.probeClipMetadata
 import com.librestatic.opencinecam.storage.*
 import com.librestatic.opencinecam.subject.SubjectReviewOperatorBar

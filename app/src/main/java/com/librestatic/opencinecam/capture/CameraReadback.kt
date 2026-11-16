@@ -19,8 +19,8 @@ import com.librestatic.opencinecam.camera.WhiteBalanceSelection
 import com.librestatic.opencinecam.CameraUiState
 import com.librestatic.opencinecam.diagnostics.shutter
 import com.librestatic.opencinecam.R
-import com.librestatic.opencinecam.displayLabel
-import com.librestatic.opencinecam.titleResource
+import com.librestatic.opencinecam.settings.displayLabel
+import com.librestatic.opencinecam.settings.titleResource
 import kotlin.math.abs
 
 /** One value the camera reported back differently from what OpenCineCam asked for. */

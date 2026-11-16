@@ -27,8 +27,8 @@ import androidx.compose.ui.window.DialogWindowProvider
 import com.librestatic.opencinecam.capture.dialogShortcuts
 import com.librestatic.opencinecam.capture.ShortcutAction
 import com.librestatic.opencinecam.R
-import com.librestatic.opencinecam.SettingsAccent
-import com.librestatic.opencinecam.SettingsMuted
+import com.librestatic.opencinecam.settings.SettingsAccent
+import com.librestatic.opencinecam.settings.SettingsMuted
 import com.librestatic.opencinecam.storage.LocalMediaTake
 import com.librestatic.opencinecam.ui.CineGlyph
 import com.librestatic.opencinecam.ui.CineIcon

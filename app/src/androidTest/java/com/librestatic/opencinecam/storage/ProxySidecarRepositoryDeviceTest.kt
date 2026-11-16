@@ -10,6 +10,7 @@ import com.librestatic.opencinecam.*
 import com.librestatic.opencinecam.gallery.GallerySettings
 import com.librestatic.opencinecam.gallery.ProxySettings
 import com.librestatic.opencinecam.metadata.productionSlateJson
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
 import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.*

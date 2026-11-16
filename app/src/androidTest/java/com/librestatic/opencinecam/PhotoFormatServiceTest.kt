@@ -28,6 +28,14 @@ import com.librestatic.opencinecam.gallery.MediaReviewSelection
 import com.librestatic.opencinecam.metadata.parseProductionSlateJson
 import com.librestatic.opencinecam.service.CaptureService
 import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.captureFileStem
+import com.librestatic.opencinecam.settings.CaptureLocationSnapshot
+import com.librestatic.opencinecam.settings.CaptureLocationStatus
+import com.librestatic.opencinecam.settings.CaptureNameSnapshot
+import com.librestatic.opencinecam.settings.CaptureNamingSettings
+import com.librestatic.opencinecam.settings.ProductionSlateLocation
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
+import com.librestatic.opencinecam.settings.ProductionSlateTimeOfDay
 import com.librestatic.opencinecam.settings.SettingsRepositories
 import java.security.MessageDigest
 import java.util.concurrent.CountDownLatch

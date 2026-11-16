@@ -4,9 +4,9 @@ package com.librestatic.opencinecam.service
 import android.net.Uri
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.librestatic.opencinecam.CaptureMode
-import com.librestatic.opencinecam.CaptureNameSnapshot
-import com.librestatic.opencinecam.CaptureNamingSettings
-import com.librestatic.opencinecam.ProductionSlateSettings
+import com.librestatic.opencinecam.settings.CaptureNameSnapshot
+import com.librestatic.opencinecam.settings.CaptureNamingSettings
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
 import com.librestatic.opencinecam.capture.RawQualificationTarget
 import com.librestatic.opencinecam.RecordingDestinationStatus
 import com.librestatic.opencinecam.storage.ClipContinuation

@@ -36,18 +36,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import com.librestatic.opencinecam.settings.normalizedFor
-import com.librestatic.opencinecam.withSimpleGain
-import com.librestatic.opencinecam.withEqProfile
-import com.librestatic.opencinecam.withListenStart
-import com.librestatic.opencinecam.withListenVolume
+import com.librestatic.opencinecam.settings.withSimpleGain
+import com.librestatic.opencinecam.settings.withEqProfile
+import com.librestatic.opencinecam.settings.withListenStart
+import com.librestatic.opencinecam.settings.withListenVolume
 import com.librestatic.opencinecam.AppSection
 import com.librestatic.opencinecam.AppShell
-import com.librestatic.opencinecam.AudioListeningDevice
-import com.librestatic.opencinecam.AudioListeningOutput
-import com.librestatic.opencinecam.AudioListeningPhase
-import com.librestatic.opencinecam.AudioListeningStatus
-import com.librestatic.opencinecam.listenExitPrompt
-import com.librestatic.opencinecam.rememberListenExitGuard
+import com.librestatic.opencinecam.settings.AudioListeningDevice
+import com.librestatic.opencinecam.settings.AudioListeningOutput
+import com.librestatic.opencinecam.settings.AudioListeningPhase
+import com.librestatic.opencinecam.settings.AudioListeningStatus
+import com.librestatic.opencinecam.settings.listenExitPrompt
+import com.librestatic.opencinecam.settings.rememberListenExitGuard
 import com.librestatic.opencinecam.ui.rememberPredictiveBack
 import androidx.compose.foundation.clickable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -80,7 +80,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.unit.dp
-import com.librestatic.opencinecam.AboutScreen
+import com.librestatic.opencinecam.settings.AboutScreen
 import com.librestatic.opencinecam.diagnostics.CameraCapabilitiesScreen
 import com.librestatic.opencinecam.diagnostics.StorageBenchmarkContent
 import com.librestatic.opencinecam.calibration.LensCalibrationContent
@@ -145,9 +145,9 @@ import com.librestatic.opencinecam.gallery.MediaCatalogContent
 import com.librestatic.opencinecam.gallery.MediaCatalogSource
 import com.librestatic.opencinecam.capture.MonitoringOverlay
 import com.librestatic.opencinecam.onboarding.OnboardingScreen
-import com.librestatic.opencinecam.ProductionSlateSettings
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
 import com.librestatic.opencinecam.R
-import com.librestatic.opencinecam.SettingsScreen
+import com.librestatic.opencinecam.settings.SettingsScreen
 import com.librestatic.opencinecam.onboarding.SplashHandoff
 import com.librestatic.opencinecam.gallery.TakeProxyState
 import com.librestatic.opencinecam.camera.Camera2CameraDescriptor
@@ -1192,8 +1192,8 @@ fun SettingsVolumeKeys() = DriverTheme {
 
 /** A fake recording destination store: what the rows show, with picking and clearing answered in memory. */
 private class DriverRecordingDestinationBackend(
-    private var current: com.librestatic.opencinecam.RecordingDestinationSettingsState,
-) : com.librestatic.opencinecam.RecordingDestinationSettingsBackend {
+    private var current: com.librestatic.opencinecam.settings.RecordingDestinationSettingsState,
+) : com.librestatic.opencinecam.settings.RecordingDestinationSettingsBackend {
     override fun read() = current
     override fun adopt(tree: android.net.Uri): com.librestatic.opencinecam.storage.RecordingFolderAdoption =
         com.librestatic.opencinecam.storage.RecordingFolderAdoption.Adopted("1A2B-3C4D", current.label)
@@ -1205,16 +1205,16 @@ private class DriverRecordingDestinationBackend(
 
 @Composable
 private fun SettingsWithRecordingDestination(
-    stored: com.librestatic.opencinecam.RecordingDestinationSettingsState,
+    stored: com.librestatic.opencinecam.settings.RecordingDestinationSettingsState,
     status: com.librestatic.opencinecam.RecordingDestinationStatus,
     initialSettings: CameraSettings = CameraSettings(),
     targetFps: Int = 30,
 ) = DriverTheme {
     var settings by remember { mutableStateOf(initialSettings) }
-    val holder = remember { com.librestatic.opencinecam.RecordingDestinationSettingsHolder(DriverRecordingDestinationBackend(stored)) }
+    val holder = remember { com.librestatic.opencinecam.settings.RecordingDestinationSettingsHolder(DriverRecordingDestinationBackend(stored)) }
     // The service would describe the drive; Phone clears it here, as the service's refresh would.
     val shown = if (holder.state.driveConfigured) status else com.librestatic.opencinecam.RecordingDestinationStatus()
-    CompositionLocalProvider(com.librestatic.opencinecam.LocalRecordingDestinationSettings provides holder) {
+    CompositionLocalProvider(com.librestatic.opencinecam.settings.LocalRecordingDestinationSettings provides holder) {
         SettingsScreen(CameraUiState(phase = CameraUiPhase.PREVIEWING, recordingDestination = shown, targetFps = targetFps), settings, audioPermissionGranted = true,
             onRequestAudioPermission = {}, onOpenAbout = {}, onSettingsChange = { settings = it })
     }
@@ -1229,7 +1229,7 @@ private val DriverDriveStatus = com.librestatic.opencinecam.RecordingDestination
  */
 @Composable
 fun SettingsRecordingDestination() = SettingsWithRecordingDestination(
-    com.librestatic.opencinecam.RecordingDestinationSettingsState(driveConfigured = true, label = "WD Elements",
+    com.librestatic.opencinecam.settings.RecordingDestinationSettingsState(driveConfigured = true, label = "WD Elements",
         speed = com.librestatic.opencinecam.storage.DriveSpeed(412_300_000L, 398_000_000L, 1_762_560_000_000L)),
     DriverDriveStatus,
 )
@@ -1237,7 +1237,7 @@ fun SettingsRecordingDestination() = SettingsWithRecordingDestination(
 /** The same drive plugged in moments ago and still spinning up: the status line says it is starting, with no Measure speed. */
 @Composable
 fun SettingsRecordingDestinationStarting() = SettingsWithRecordingDestination(
-    com.librestatic.opencinecam.RecordingDestinationSettingsState(driveConfigured = true, label = "WD Elements",
+    com.librestatic.opencinecam.settings.RecordingDestinationSettingsState(driveConfigured = true, label = "WD Elements",
         speed = com.librestatic.opencinecam.storage.DriveSpeed(412_300_000L, 398_000_000L, 1_762_560_000_000L)),
     com.librestatic.opencinecam.RecordingDestinationStatus(configuredDrive = true,
         fallback = com.librestatic.opencinecam.storage.DestinationFallback.DRIVE_STARTING, driveLabel = "WD Elements"),
@@ -1249,7 +1249,7 @@ fun SettingsRecordingDestinationStarting() = SettingsWithRecordingDestination(
  */
 @Composable
 fun SettingsRecordingDestinationRenamed() = SettingsWithRecordingDestination(
-    com.librestatic.opencinecam.RecordingDestinationSettingsState(driveConfigured = true, label = "WD Elements",
+    com.librestatic.opencinecam.settings.RecordingDestinationSettingsState(driveConfigured = true, label = "WD Elements",
         speed = com.librestatic.opencinecam.storage.DriveSpeed(412_300_000L, 398_000_000L, 1_762_560_000_000L)),
     com.librestatic.opencinecam.RecordingDestinationStatus(configuredDrive = true,
         fallback = com.librestatic.opencinecam.storage.DestinationFallback.DRIVE_RENAMED, driveLabel = "WD Elements"),
@@ -1258,7 +1258,7 @@ fun SettingsRecordingDestinationRenamed() = SettingsWithRecordingDestination(
 /** A drive measured at 9.1 MB/s with 40 Mb/s video at 60 fps, which needs about 10 MB/s: the amber warning. */
 @Composable
 fun SettingsRecordingDestinationSlowDrive() = SettingsWithRecordingDestination(
-    com.librestatic.opencinecam.RecordingDestinationSettingsState(driveConfigured = true, label = "Generic flash",
+    com.librestatic.opencinecam.settings.RecordingDestinationSettingsState(driveConfigured = true, label = "Generic flash",
         speed = com.librestatic.opencinecam.storage.DriveSpeed(9_100_000L, 7_800_000L, 1_762_560_000_000L)),
     DriverDriveStatus.copy(driveLabel = "Generic flash", driveFreeBytes = 58_000_000_000L),
     CameraSettings(videoBitrateMbps = 40),
@@ -1268,14 +1268,14 @@ fun SettingsRecordingDestinationSlowDrive() = SettingsWithRecordingDestination(
 /** The drive just picked, its write speed being measured. */
 @Composable
 fun SettingsRecordingDestinationMeasuring() = SettingsWithRecordingDestination(
-    com.librestatic.opencinecam.RecordingDestinationSettingsState(driveConfigured = true, label = "WD Elements", measuring = true),
+    com.librestatic.opencinecam.settings.RecordingDestinationSettingsState(driveConfigured = true, label = "WD Elements", measuring = true),
     DriverDriveStatus,
 )
 
 /** Settings after a FAT32 drive was turned down: the phone is still the destination and the row says to format it as exFAT. */
 @Composable
 fun SettingsRecordingDestinationRejected() = SettingsWithRecordingDestination(
-    com.librestatic.opencinecam.RecordingDestinationSettingsState(rejection = com.librestatic.opencinecam.storage.RecordingFolderRejection.FILE_SIZE_LIMIT),
+    com.librestatic.opencinecam.settings.RecordingDestinationSettingsState(rejection = com.librestatic.opencinecam.storage.RecordingFolderRejection.FILE_SIZE_LIMIT),
     com.librestatic.opencinecam.RecordingDestinationStatus(),
 )
 
@@ -2066,7 +2066,7 @@ fun InputEqualizerListening() = InputEqualizerDriverPage(
     CameraSettings().withEqProfile(DriverLavalierEqProfile).withListenStart(DriverUsbHeadset).withListenVolume(65),
     DriverReferenceEqProfile, listOf(DriverLavalierEqProfile),
     outputs = listOf(DriverPhoneSpeaker, DriverUsbHeadset),
-    listeningStatus = com.librestatic.opencinecam.AudioListeningStatus(com.librestatic.opencinecam.AudioListeningPhase.ACTIVE,
+    listeningStatus = com.librestatic.opencinecam.settings.AudioListeningStatus(com.librestatic.opencinecam.settings.AudioListeningPhase.ACTIVE,
         DriverUsbHeadset.id, DriverUsbHeadset.id, DriverUsbHeadset.name),
 )
 
@@ -2084,22 +2084,22 @@ fun InputEqualizerClipped() = InputEqualizerDriverPage(
 @Composable
 fun InputEqualizerSnippetRecording() = InputEqualizerDriverPage(
     CameraSettings().withEqProfile(DriverLavalierEqProfile), DriverReferenceEqProfile, listOf(DriverLavalierEqProfile),
-    snippet = com.librestatic.opencinecam.EqSnippetUiState(com.librestatic.opencinecam.EqSnippetPhase.RECORDING, recordedMs = 4_300),
+    snippet = com.librestatic.opencinecam.settings.EqSnippetUiState(com.librestatic.opencinecam.settings.EqSnippetPhase.RECORDING, recordedMs = 4_300),
 )
 
 /** A 7 s snippet looping through the curve with only the phone's speaker: the paused-microphone note and Stop. */
 @Composable
 fun InputEqualizerSnippetPlaying() = InputEqualizerDriverPage(
     CameraSettings().withEqProfile(DriverLavalierEqProfile), DriverReferenceEqProfile, listOf(DriverLavalierEqProfile),
-    snippet = com.librestatic.opencinecam.EqSnippetUiState(com.librestatic.opencinecam.EqSnippetPhase.PLAYING, snippetMs = DRIVER_SNIPPET_MS),
+    snippet = com.librestatic.opencinecam.settings.EqSnippetUiState(com.librestatic.opencinecam.settings.EqSnippetPhase.PLAYING, snippetMs = DRIVER_SNIPPET_MS),
 )
 
 /** Simple mode: a custom curve of the three fixed bands with their gains moved. */
 @Composable
 fun InputEqualizerSimple() = InputEqualizerDriverPage(
-    CameraSettings(audioEqCurve = com.librestatic.opencinecam.camera.EqCurve(com.librestatic.opencinecam.simpleEqPoints())
-        .withSimpleGain(com.librestatic.opencinecam.SimpleEqBand.LOW, 2.0).withSimpleGain(com.librestatic.opencinecam.SimpleEqBand.MID, -1.5)
-        .withSimpleGain(com.librestatic.opencinecam.SimpleEqBand.HIGH, 3.0)),
+    CameraSettings(audioEqCurve = com.librestatic.opencinecam.camera.EqCurve(com.librestatic.opencinecam.settings.simpleEqPoints())
+        .withSimpleGain(com.librestatic.opencinecam.settings.SimpleEqBand.LOW, 2.0).withSimpleGain(com.librestatic.opencinecam.settings.SimpleEqBand.MID, -1.5)
+        .withSimpleGain(com.librestatic.opencinecam.settings.SimpleEqBand.HIGH, 3.0)),
     DriverReferenceEqProfile, listOf(DriverLavalierEqProfile),
 )
 

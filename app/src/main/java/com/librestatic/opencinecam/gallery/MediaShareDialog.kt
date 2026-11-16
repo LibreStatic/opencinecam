@@ -17,8 +17,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.R
-import com.librestatic.opencinecam.SettingsAccent
-import com.librestatic.opencinecam.SettingsMuted
+import com.librestatic.opencinecam.settings.SettingsAccent
+import com.librestatic.opencinecam.settings.SettingsMuted
 import com.librestatic.opencinecam.storage.*
 import com.librestatic.opencinecam.ui.CineGlyph
 import com.librestatic.opencinecam.ui.CineIcon
