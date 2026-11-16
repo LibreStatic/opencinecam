@@ -52,7 +52,7 @@ class MediaDeletionDeviceTest {
         val take = f.recording();val order = mutableListOf<String>()
         val access = MediaStoreDeleteAccess(context)
         val result = MediaTakeDeleter(object:MediaDeleteAccess by access {
-            override fun delete(row:MediaDeleteRow):Int { order+=row.artifact.uri;return access.delete(row) }
+            override fun delete(row:MediaDeleteRow): Int { order+=row.artifact.uri;return access.delete(row) }
         }).delete(take)
         assertTrue(result.toString(),result.complete)
         assertEquals(take.primary.uri,order.last())
@@ -119,7 +119,7 @@ class MediaDeletionDeviceTest {
         val take=f.recording();val anchor=bytes(take.primary.uri);val meta=take.metadata.first();val beforeMeta=bytes(meta.uri)
         val access=MediaStoreDeleteAccess(context)
         val result=MediaTakeDeleter(object:MediaDeleteAccess by access {
-            override fun delete(row:MediaDeleteRow):Int {
+            override fun delete(row:MediaDeleteRow): Int {
                 if(row.artifact.uri==meta.uri) assertEquals(1,resolver.update(meta.uri.toUri(),ContentValues().apply {
                     put(MediaStore.MediaColumns.DISPLAY_NAME,"${f.token}-changed.json")
                 },null,null))
@@ -139,7 +139,7 @@ class MediaDeletionDeviceTest {
         val take=f.recording();val secondary=take.originals.single { it!=take.primary };val anchor=bytes(take.primary.uri)
         val access=MediaStoreDeleteAccess(context)
         val result=MediaTakeDeleter(object:MediaDeleteAccess by access {
-            override fun isAbsent(row:MediaDeleteRow):Boolean {
+            override fun isAbsent(row:MediaDeleteRow): Boolean {
                 if(row.artifact.uri==secondary.uri) throw IOException("Fixture provider verification failed")
                 return access.isAbsent(row)
             }
@@ -186,12 +186,12 @@ class MediaDeletionDeviceTest {
             try { java.io.ByteArrayOutputStream().use { out -> bitmap.eraseColor(android.graphics.Color.BLUE);check(bitmap.compress(Bitmap.CompressFormat.JPEG,90,out));out.toByteArray() } }
             finally { bitmap.recycle() }
         }
-        fun photo():LocalMediaTake {
+        fun photo(): LocalMediaTake {
             val image=StillImageSaver(context).saveJpeg(jpeg,ProductionSlateSettings(project=token));uris+=image
             val take=LocalMediaRepository(context).page(GallerySettings(),token).takes.single()
             uris+=take.metadata.map { it.uri.toUri() };return take
         }
-        fun recording():LocalMediaTake {
+        fun recording(): LocalMediaTake {
             val id=UUID.randomUUID().toString();val folder="OpenCineCam/OCC_TAKE_$id/"
             val video=insert(videos,"DCIM/$folder","$token.mp4","video/mp4",byteArrayOf(1,2,3))
             val sound=insert(audio,"Music/$folder","$token.wav","audio/wav",byteArrayOf(4,5,6))
@@ -206,7 +206,7 @@ class MediaDeletionDeviceTest {
                 assertEquals(LocalMediaRelationStatus.DECLARED,it.relationStatus);assertEquals(2,it.originals.size);assertEquals(2,it.metadata.size)
             }
         }
-        fun insert(collection:Uri,path:String,name:String,mime:String,data:ByteArray,pending:Boolean=false):Uri {
+        fun insert(collection:Uri,path:String,name:String,mime:String,data:ByteArray,pending:Boolean=false): Uri {
             val uri=resolver.insert(collection,ContentValues().apply {
                 put(MediaStore.MediaColumns.RELATIVE_PATH,path);put(MediaStore.MediaColumns.DISPLAY_NAME,name);put(MediaStore.MediaColumns.MIME_TYPE,mime);put(MediaStore.MediaColumns.IS_PENDING,1)
             })!!;uris+=uri;resolver.openOutputStream(uri,"w")!!.use { it.write(data) }
@@ -215,9 +215,9 @@ class MediaDeletionDeviceTest {
         }
         fun snapshot(take:LocalMediaTake)=(take.originals+take.metadata).associate { it.uri to bytes(it.uri) }
         fun assertBytes(before:Map<String,ByteArray>)=before.forEach { (uri,data) -> assertArrayEquals(data,bytes(uri)) }
-        fun isolatedContext():Pair<Context,File> {
+        fun isolatedContext(): Pair<Context,File> {
             val dir=File(context.cacheDir,"delete-private-${UUID.randomUUID()}").apply { mkdirs() };privateDirs+=dir
-            return object:ContextWrapper(context) { override fun getApplicationContext():Context=this;override fun getNoBackupFilesDir():File=dir } to dir
+            return object:ContextWrapper(context) { override fun getApplicationContext(): Context=this;override fun getNoBackupFilesDir(): File=dir } to dir
         }
         fun close() {
             uris.asReversed().forEach { if(exists(it.toString())) assertEquals(1,resolver.delete(it,null,null)) }

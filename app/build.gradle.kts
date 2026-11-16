@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.androidx.baselineprofile)
+    id("org.jetbrains.kotlinx.kover")
 }
 
 val profileBuildTypes = setOf("benchmarkRelease", "nonMinifiedRelease")
@@ -188,4 +189,13 @@ dependencies {
     androidTestImplementation(project(":camera"))
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+}
+
+// Coverage of the debug unit tests, merged by the root project's koverHtmlReportUnit.
+kover {
+    currentProject {
+        createVariant("unit") {
+            add("debug")
+        }
+    }
 }

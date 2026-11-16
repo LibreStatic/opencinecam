@@ -75,8 +75,8 @@ class MediaRenamingDeviceTest {
         val access=MediaStoreRenameAccess(context)
         val result=MediaTakeRenamer(object:MediaRenameAccess by access {
             override fun holdOutbox(plan:MediaRenamePlan) { fail("A no-op must not hold pending transfers") }
-            override fun rename(row:MediaDeleteRow,newName:String):MediaDeleteRow { fail("A no-op must not update a row");return row }
-            override fun writeMetadata(row:MediaDeleteRow,expected:ByteArray,replacement:ByteArray):MediaDeleteRow { fail("A no-op must not write metadata");return row }
+            override fun rename(row:MediaDeleteRow,newName:String): MediaDeleteRow { fail("A no-op must not update a row");return row }
+            override fun writeMetadata(row:MediaDeleteRow,expected:ByteArray,replacement:ByteArray): MediaDeleteRow { fail("A no-op must not write metadata");return row }
         }).rename(fresh,"Repeat")
         assertTrue(result.toString(),result.complete);assertTrue(result.files.all { it.status==MediaRenameStatus.UNCHANGED })
         assertEquals(fresh,LocalMediaRepository(context).page(GallerySettings(),f.token).takes.single());f.assertBytes(before)
@@ -111,7 +111,7 @@ class MediaRenamingDeviceTest {
     @Test fun changedIdentityAtConditionalUpdateIsNeverOverwrittenDuringCompensation() = fixture { f ->
         val take=f.photo();val before=f.snapshot(take);val access=MediaStoreRenameAccess(context);var changed=false
         val result=MediaTakeRenamer(object:MediaRenameAccess by access {
-            override fun rename(row:MediaDeleteRow,newName:String):MediaDeleteRow {
+            override fun rename(row:MediaDeleteRow,newName:String): MediaDeleteRow {
                 if(!changed) {
                     changed=true
                     assertEquals(1,resolver.update(row.artifact.uri.toUri(),ContentValues().apply { put(MediaStore.MediaColumns.DISPLAY_NAME,"external-"+row.artifact.name) },null,null))
@@ -126,7 +126,7 @@ class MediaRenamingDeviceTest {
     @Test fun failureBeforeMetadataWriteCompensatesNamesAndExactOriginalJsonBytes() = fixture { f ->
         val take=f.photo();val before=f.snapshot(take);val access=MediaStoreRenameAccess(context)
         val result=MediaTakeRenamer(object:MediaRenameAccess by access {
-            override fun writeMetadata(row:MediaDeleteRow,expected:ByteArray,replacement:ByteArray):MediaDeleteRow {
+            override fun writeMetadata(row:MediaDeleteRow,expected:ByteArray,replacement:ByteArray): MediaDeleteRow {
                 throw IOException("Fixture rejected before first metadata write")
             }
         }).rename(take,"Restore names")
@@ -139,7 +139,7 @@ class MediaRenamingDeviceTest {
         val take=f.photo();val before=f.snapshot(take);val access=MediaStoreRenameAccess(context)
         var written=false
         val result=MediaTakeRenamer(object:MediaRenameAccess by access {
-            override fun writeMetadata(row:MediaDeleteRow,expected:ByteArray,replacement:ByteArray):MediaDeleteRow {
+            override fun writeMetadata(row:MediaDeleteRow,expected:ByteArray,replacement:ByteArray): MediaDeleteRow {
                 val changed=access.writeMetadata(row,expected,replacement)
                 if(!written) {
                     written=true
@@ -160,7 +160,7 @@ class MediaRenamingDeviceTest {
         val take=f.photo();val original=bytes(take.primary.uri);val access=MediaStoreRenameAccess(context)
         val foreign="{\"changedByAnotherWriter\":true}".toByteArray();var changedUri:String?=null
         val result=MediaTakeRenamer(object:MediaRenameAccess by access {
-            override fun writeMetadata(row:MediaDeleteRow,expected:ByteArray,replacement:ByteArray):MediaDeleteRow {
+            override fun writeMetadata(row:MediaDeleteRow,expected:ByteArray,replacement:ByteArray): MediaDeleteRow {
                 changedUri=row.artifact.uri
                 resolver.openOutputStream(row.artifact.uri.toUri(),"wt")!!.use { it.write(foreign) }
                 throw IOException("Fixture unrecognized concurrent metadata write")
@@ -174,7 +174,7 @@ class MediaRenamingDeviceTest {
     @Test fun unexpectedProviderNameIsDetectedAndCompensatedUsingObservedIdentity() = fixture { f ->
         val take=f.photo();val before=f.snapshot(take);val access=MediaStoreRenameAccess(context);var first=true
         val result=MediaTakeRenamer(object:MediaRenameAccess by access {
-            override fun rename(row:MediaDeleteRow,newName:String):MediaDeleteRow {
+            override fun rename(row:MediaDeleteRow,newName:String): MediaDeleteRow {
                 val requested=if(first) { first=false;newName.substringBeforeLast('.')+" (1)."+newName.substringAfterLast('.') } else newName
                 return access.rename(row,requested)
             }
@@ -204,7 +204,7 @@ class MediaRenamingDeviceTest {
                         members.values.forEach { assertEquals(it.name,name(it.uri)) }
                     };held=true
                 }
-                override fun rename(row:MediaDeleteRow,newName:String):MediaDeleteRow { assertTrue(held);return access.rename(row,newName) }
+                override fun rename(row:MediaDeleteRow,newName:String): MediaDeleteRow { assertTrue(held);return access.rename(row,newName) }
             }).rename(take,"Local version")
             assertTrue(result.toString(),result.complete)
             WebDavSqliteOutbox(context,database).use { store ->
@@ -219,8 +219,8 @@ class MediaRenamingDeviceTest {
     @Test fun absentOutboxGuardDoesNotCreateDatabaseOrCompanionFiles() = fixture { f ->
         val (base,dir)=f.isolatedContext()
         val isolated=object:ContextWrapper(base) {
-            override fun getApplicationContext():Context=this
-            override fun getDatabasePath(name:String):File=File(dir,name)
+            override fun getApplicationContext(): Context=this
+            override fun getDatabasePath(name:String): File=File(dir,name)
         }
         MediaRenameOutboxGuard.prepare(isolated,setOf("content://media/external_primary/video/media/123"))
         assertTrue(dir.listFiles().orEmpty().isEmpty())
@@ -236,12 +236,12 @@ class MediaRenamingDeviceTest {
             try { java.io.ByteArrayOutputStream().use { out -> bitmap.eraseColor(android.graphics.Color.BLUE);check(bitmap.compress(Bitmap.CompressFormat.JPEG,90,out));out.toByteArray() } }
             finally { bitmap.recycle() }
         }
-        fun photo():LocalMediaTake {
+        fun photo(): LocalMediaTake {
             val image=StillImageSaver(context).saveJpeg(jpeg,ProductionSlateSettings(project=token));uris+=image
             val take=LocalMediaRepository(context).page(GallerySettings(),token).takes.single()
             uris+=take.metadata.map { it.uri.toUri() };return take
         }
-        fun recording():LocalMediaTake {
+        fun recording(): LocalMediaTake {
             val id=UUID.randomUUID().toString();val folder="OpenCineCam/OCC_TAKE_$id/"
             val video=insert(videos,"DCIM/$folder","$token.mp4","video/mp4",byteArrayOf(1,2,3))
             val sound=insert(audio,"Music/$folder","$token.wav","audio/wav",byteArrayOf(4,5,6))
@@ -256,7 +256,7 @@ class MediaRenamingDeviceTest {
                 assertEquals(LocalMediaRelationStatus.DECLARED,it.relationStatus);assertEquals(2,it.originals.size);assertEquals(2,it.metadata.size)
             }
         }
-        fun insert(collection:Uri,path:String,name:String,mime:String,data:ByteArray,pending:Boolean=false):Uri {
+        fun insert(collection:Uri,path:String,name:String,mime:String,data:ByteArray,pending:Boolean=false): Uri {
             val uri=resolver.insert(collection,ContentValues().apply {
                 put(MediaStore.MediaColumns.RELATIVE_PATH,path);put(MediaStore.MediaColumns.DISPLAY_NAME,name);put(MediaStore.MediaColumns.MIME_TYPE,mime);put(MediaStore.MediaColumns.IS_PENDING,1)
             })!!;uris+=uri;resolver.openOutputStream(uri,"w")!!.use { it.write(data) }
@@ -265,9 +265,9 @@ class MediaRenamingDeviceTest {
         }
         fun snapshot(take:LocalMediaTake)=(take.originals+take.metadata).associate { it.uri to bytes(it.uri) }
         fun assertBytes(before:Map<String,ByteArray>)=before.forEach { (uri,data) -> assertArrayEquals(data,bytes(uri)) }
-        fun isolatedContext():Pair<Context,File> {
+        fun isolatedContext(): Pair<Context,File> {
             val dir=File(context.cacheDir,"rename-private-${UUID.randomUUID()}").apply { mkdirs() };privateDirs+=dir
-            return object:ContextWrapper(context) { override fun getApplicationContext():Context=this;override fun getNoBackupFilesDir():File=dir } to dir
+            return object:ContextWrapper(context) { override fun getApplicationContext(): Context=this;override fun getNoBackupFilesDir(): File=dir } to dir
         }
         fun close() {
             uris.asReversed().forEach { if(exists(it.toString())) assertEquals(1,resolver.delete(it,null,null)) }

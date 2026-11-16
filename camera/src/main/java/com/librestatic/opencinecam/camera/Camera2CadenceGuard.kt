@@ -144,7 +144,7 @@ internal fun Camera2PreviewEngine.checkQcomHold(result: TotalCaptureResult) {
     val iso = result.get(android.hardware.camera2.CaptureResult.SENSOR_SENSITIVITY)
     if (sinceMs >= 300 && !cadenceQcomLogged) {
         cadenceQcomLogged = true
-        Log.i(CADENCE_TAG, "qcom hold at ${sinceMs} ms: exposure=${exposure?.let { "%.2f ms".format(it / 1e6) }} iso=$iso " +
+        Log.i(CADENCE_TAG, "qcom hold at $sinceMs ms: exposure=${exposure?.let { "%.2f ms".format(it / 1e6) }} iso=$iso " +
             "boost=${result.get(android.hardware.camera2.CaptureResult.CONTROL_POST_RAW_SENSITIVITY_BOOST)}")
     }
     if (sinceMs >= 600 && qcomHoldIgnored(exposure, cadenceHeldExposureNs())) {
@@ -245,11 +245,11 @@ internal fun Camera2PreviewEngine.observeCadenceLuma(analysis: Camera2Analysis, 
     val awaiting = cadenceIsoLoop.awaitingEffect
     val measured = cadenceIsoLoop.update(SystemClock.elapsedRealtimeNanos(), luma, scale, analysis.sensorTimestampNs)
     if (awaiting && !cadenceIsoLoop.awaitingEffect) {
-        Log.w(CADENCE_TAG, "jumped iso ${cadenceHeldIso} never reported within ${CadenceIsoLoop.EFFECT_TIMEOUT_NS / 1_000_000} ms; last result $cadenceLastResultIso")
+        Log.w(CADENCE_TAG, "jumped iso $cadenceHeldIso never reported within ${CadenceIsoLoop.EFFECT_TIMEOUT_NS / 1_000_000} ms; last result $cadenceLastResultIso")
     }
     if (lensPending && !cadenceIsoLoop.lensPending) {
         Log.i(CADENCE_TAG, "lens $cadenceLensId first frame ${(SystemClock.elapsedRealtimeNanos() - cadenceLensSwitchAtNs) / 1_000_000} ms after the switch: " +
-            "luma=${"%.4f".format(luma)} iso ${cadenceHeldIso}")
+            "luma=${"%.4f".format(luma)} iso $cadenceHeldIso")
         cadenceMeasuredLensId = cadenceLensId
     } else if (!lensPending) cadenceMeasuredLensId = cadenceLensId
     if (measured != null) {
@@ -366,10 +366,6 @@ internal fun Camera2PreviewEngine.checkSustainedCadence(sensorTimestamp: Long?, 
 }
 
 /**
- * FPS LOCK engaged: AE stays on and still picks the ISO, but the shutter is held a hair under the
- * frame time so the HAL cannot stretch the frame. Compensation and antibanding stay as set above.
- */
-/**
  * The sensor part of the held ISO stops at the lowest sensor maximum of the logical camera's
  * lenses, the boost making up the rest. The HAL hands the next lens the request as it is, and a
  * lens clamps what its sensor cannot reach (the Razr Fold's ultrawide and tele stop at 6400, the
@@ -389,6 +385,10 @@ internal fun Camera2PreviewEngine.cadenceSensorIsoRange(range: IntRange): IntRan
     return range.first..top
 }
 
+/**
+ * FPS LOCK engaged: AE stays on and still picks the ISO, but the shutter is held a hair under the
+ * frame time so the HAL cannot stretch the frame. Compensation and antibanding stay as set above.
+ */
 internal fun Camera2PreviewEngine.applyCadenceHold(builder: CaptureRequest.Builder) {
     val heldIso = cadenceHeldIso
     val exposureNs = cadenceHoldExposureNs()

@@ -69,7 +69,6 @@ import com.librestatic.opencinecam.camera.AfLockBehavior
 import com.librestatic.opencinecam.camera.FocusPullEasing
 import com.librestatic.opencinecam.camera.SmpteTimecode
 import com.librestatic.opencinecam.camera.TimecodeRate
-import com.librestatic.opencinecam.camera.TimecodeMode
 import com.librestatic.opencinecam.camera.TimecodeTracker
 import com.librestatic.opencinecam.camera.HdrVideoFormat
 import com.librestatic.opencinecam.camera.OpenCineLogSourcePath
@@ -803,8 +802,8 @@ class CaptureService : Service() {
     @Volatile internal var rawArmedRing: com.librestatic.opencinecam.rawvideo.RawVideoArmState? = null
     /** The mode RAW_VIDEO was entered from, restored when the camera refuses the RAW graph. */
     internal var rawModeFallback: CaptureMode? = null
-    /** [destination] is where the take writes, resolved when it was admitted (PLAN-072 Delivery 3). */
     /**
+     * [destination] is where the take writes, resolved when it was admitted (PLAN-072 Delivery 3).
      * [captureNames] and [audio] are what the take was admitted with; [continuation] is set when it continues on the phone
      * a RAW take whose drive was lost (PLAN-072 Delivery 4), and names its file and metadata.
      */
@@ -1974,7 +1973,7 @@ class CaptureService : Service() {
                 effectiveFps = null,
                 messageTransient = snappedFps || selectedFps != current.targetFps,
                 message = fpsUnavailableNotice(snappedFps || selectedFps != current.targetFps, current.selectedMode, current.targetFps, selectedFps)
-                    ?: "$sourceLabel ${width}×$height · $selectedFps fps${if (selectedHighSpeed) " · " + getString(R.string.capture_high_speed) else ""}",
+                    ?: "$sourceLabel $width×$height · $selectedFps fps${if (selectedHighSpeed) " · " + getString(R.string.capture_high_speed) else ""}",
             )
             if (current.selectedMode.usesLogGraph) {
                 attachedPreviewSurface?.takeIf { it.isValid }?.let { surface ->
@@ -2344,7 +2343,6 @@ class CaptureService : Service() {
             applySettings(repository.states.value)
         }
 
-        /** [audioForThisTake] overrides the persisted audio switch for one recording only. */
         /** UI actions retain their originating take and display role, not the next live take. */
         fun setRecordingPausedForRole(paused: Boolean, takeId: Long, ticket: CaptureActionTicket): Boolean {
             if (!ticket.isCurrent(selfRecordingRole, cameraState.value.captureActionGeneration) ||
@@ -2441,6 +2439,7 @@ class CaptureService : Service() {
             return true
         }
 
+        /** [audioForThisTake] overrides the persisted audio switch for one recording only. */
         fun capturePrimary(audioForThisTake: Boolean? = null): Boolean {
             if (captureCountdown.active != null) { cancelCountdown(); return true }
             return capturePrimaryNow(audioForThisTake)

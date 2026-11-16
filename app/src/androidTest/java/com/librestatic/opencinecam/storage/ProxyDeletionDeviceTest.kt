@@ -2,7 +2,6 @@
 package com.librestatic.opencinecam.storage
 
 import android.content.ContentValues
-import android.net.Uri
 import android.provider.MediaStore
 import android.util.AtomicFile
 import androidx.core.net.toUri

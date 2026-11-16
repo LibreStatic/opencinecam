@@ -19,7 +19,6 @@ import android.os.HandlerThread
 import android.os.StatFs
 import android.os.SystemClock
 import android.util.Log
-import android.util.Range
 import android.util.Size
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -250,7 +249,7 @@ class RawVideoProbeDeviceTest {
             val intervals = (1 until count).map { (timestamps[it] - timestamps[it - 1]) / 1_000_000.0 }.sorted()
             val frameBytes = if (delivered.get() > 0) written.get() / maxOf(1, delivered.get() - queue.size) else 0
             return JSONObject()
-                .put("mode", if (manual) "manual" else "ae ${aeRange}")
+                .put("mode", if (manual) "manual" else "ae $aeRange")
                 .put("completedFps", completed.get() / elapsed)
                 .put("deliveredFps", delivered.get() / elapsed)
                 .put("sensorIntervalMs", JSONObject()

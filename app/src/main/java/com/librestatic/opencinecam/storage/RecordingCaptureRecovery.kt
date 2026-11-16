@@ -770,7 +770,7 @@ internal class SafRecordingRows(
     override fun verify(id: String, row: RecordingRow, pending: Int) {
         val actual = docs.describe(row.uri)
         check(actual != null && actual.name == row.name && inFolder(row.uri)) {
-            "Recording output identity or publication changed: expected=${row.name} in ${folder}; actual=${actual?.name}"
+            "Recording output identity or publication changed: expected=${row.name} in $folder; actual=${actual?.name}"
         }
         if (pending == 1) check(markerExists()) { "Recording take is no longer in progress" }
     }

@@ -3,6 +3,7 @@
 
 plugins {
     id("com.android.library")
+    id("org.jetbrains.kotlinx.kover")
 }
 
 android {
@@ -20,4 +21,13 @@ dependencies {
     implementation(libs.androidx.exifinterface)
     implementation(libs.kotlinx.serialization.json)
     testImplementation("junit:junit:4.13.2")
+}
+
+// Coverage of the debug unit tests, merged by the root project's koverHtmlReportUnit.
+kover {
+    currentProject {
+        createVariant("unit") {
+            add("debug")
+        }
+    }
 }

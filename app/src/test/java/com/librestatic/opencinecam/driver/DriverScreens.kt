@@ -557,7 +557,7 @@ fun CaptureRawVideo() = CaptureChrome(driverRawVideoState(), DriverRawVideoSetti
  * into two rows (`capture-status-line-top` / `-bottom`) instead of ending in an ellipsis.
  */
 @Composable
-fun CaptureRawVideoStatus(): Unit {
+fun CaptureRawVideoStatus() {
     val context = androidx.compose.ui.platform.LocalContext.current
     remember {
         val battery = context.getSystemService(android.content.Context.BATTERY_SERVICE) as android.os.BatteryManager
@@ -645,7 +645,6 @@ fun CaptureRawVideoRecording() = CaptureChrome(
     driverRawVideoState(CameraUiPhase.RECORDING).copy(recordingElapsedMs = 42_000L, rawVideoRingPercent = 37, rawVideoFramesWritten = 1_260L),
     DriverRawVideoSettings,
 )
-
 
 /**
  * RAW video with the next take going to the USB drive (PLAN-072 Delivery 3): the "USB storage" chip beside the status line, whose
@@ -1430,7 +1429,6 @@ fun GalleryDrive() = GalleryWith(FakeCatalog(SampleWithDriveTakes))
 @Composable
 fun GalleryDriveInspector() = GalleryWith(FakeCatalog(SampleWithDriveTakes), initialSelection = SampleDriveTakes.first().take.id)
 
-/** The media catalog with no takes yet. */
 /**
  * The sample takes with two RAW video takes (`.ocraw`): RAW10 and near-lossless badges, size in place of the length;
  * the first with its developed first frame (a fake gradient), the second whose frame gave no picture, so the placeholder.
@@ -1511,6 +1509,7 @@ internal class FakeExports(state: CinemaDngExportState) : CinemaDngExportControl
     override fun acknowledge() {}
 }
 
+/** The media catalog with no takes yet. */
 @Composable
 fun GalleryEmpty() = GalleryWith(FakeCatalog(emptyList()))
 

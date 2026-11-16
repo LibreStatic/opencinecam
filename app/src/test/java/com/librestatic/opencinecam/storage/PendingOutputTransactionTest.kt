@@ -21,7 +21,7 @@ class PendingOutputTransactionTest {
     @Test fun preparationOrPublicationFailureDeletesAndStaysTerminal() {
         for(stage in listOf("prepare","publish")) {
             var deleted=0;val error=IllegalStateException(stage);val t=PendingOutputTransaction("uri",{}, {deleted++})
-            assertSame(error,assertThrows(IllegalStateException::class.java) { t.finish(true,{if(stage=="prepare")throw error},{if(stage=="publish")throw error}) })
+            assertSame(error,assertThrows(IllegalStateException::class.java) { t.finish(true,{if(stage=="prepare") throw error},{if(stage=="publish") throw error}) })
             assertEquals(1,deleted);assertNull(t.finish(true))
         }
     }

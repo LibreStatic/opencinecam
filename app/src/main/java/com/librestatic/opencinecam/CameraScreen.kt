@@ -199,7 +199,6 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
 
     @Composable
     fun MainContent() {
-
     if (!permissionGranted) {
         PermissionScreen(blocked = cameraAccess.blocked, onGrant = cameraAccess.request)
         return
@@ -419,7 +418,6 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
     }
     }
     }
-
 }
 
 private const val HandoffWaitMillis = 1_500L

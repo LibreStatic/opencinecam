@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam.camera
 
-import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import org.junit.Assert.*

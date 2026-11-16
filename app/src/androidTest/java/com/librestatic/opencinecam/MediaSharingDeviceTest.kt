@@ -174,7 +174,7 @@ LUT_3D_SIZE 2
         assertArrayEquals(original,bytes(take.primary.uri))
     }
 
-    private fun receive(share:PreparedMediaShare,ungranted:Uri):Bundle {
+    private fun receive(share:PreparedMediaShare,ungranted:Uri): Bundle {
         instrumentation.uiAutomation.grantRuntimePermission(context.packageName,Manifest.permission.CAMERA)
         val intent=share.buildIntent()
         assertEquals(Intent.ACTION_SEND_MULTIPLE,intent.action)
@@ -197,7 +197,7 @@ LUT_3D_SIZE 2
         return result
     }
     private fun json(share:PreparedMediaShare,role:MediaShareRole)=Json.parseToJsonElement(bytes(share.files.single { it.role==role }.uri).toString(Charsets.UTF_8)).jsonObject
-    private fun hasProductionNode(value:JsonElement):Boolean=when(value) {
+    private fun hasProductionNode(value:JsonElement): Boolean=when(value) {
         is JsonObject -> "productionSlate" in value || value.values.any(::hasProductionNode)
         is JsonArray -> value.any(::hasProductionNode)
         else -> false
@@ -210,23 +210,23 @@ LUT_3D_SIZE 2
         val jpeg=Bitmap.createBitmap(16,16,Bitmap.Config.ARGB_8888).let { bitmap ->
             try { java.io.ByteArrayOutputStream().use { out -> bitmap.eraseColor(android.graphics.Color.GREEN);check(bitmap.compress(Bitmap.CompressFormat.JPEG,90,out));out.toByteArray() } } finally { bitmap.recycle() }
         }
-        fun photo():LocalMediaTake {
+        fun photo(): LocalMediaTake {
             val image=StillImageSaver(context).saveJpeg(jpeg,ProductionSlateSettings(project=token,scene="Private scene",takeNumber=9,goodTake=true));uris+=image
             val take=LocalMediaRepository(context).page(GallerySettings(),token).takes.single()
             uris+=take.metadata.map { it.uri.toUri() };return take
         }
         fun prepare(take:LocalMediaTake,settings:MediaSharingSettings=MediaSharingSettings())=MediaShareExporter(context).prepare(take,settings).also { shares+=it }
-        fun insert(collection:Uri,path:String,name:String,mime:String,data:ByteArray):Uri {
+        fun insert(collection:Uri,path:String,name:String,mime:String,data:ByteArray): Uri {
             val uri=resolver.insert(collection,ContentValues().apply {
                 put(MediaStore.MediaColumns.RELATIVE_PATH,path);put(MediaStore.MediaColumns.DISPLAY_NAME,name);put(MediaStore.MediaColumns.MIME_TYPE,mime);put(MediaStore.MediaColumns.IS_PENDING,1)
             })!!;uris+=uri;resolver.openOutputStream(uri,"w")!!.use { it.write(data) }
             assertEquals(1,resolver.update(uri,ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING,0) },null,null));return uri
         }
-        fun isolatedContext():Pair<Context,File> {
+        fun isolatedContext(): Pair<Context,File> {
             val dir=File(context.cacheDir,"share-private-${UUID.randomUUID()}").apply { mkdirs() };privateDirs+=dir
-            return object:ContextWrapper(context) { override fun getApplicationContext():Context=this;override fun getNoBackupFilesDir():File=dir } to dir
+            return object:ContextWrapper(context) { override fun getApplicationContext(): Context=this;override fun getNoBackupFilesDir(): File=dir } to dir
         }
-        fun ungrantedSibling():Uri {
+        fun ungrantedSibling(): Uri {
             val dir=File(context.cacheDir,"media-exports/${UUID.randomUUID()}").apply { mkdirs() };privateDirs+=dir
             val file=File(dir,"take.production.json").apply { writeText("ungranted fixture") }
             return FileProvider.getUriForFile(context,"${context.packageName}.mediaexports",file)

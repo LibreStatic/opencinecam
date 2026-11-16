@@ -595,5 +595,4 @@ class SubjectPreviewGpuTest {
             } finally { resume.countDown(); descriptor.close(); file.delete() }
         }
     }
-
 }

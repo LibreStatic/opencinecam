@@ -350,5 +350,4 @@ class LutLibraryTest {
         val reset = library.activeSelections()
         assertTrue(reset.available); assertNull(reset.recording)
     }
-
 }

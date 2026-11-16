@@ -200,5 +200,4 @@ class StillPhotoTest {
         assertNull(failure.get())
         assertEquals(0L, budget.usedBytes())
     }
-
 }

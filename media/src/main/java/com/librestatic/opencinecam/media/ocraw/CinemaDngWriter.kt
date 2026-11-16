@@ -866,7 +866,7 @@ class CinemaDngWriter(
             return code
         }
 
-        /** Unpacks [groups] RAW10 groups from `src[at...]` to little-endian 16-bit samples at `dst.position()`. */
+        /** Unpacks [groups] RAW10 groups from `src`, starting at byte `at`, to little-endian 16-bit samples at `dst.position()`. */
         internal fun unpackRaw10(src: ByteBuffer, at: Int, groups: Int, dst: ByteBuffer) {
             var i = at
             repeat(groups) {

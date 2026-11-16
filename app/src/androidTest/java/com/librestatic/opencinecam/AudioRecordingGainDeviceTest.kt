@@ -115,7 +115,7 @@ class AudioRecordingGainDeviceTest {
             audioBitDepth = depth, audioSampleRateHz = 48000, audioChannels = channels,
             audioSource = AudioSourceSelection.MIC, automaticGainControlEnabled = true,
             audioRecordingGain = gain, noiseSuppressorEnabled = false, acousticEchoCancelerEnabled = false)
-        val stem = "E15_${if (flac) "FLAC" else "WAV"}_${depth.name}_${channels}"
+        val stem = "E15_${if (flac) "FLAC" else "WAV"}_${depth.name}_$channels"
         val videoName = "${stem}_${UUID.randomUUID()}.mp4"
         val levels = CopyOnWriteArrayList<AudioLevelSnapshot>()
         val observed = CountDownLatch(3)

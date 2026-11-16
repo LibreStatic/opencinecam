@@ -3,7 +3,6 @@ package com.librestatic.opencinecam.storage
 
 import android.content.ContentValues
 import android.content.Intent
-import android.net.Uri
 import android.provider.MediaStore
 import android.util.AtomicFile
 import androidx.core.net.toUri
@@ -13,7 +12,6 @@ import com.librestatic.opencinecam.gallery.ProxySettings
 import java.io.File
 import java.security.MessageDigest
 import java.util.UUID
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.jsonObject

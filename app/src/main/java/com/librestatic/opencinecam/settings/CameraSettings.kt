@@ -20,9 +20,6 @@ import com.librestatic.opencinecam.gallery.PlaybackSettings
 import com.librestatic.opencinecam.gallery.ProxySettings
 import com.librestatic.opencinecam.gallery.RawPlaybackMode
 import com.librestatic.opencinecam.camera.MonitoringOptions
-import com.librestatic.opencinecam.camera.MonitorColor
-import com.librestatic.opencinecam.camera.FalseColorPalette
-import com.librestatic.opencinecam.camera.MonitorAspectGuide
 import com.librestatic.opencinecam.camera.ImageProcessingSelection
 import com.librestatic.opencinecam.camera.StabilizationMode
 import com.librestatic.opencinecam.camera.IspMode

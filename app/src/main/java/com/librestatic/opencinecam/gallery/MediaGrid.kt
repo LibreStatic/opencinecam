@@ -69,8 +69,10 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
 
-/** What MediaStore knows about a file beyond its name: duration, frame size and HDR transfer. */
-/** [codec] is a RAW take's, read from its file; null for every other kind, whose badge needs no read. */
+/**
+ * What MediaStore knows about a file beyond its name: duration, frame size and HDR transfer.
+ * [codec] is a RAW take's, read from its file; null for every other kind, whose badge needs no read.
+ */
 internal data class GalleryFacts(val durationMs: Long? = null, val width: Int? = null, val height: Int? = null, val hdr: Boolean = false,
     val codec: CodecBadge? = null)
 
