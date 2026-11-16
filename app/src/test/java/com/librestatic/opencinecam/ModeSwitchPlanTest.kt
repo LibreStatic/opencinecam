@@ -9,6 +9,7 @@ import com.librestatic.opencinecam.camera.Camera2VideoProfile
 import com.librestatic.opencinecam.capture.ModeSwitchPlan
 import com.librestatic.opencinecam.capture.planModeSwitch
 import com.librestatic.opencinecam.driver.DriverCamera
+import com.librestatic.opencinecam.settings.CameraSettings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test

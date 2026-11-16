@@ -35,6 +35,8 @@ import com.librestatic.opencinecam.capture.StartupMode
 import com.librestatic.opencinecam.capture.ThermalHudChip
 import com.librestatic.opencinecam.camera.analyzeMonitoringRgb
 import com.librestatic.opencinecam.service.CaptureService
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.SettingsRepositories
 import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.*
 import org.junit.Rule

@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.camera.*
 import com.librestatic.opencinecam.capture.composeColor
+import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.ui.CineIcon
 
 /** Edits monitoring intent only; signal sampling and output eligibility belong to the backend. */

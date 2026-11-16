@@ -3,7 +3,7 @@
 
 package com.librestatic.opencinecam.capture
 
-import com.librestatic.opencinecam.ViewfinderScale
+import com.librestatic.opencinecam.settings.ViewfinderScale
 
 /** Window profiles used by the capture chrome. Expanded windows use the horizontal deck. */
 internal enum class CaptureWindowProfile { COMPACT_PORTRAIT, COMPACT_LANDSCAPE, EXPANDED }

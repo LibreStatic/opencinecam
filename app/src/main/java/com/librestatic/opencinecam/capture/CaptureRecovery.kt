@@ -4,7 +4,7 @@ package com.librestatic.opencinecam.capture
 import android.content.Context
 import com.librestatic.opencinecam.CameraUiState
 import com.librestatic.opencinecam.CaptureMode
-import com.librestatic.opencinecam.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettings
 
 /**
  * The capture configuration that last reached a live preview. A failed preview must never trap the

@@ -5,7 +5,7 @@ package com.librestatic.opencinecam.service
 
 import com.librestatic.opencinecam.CameraUiPhase
 import com.librestatic.opencinecam.CaptureMode
-import com.librestatic.opencinecam.TimeLapseLimitMode
+import com.librestatic.opencinecam.settings.TimeLapseLimitMode
 import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.core.model.StableFailure
 import kotlinx.coroutines.flow.update

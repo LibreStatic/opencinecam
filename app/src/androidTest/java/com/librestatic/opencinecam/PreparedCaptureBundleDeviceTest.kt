@@ -15,6 +15,7 @@ import com.librestatic.opencinecam.gallery.GallerySettings
 import com.librestatic.opencinecam.media.audio.AudioBitDepth
 import com.librestatic.opencinecam.media.audio.AudioSourceSelection
 import com.librestatic.opencinecam.metadata.parseProductionSlateJson
+import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.storage.*
 import com.librestatic.opencinecam.transfers.*
 import java.io.File

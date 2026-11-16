@@ -15,6 +15,7 @@ import com.librestatic.opencinecam.capture.CaptureSurface
 import com.librestatic.opencinecam.fold.FoldDisplayState
 import com.librestatic.opencinecam.fold.FoldHinge
 import com.librestatic.opencinecam.fold.FoldPosture
+import com.librestatic.opencinecam.settings.CameraSettings
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test

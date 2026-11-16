@@ -16,6 +16,7 @@ import com.librestatic.opencinecam.camera.NIGHT_EXTENSION_MIN_SDK
 import com.librestatic.opencinecam.camera.NightPhotoMode
 import com.librestatic.opencinecam.camera.nightExtensionEngaged
 import com.librestatic.opencinecam.camera.nightPhotoRequested
+import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
 
 /**

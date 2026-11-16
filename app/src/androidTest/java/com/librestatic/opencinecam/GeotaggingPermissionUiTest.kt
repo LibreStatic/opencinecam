@@ -12,6 +12,7 @@ import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.core.content.ContextCompat
 import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.onboarding.OnboardingStore
+import com.librestatic.opencinecam.settings.SettingsRepositories
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test

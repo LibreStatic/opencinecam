@@ -70,6 +70,7 @@ import com.librestatic.opencinecam.gallery.MediaDialogFrame
 import com.librestatic.opencinecam.camera.coerced
 import com.librestatic.opencinecam.service.CaptureService
 import com.librestatic.opencinecam.service.EqAuditionState
+import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.ui.CineGlyph
 import com.librestatic.opencinecam.ui.CineIcon
 import com.librestatic.opencinecam.ui.CineSlider

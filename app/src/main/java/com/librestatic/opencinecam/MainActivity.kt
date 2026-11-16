@@ -47,6 +47,7 @@ import com.librestatic.opencinecam.fold.LocalFoldDisplayCoordinator
 import com.librestatic.opencinecam.onboarding.OnboardingStore
 import com.librestatic.opencinecam.onboarding.SplashHandoff
 import com.librestatic.opencinecam.service.CaptureStartup
+import com.librestatic.opencinecam.settings.SettingsRepositories
 import com.librestatic.opencinecam.storage.RecordingDestinationStore
 import com.librestatic.opencinecam.ui.ProvideAdaptiveWindow
 import com.librestatic.opencinecam.ui.theme.AppTheme

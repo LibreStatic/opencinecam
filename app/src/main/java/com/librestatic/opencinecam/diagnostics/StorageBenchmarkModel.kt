@@ -16,7 +16,7 @@ import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.core.model.canonicalJson
 import com.librestatic.opencinecam.core.model.checkSchemaCompatibility
 import com.librestatic.opencinecam.service.projectedTakeBytesPerMinute
-import com.librestatic.opencinecam.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.usesLogGraph
 import java.io.File
 import java.util.Locale

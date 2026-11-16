@@ -14,6 +14,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.camera.CaptureFrameRate
+import com.librestatic.opencinecam.settings.CameraSettings
 
 @Composable
 internal fun ProjectRateEditor(rate: CaptureFrameRate, tag: String, onChange: (CaptureFrameRate) -> Unit) {

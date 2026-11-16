@@ -8,6 +8,7 @@ import com.librestatic.opencinecam.camera.EqProfile
 import com.librestatic.opencinecam.camera.isBundledEqProfileId
 import com.librestatic.opencinecam.media.audio.AudioSourceSelection
 import com.librestatic.opencinecam.media.audio.ProfessionalAudioCapabilities
+import com.librestatic.opencinecam.settings.CameraSettings
 
 /** The audio input a phone starts with (PLAN-074 decision 1): the source and its equaliser. */
 data class AudioInputDefault(val source: AudioSourceSelection, val eqProfileId: String?, val eqCurve: EqCurve)

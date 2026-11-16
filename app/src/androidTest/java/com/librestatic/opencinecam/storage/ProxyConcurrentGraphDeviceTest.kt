@@ -10,7 +10,7 @@ import android.os.SystemClock
 import android.provider.MediaStore
 import androidx.core.net.toUri
 import androidx.test.platform.app.InstrumentationRegistry
-import com.librestatic.opencinecam.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.gallery.GallerySettings
 import com.librestatic.opencinecam.ProductionSlateSettings
 import com.librestatic.opencinecam.gallery.ProxySettings

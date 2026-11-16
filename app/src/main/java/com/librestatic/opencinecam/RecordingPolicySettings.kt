@@ -4,6 +4,7 @@ package com.librestatic.opencinecam
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
 import com.librestatic.opencinecam.core.model.PolicyMode
+import com.librestatic.opencinecam.settings.CameraSettings
 
 internal const val RECORDING_POLICY_SETTING_ID = "recording-policy"
 

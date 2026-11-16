@@ -10,6 +10,7 @@ import androidx.test.espresso.Espresso
 import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.gallery.GallerySettings
 import com.librestatic.opencinecam.gallery.PlaybackSettings
+import com.librestatic.opencinecam.settings.SettingsRepositories
 import com.librestatic.opencinecam.storage.LocalMediaTake
 import org.junit.Assert.*
 import org.junit.Rule

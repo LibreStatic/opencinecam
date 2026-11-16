@@ -70,12 +70,12 @@ import com.librestatic.opencinecam.AudioMeterMode
 import com.librestatic.opencinecam.AudioMeterPeakHold
 import com.librestatic.opencinecam.AudioMeterSettings
 import com.librestatic.opencinecam.audioOutputLabel
-import com.librestatic.opencinecam.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.captureStatusFreeBytes
 import com.librestatic.opencinecam.currentAudioMeterSnapshot
 import com.librestatic.opencinecam.displayDb
 import com.librestatic.opencinecam.formatAudioRate
-import com.librestatic.opencinecam.HistogramMode
+import com.librestatic.opencinecam.settings.HistogramMode
 import com.librestatic.opencinecam.subject.OutOfFrameHudChip
 import com.librestatic.opencinecam.ui.CineIcon
 import com.librestatic.opencinecam.ui.cineMarquee

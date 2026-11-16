@@ -2,7 +2,7 @@
 package com.librestatic.opencinecam.calibration
 
 import com.librestatic.opencinecam.core.model.CalibrationFlag
-import com.librestatic.opencinecam.SettingsCatalog
+import com.librestatic.opencinecam.settings.SettingsCatalog
 import java.util.Locale
 import org.junit.Test
 import org.junit.Assert.assertEquals

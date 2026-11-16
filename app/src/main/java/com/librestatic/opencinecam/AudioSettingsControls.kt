@@ -35,6 +35,12 @@ import com.librestatic.opencinecam.capture.audioMeterModeLabel
 import com.librestatic.opencinecam.capture.Muted
 import com.librestatic.opencinecam.capture.VerifiedCyan
 import com.librestatic.opencinecam.media.audio.AudioOutputFormat
+import com.librestatic.opencinecam.settings.AUDIO_SYNC_OFFSET_RANGE_MS
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.decodeAudioInputKey
+import com.librestatic.opencinecam.settings.encodeAudioInputKey
+import com.librestatic.opencinecam.settings.normalizedFor
+import com.librestatic.opencinecam.settings.resolveAudioInputSelection
 import com.librestatic.opencinecam.ui.CineSlider
 import com.librestatic.opencinecam.media.audio.AudioBitDepth
 import kotlin.math.roundToInt

@@ -9,6 +9,14 @@ import com.librestatic.opencinecam.media.audio.AudioSourceSelection
 import com.librestatic.opencinecam.media.audio.PcmAudioConfiguration
 import com.librestatic.opencinecam.media.audio.ProfessionalAudioCapabilities
 import com.librestatic.opencinecam.media.audio.SelectableAudioInput
+import com.librestatic.opencinecam.settings.audioInputUnavailable
+import com.librestatic.opencinecam.settings.CameraPresetCodec
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettingsStore
+import com.librestatic.opencinecam.settings.decodeAudioInputKey
+import com.librestatic.opencinecam.settings.encodeAudioInputKey
+import com.librestatic.opencinecam.settings.normalizedFor
+import com.librestatic.opencinecam.settings.PresetPreferences
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull

@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.camera.OpenCineLogGreyReference
+import com.librestatic.opencinecam.settings.CameraSettings
 
 /** OCLog2 middle-grey reference between source tiers; see docs/color/opencine-log-v2.md. */
 @Composable

@@ -18,6 +18,12 @@ import com.librestatic.opencinecam.fold.SubjectSessionCues
 import com.librestatic.opencinecam.fold.SubjectSlateField
 import com.librestatic.opencinecam.fold.transferBrightnessRequest
 import com.librestatic.opencinecam.fold.wantsCameraPreview
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettingsStore
+import com.librestatic.opencinecam.settings.PresetPreferences
+import com.librestatic.opencinecam.settings.SettingsCatalog
+import com.librestatic.opencinecam.settings.SettingsCategory
+import com.librestatic.opencinecam.settings.withLivePreferencesFrom
 import com.librestatic.opencinecam.subject.parseInterviewQuestions
 import kotlinx.serialization.json.JsonPrimitive
 import org.junit.Assert.*

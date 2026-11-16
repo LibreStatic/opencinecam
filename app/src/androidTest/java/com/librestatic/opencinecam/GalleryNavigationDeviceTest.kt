@@ -11,6 +11,7 @@ import com.librestatic.opencinecam.gallery.MediaShareContent
 import com.librestatic.opencinecam.gallery.MediaShareMetadata
 import com.librestatic.opencinecam.gallery.takeTitleText
 import com.librestatic.opencinecam.onboarding.OnboardingStore
+import com.librestatic.opencinecam.settings.SettingsRepositories
 import com.librestatic.opencinecam.storage.LocalMediaRepository
 import com.librestatic.opencinecam.storage.StillImageSaver
 import java.util.UUID

@@ -16,7 +16,7 @@ All paths are under [`app/src/main/java/com/librestatic/opencinecam/`](../../app
 | Fill light dimming | [`SubjectFillLightPolicy.kt`](../../app/src/main/java/com/librestatic/opencinecam/subject/SubjectFillLightPolicy.kt) |
 | Self capture on the cover | [`SelfCaptureChrome.kt`](../../app/src/main/java/com/librestatic/opencinecam/capture/SelfCaptureChrome.kt) |
 | Displays menu | [`FoldDisplaySettings.kt`](../../app/src/main/java/com/librestatic/opencinecam/fold/FoldDisplaySettings.kt). It is shown in the capture pane (`CapturePane.Displays` in [`AdaptiveCaptureChrome.kt`](../../app/src/main/java/com/librestatic/opencinecam/capture/AdaptiveCaptureChrome.kt)) and in the Settings card `fold-displays` |
-| Persisted preferences | `SubjectDisplaySettings`, persisted through [`CameraSettings.kt`](../../app/src/main/java/com/librestatic/opencinecam/CameraSettings.kt) |
+| Persisted preferences | `SubjectDisplaySettings`, persisted through [`CameraSettings.kt`](../../app/src/main/java/com/librestatic/opencinecam/settings/CameraSettings.kt) |
 
 ## States and roles
 

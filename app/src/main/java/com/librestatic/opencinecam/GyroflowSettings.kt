@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.librestatic.opencinecam.settings.CameraSettings
 
 /** Motion data needs a gyroscope; without one the setting is hidden and nothing is ever recorded. */
 internal fun deviceHasGyroscope(context: Context): Boolean = runCatching {

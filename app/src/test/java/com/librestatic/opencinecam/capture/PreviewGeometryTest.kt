@@ -3,7 +3,7 @@
 
 package com.librestatic.opencinecam.capture
 
-import com.librestatic.opencinecam.ViewfinderScale
+import com.librestatic.opencinecam.settings.ViewfinderScale
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

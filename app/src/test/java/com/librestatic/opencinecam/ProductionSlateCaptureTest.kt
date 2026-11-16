@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam
 
+import com.librestatic.opencinecam.settings.CameraSettings
 import org.junit.Assert.*
 import org.junit.Test
 

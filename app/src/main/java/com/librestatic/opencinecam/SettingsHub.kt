@@ -32,6 +32,10 @@ import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.capture.rawVideoSettingsShown
 import com.librestatic.opencinecam.fold.FoldDisplayState
 import com.librestatic.opencinecam.fold.LocalFoldDisplayCoordinator
+import com.librestatic.opencinecam.settings.CameraPreset
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.SettingsCatalog
+import com.librestatic.opencinecam.settings.SettingsCategory
 import com.librestatic.opencinecam.ui.CineGlyph
 import com.librestatic.opencinecam.ui.CineIcon
 import com.librestatic.opencinecam.ui.predictiveBackPreview

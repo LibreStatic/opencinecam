@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam
 
+import com.librestatic.opencinecam.settings.CameraSettings
+
 /** Called only after committed media. Never overwrite a next-take edit or wrap at the limit.
  * UUID media identity is independent; this optional editorial number is not a crash-atomic ID. */
 internal fun afterSavedProductionSlate(current: CameraSettings, saved: ProductionSlateSettings): CameraSettings =

@@ -13,6 +13,7 @@ import com.librestatic.opencinecam.camera.isBundledEqProfileId
 import com.librestatic.opencinecam.service.EQ_SNIPPET_MAX_MS
 import com.librestatic.opencinecam.service.EqAuditionPhase
 import com.librestatic.opencinecam.service.EqAuditionState
+import com.librestatic.opencinecam.settings.CameraSettings
 import java.math.BigDecimal
 import java.math.MathContext
 import java.text.NumberFormat

@@ -9,9 +9,9 @@ import com.librestatic.opencinecam.fold.DisplaySessionPhase
 import com.librestatic.opencinecam.fold.FoldDisplayState
 import com.librestatic.opencinecam.fold.SubjectDisplayMode
 import com.librestatic.opencinecam.fold.SubjectDisplaySettings
-import com.librestatic.opencinecam.CameraSettings
-import com.librestatic.opencinecam.SettingsPersistence
-import com.librestatic.opencinecam.SettingsRepository
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.SettingsPersistence
+import com.librestatic.opencinecam.settings.SettingsRepository
 import com.librestatic.opencinecam.storage.OcLogClip
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

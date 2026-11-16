@@ -1,7 +1,9 @@
 /* SPDX-License-Identifier: Apache-2.0 */
-package com.librestatic.opencinecam
+package com.librestatic.opencinecam.settings
 
 import com.librestatic.opencinecam.capture.rawVideoSettingsShown
+import com.librestatic.opencinecam.ModeGateState
+import com.librestatic.opencinecam.R
 import org.junit.Assert.*
 import org.junit.Test
 

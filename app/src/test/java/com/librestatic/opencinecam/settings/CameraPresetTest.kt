@@ -1,14 +1,17 @@
 /* SPDX-License-Identifier: Apache-2.0 */
-package com.librestatic.opencinecam
+package com.librestatic.opencinecam.settings
 
 import com.librestatic.opencinecam.camera.*
+import com.librestatic.opencinecam.CameraUiState
 import com.librestatic.opencinecam.capture.OperatorAction
 import com.librestatic.opencinecam.capture.OperatorPreferences
 import com.librestatic.opencinecam.capture.VolumeKeyPair
+import com.librestatic.opencinecam.CaptureMode
 import com.librestatic.opencinecam.fold.SubjectDisplayMode
 import com.librestatic.opencinecam.fold.SubjectDisplaySettings
 import com.librestatic.opencinecam.fold.SubjectPreviewGuide
 import com.librestatic.opencinecam.fold.SubjectSlateField
+import com.librestatic.opencinecam.readPresetDocument
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Test

@@ -10,6 +10,11 @@ import com.librestatic.opencinecam.capture.captureHold
 import com.librestatic.opencinecam.capture.CaptureSlot
 import com.librestatic.opencinecam.capture.captureSlotUnavailableReason
 import com.librestatic.opencinecam.capture.SlotUnavailableReason
+import com.librestatic.opencinecam.settings.CameraPreset
+import com.librestatic.opencinecam.settings.CameraPresetCodec
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettingsStore
+import com.librestatic.opencinecam.settings.PresetPreferences
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals

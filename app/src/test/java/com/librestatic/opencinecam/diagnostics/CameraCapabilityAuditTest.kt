@@ -10,7 +10,7 @@ import com.librestatic.opencinecam.camera.CharacteristicEntry
 import com.librestatic.opencinecam.camera.ExposureCapabilities
 import com.librestatic.opencinecam.camera.ExposureMode
 import com.librestatic.opencinecam.camera.TorchCapabilities
-import com.librestatic.opencinecam.SettingsCatalog
+import com.librestatic.opencinecam.settings.SettingsCatalog
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test

@@ -79,9 +79,9 @@ import com.librestatic.opencinecam.fold.FoldPane
 import com.librestatic.opencinecam.fold.foldPanes
 import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.service.CaptureService
-import com.librestatic.opencinecam.CameraSettings
-import com.librestatic.opencinecam.HistogramMode
-import com.librestatic.opencinecam.ViewfinderScale
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.HistogramMode
+import com.librestatic.opencinecam.settings.ViewfinderScale
 import com.librestatic.opencinecam.subject.InterviewOperatorControl
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlin.math.roundToInt

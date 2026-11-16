@@ -1,5 +1,11 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam
+import com.librestatic.opencinecam.settings.CameraPreset
+import com.librestatic.opencinecam.settings.CameraPresetCodec
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettingsStore
+import com.librestatic.opencinecam.settings.PresetPreferences
+import com.librestatic.opencinecam.settings.withTimecodeRate
 import org.junit.Assert.*
 import org.junit.Test
 

@@ -25,6 +25,9 @@ import com.librestatic.opencinecam.capture.CaptureActionTicket
 import com.librestatic.opencinecam.capture.OperatorPreferences
 import com.librestatic.opencinecam.capture.StartupMode
 import com.librestatic.opencinecam.service.CaptureService
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettingsStore
+import com.librestatic.opencinecam.settings.SettingsRepositories
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executor
 import java.util.concurrent.TimeUnit

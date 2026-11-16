@@ -6,6 +6,7 @@ package com.librestatic.opencinecam
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import com.librestatic.opencinecam.onboarding.OnboardingStore
+import com.librestatic.opencinecam.settings.CameraSettings
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.Saver

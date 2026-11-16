@@ -23,6 +23,9 @@ import com.librestatic.opencinecam.camera.*
 import com.librestatic.opencinecam.capture.OperatorPreferences
 import com.librestatic.opencinecam.capture.StartupMode
 import com.librestatic.opencinecam.service.CaptureService
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.SettingsRepositories
+import com.librestatic.opencinecam.settings.TimeLapseLimitMode
 import com.librestatic.opencinecam.storage.CaptureArtifactRole
 import com.librestatic.opencinecam.transfers.*
 import java.io.File

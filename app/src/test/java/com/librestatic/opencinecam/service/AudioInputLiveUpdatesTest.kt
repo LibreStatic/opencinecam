@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam.service
 
-import com.librestatic.opencinecam.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.camera.EqCurve
 import com.librestatic.opencinecam.camera.EqFilterType
 import com.librestatic.opencinecam.camera.EqPoint

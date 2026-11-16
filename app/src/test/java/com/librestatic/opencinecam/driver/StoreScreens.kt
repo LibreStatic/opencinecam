@@ -34,7 +34,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.librestatic.opencinecam.capture.AdaptiveCaptureChrome
 import com.librestatic.opencinecam.ui.AdaptiveWindow
-import com.librestatic.opencinecam.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.CameraUiState
 import com.librestatic.opencinecam.capture.CaptureFrameReserve
 import com.librestatic.opencinecam.capture.CaptureInitialPane
@@ -42,7 +42,7 @@ import com.librestatic.opencinecam.capture.CaptureLayoutFamily
 import com.librestatic.opencinecam.CaptureMode
 import com.librestatic.opencinecam.capture.CaptureScopeVisibility
 import com.librestatic.opencinecam.capture.CompositionGridMode
-import com.librestatic.opencinecam.HistogramMode
+import com.librestatic.opencinecam.settings.HistogramMode
 import com.librestatic.opencinecam.capture.HorizonRollMath
 import com.librestatic.opencinecam.ui.LocalAdaptiveWindow
 import com.librestatic.opencinecam.capture.LocalOperatorActions

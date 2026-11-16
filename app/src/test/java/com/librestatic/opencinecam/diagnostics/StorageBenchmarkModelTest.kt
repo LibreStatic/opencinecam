@@ -9,7 +9,7 @@ import com.librestatic.opencinecam.core.model.StorageBenchmarkOutcome
 import com.librestatic.opencinecam.core.model.StorageBenchmarkResult
 import com.librestatic.opencinecam.core.model.StorageBenchmarkWindow
 import com.librestatic.opencinecam.R
-import com.librestatic.opencinecam.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettings
 import java.io.File
 import java.time.Instant
 import org.junit.Assert.assertEquals

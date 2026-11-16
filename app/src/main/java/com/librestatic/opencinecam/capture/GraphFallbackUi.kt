@@ -8,7 +8,7 @@ import com.librestatic.opencinecam.camera.PreviewGraphLoss
 import com.librestatic.opencinecam.camera.StillPhotoFormat
 import com.librestatic.opencinecam.CaptureMode
 import com.librestatic.opencinecam.R
-import com.librestatic.opencinecam.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.ui.CineIcon
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
 

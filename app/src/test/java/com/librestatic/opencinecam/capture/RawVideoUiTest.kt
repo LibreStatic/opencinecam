@@ -17,7 +17,7 @@ import com.librestatic.opencinecam.gallery.rawCodecBadge
 import com.librestatic.opencinecam.gallery.renamesAndDeletes
 import com.librestatic.opencinecam.gallery.thumbnailFailureShowsPlaceholder
 import com.librestatic.opencinecam.R
-import com.librestatic.opencinecam.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.storage.LocalMediaArtifact
 import com.librestatic.opencinecam.storage.LocalMediaKind
 import com.librestatic.opencinecam.storage.rawVideoTake

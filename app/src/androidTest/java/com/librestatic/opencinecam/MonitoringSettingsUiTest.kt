@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import com.librestatic.opencinecam.camera.FalseColorPalette
 import com.librestatic.opencinecam.camera.MonitorAspectGuide
 import com.librestatic.opencinecam.camera.MonitorColor
+import com.librestatic.opencinecam.settings.CameraSettings
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test

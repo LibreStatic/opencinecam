@@ -16,6 +16,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.librestatic.opencinecam.settings.CameraSettings
 
 /** The displayed preview uses no clock or IO and never owns an active capture's frozen naming. */
 internal const val CAPTURE_NAMING_EXAMPLE_UUID = "00000000-0000-4000-8000-000000000000"

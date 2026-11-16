@@ -13,6 +13,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.camera.*
+import com.librestatic.opencinecam.settings.CameraSettings
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

@@ -48,9 +48,9 @@ import com.librestatic.opencinecam.fold.FoldDisplayState
 import com.librestatic.opencinecam.MainActivity
 import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.service.CaptureService
-import com.librestatic.opencinecam.CameraPreset
-import com.librestatic.opencinecam.CameraSettings
-import com.librestatic.opencinecam.PresetRepositories
+import com.librestatic.opencinecam.settings.CameraPreset
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.PresetRepositories
 import com.librestatic.opencinecam.PresetReviewDialog
 import com.librestatic.opencinecam.SettingsChips
 import com.librestatic.opencinecam.SettingsHelp

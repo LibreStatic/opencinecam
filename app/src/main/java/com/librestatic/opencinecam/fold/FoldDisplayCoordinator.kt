@@ -26,7 +26,7 @@ import androidx.window.layout.FoldingFeature
 import androidx.window.layout.WindowInfoTracker
 import com.librestatic.opencinecam.CameraUiPhase
 import com.librestatic.opencinecam.CameraUiState
-import com.librestatic.opencinecam.SettingsRepositories
+import com.librestatic.opencinecam.settings.SettingsRepositories
 import com.librestatic.opencinecam.subject.FillLightOutput
 import com.librestatic.opencinecam.subject.fillLightOutput
 import com.librestatic.opencinecam.subject.LocalSubjectFillLightOutput

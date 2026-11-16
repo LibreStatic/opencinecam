@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.librestatic.opencinecam.settings.CameraSettings
 import androidx.lifecycle.compose.LocalLifecycleOwner
 
 /** Consent and Android access are independent: granting access never changes this preference. */

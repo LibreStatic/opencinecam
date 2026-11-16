@@ -86,6 +86,8 @@ import com.librestatic.opencinecam.onboarding.OnboardingScreen
 import com.librestatic.opencinecam.onboarding.OnboardingStore
 import com.librestatic.opencinecam.onboarding.SplashHandoff
 import com.librestatic.opencinecam.service.CaptureService
+import com.librestatic.opencinecam.settings.normalizedFor
+import com.librestatic.opencinecam.settings.SettingsRepositories
 import com.librestatic.opencinecam.ui.LocalAppHaptics
 import com.librestatic.opencinecam.ui.LocalScrollLongText
 import com.librestatic.opencinecam.ui.predictiveBackPreview

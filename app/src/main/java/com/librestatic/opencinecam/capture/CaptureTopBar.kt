@@ -48,7 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.librestatic.opencinecam.service.CaptureService
-import com.librestatic.opencinecam.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.CaptureDestinationChip
 import com.librestatic.opencinecam.captureDestinationChipLabelledWidth
 import com.librestatic.opencinecam.TorchSettings

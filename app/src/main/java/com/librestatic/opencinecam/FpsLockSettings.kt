@@ -9,6 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.librestatic.opencinecam.settings.CameraSettings
 
 /** The modes FPS LOCK applies to: regular video and the OCLog LOG and HLG graphs. */
 internal fun fpsLockMode(mode: CaptureMode): Boolean = mode == CaptureMode.VIDEO || mode.usesLogGraph

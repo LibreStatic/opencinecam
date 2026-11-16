@@ -1,6 +1,9 @@
 /* SPDX-License-Identifier: Apache-2.0 */
-package com.librestatic.opencinecam
+package com.librestatic.opencinecam.settings
 
+import com.librestatic.opencinecam.CameraUiPhase
+import com.librestatic.opencinecam.CameraUiState
+import com.librestatic.opencinecam.CaptureMode
 import org.junit.Assert.*
 import org.junit.Test
 

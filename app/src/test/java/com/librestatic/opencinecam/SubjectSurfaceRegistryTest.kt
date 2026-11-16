@@ -3,6 +3,8 @@ package com.librestatic.opencinecam
 
 import com.librestatic.opencinecam.fold.SubjectDisplayMode
 import com.librestatic.opencinecam.fold.SubjectDisplaySettings
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.withLivePreferencesFrom
 import com.librestatic.opencinecam.subject.SubjectPreviewBlock
 import com.librestatic.opencinecam.subject.subjectPreviewBlock
 import com.librestatic.opencinecam.subject.subjectPreviewFrameRate

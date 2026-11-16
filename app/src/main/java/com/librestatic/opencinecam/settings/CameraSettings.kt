@@ -1,9 +1,13 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* Copyright 2026 OpenCineCam contributors */
 
-package com.librestatic.opencinecam
+package com.librestatic.opencinecam.settings
 
 import android.content.Context
+import com.librestatic.opencinecam.AudioListeningOutput
+import com.librestatic.opencinecam.AudioListeningSettings
+import com.librestatic.opencinecam.AudioMeterMode
+import com.librestatic.opencinecam.AudioMeterSettings
 import com.librestatic.opencinecam.core.model.PolicyMode
 import com.librestatic.opencinecam.fold.SUBJECT_INTERVIEW_MAX_QUESTION_LENGTH
 import com.librestatic.opencinecam.fold.SUBJECT_INTERVIEW_MAX_QUESTIONS
@@ -38,6 +42,11 @@ import com.librestatic.opencinecam.media.audio.AudioBitDepth
 import com.librestatic.opencinecam.media.audio.AudioInputKey
 import com.librestatic.opencinecam.media.audio.AudioInputLossPolicy
 import com.librestatic.opencinecam.media.audio.SelectableAudioInput
+import com.librestatic.opencinecam.ProductionSlateLocation
+import com.librestatic.opencinecam.ProductionSlateSettings
+import com.librestatic.opencinecam.ProductionSlateTimeOfDay
+import com.librestatic.opencinecam.StoredAudioInput
+import com.librestatic.opencinecam.validProjectRate
 import com.librestatic.opencinecam.media.audio.preferredAutoInput
 import com.librestatic.opencinecam.media.audio.resolveAudioInput
 import com.librestatic.opencinecam.media.audio.AudioOutputFormat
@@ -52,6 +61,7 @@ import com.librestatic.opencinecam.capture.OperatorPreferences
 import com.librestatic.opencinecam.capture.RawVideoConfigKeys
 import com.librestatic.opencinecam.capture.StartupMode
 import com.librestatic.opencinecam.capture.VolumeKeyPair
+import com.librestatic.opencinecam.CaptureNamingSettings
 import com.librestatic.opencinecam.camera.FocusPullEasing
 import com.librestatic.opencinecam.camera.AnamorphicSqueeze
 import com.librestatic.opencinecam.camera.AnamorphicOutputMode
