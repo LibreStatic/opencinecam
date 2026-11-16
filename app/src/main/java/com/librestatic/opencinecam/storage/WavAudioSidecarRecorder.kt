@@ -120,6 +120,11 @@ class WavAudioSidecarRecorder private constructor(
     private var overrunBaseline = 0
     @Volatile private var inputOverruns = 0
 
+    /** After each read, and once more when the input stops: an overrun after the last read shows only then, and a closed input counts none. */
+    private fun sampleInputOverruns() {
+        inputOverruns = maxOf(inputOverruns, input.overrunCount - overrunBaseline)
+    }
+
     @Synchronized override fun start() {
         AudioRetirementGate.requireIdle()
         check(!finished && !startAttempted) { "WAV recorder cannot be started twice." }
@@ -302,7 +307,7 @@ class WavAudioSidecarRecorder private constructor(
         val retirement = retireAudioWorkers(
             workers = listOfNotNull(writerThread),
             timeoutMs = 3_000,
-            stop = { input.stop() },
+            stop = { try { input.stop() } finally { sampleInputOverruns() } },
             release = {
                 inputGuard?.detach()
                 releaseAudioResources(effects.map { effect -> { effect.release() } } +
@@ -374,7 +379,7 @@ class WavAudioSidecarRecorder private constructor(
                 }
                 if (read <= 0) continue
                 captureTiming.readReturned(read, SystemClock.elapsedRealtimeNanos())
-                inputOverruns = (input.overrunCount - overrunBaseline).coerceAtLeast(0)
+                sampleInputOverruns()
                 val observedAtMs = SystemClock.elapsedRealtime()
                 val observedEffects = observeEffects(observedAtMs)
                 inputGuard?.silenceIfMuted(buffer, read)

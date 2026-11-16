@@ -125,6 +125,11 @@ class FlacAudioSidecarRecorder private constructor(
     private var overrunBaseline = 0
     @Volatile private var inputOverruns = 0
 
+    /** After each read, and once more when the input stops: an overrun after the last read shows only then, and a closed input counts none. */
+    private fun sampleInputOverruns() {
+        inputOverruns = maxOf(inputOverruns, input.overrunCount - overrunBaseline)
+    }
+
     @Synchronized override fun start() {
         AudioRetirementGate.requireIdle()
         check(!finished && !started) { "FLAC recorder cannot be started twice." }
@@ -277,7 +282,7 @@ class FlacAudioSidecarRecorder private constructor(
         val retirement = retireAudioWorkers(
             workers = listOfNotNull(feederThread, drainThread),
             timeoutMs = STOP_TIMEOUT_MS,
-            stop = { input.stop() },
+            stop = { try { input.stop() } finally { sampleInputOverruns() } },
             release = {
                 inputGuard?.detach()
                 releaseAudioResources(effects.map { effect -> { effect.release() } } +
@@ -354,7 +359,7 @@ class FlacAudioSidecarRecorder private constructor(
                 levelMeter.analyze(buffer, read, observedAtMs)?.let {
                     onAudioLevel?.invoke(it.copy(appliedRecordingGain = settings.audioRecordingGain, effects = observedEffects))
                 }
-                inputOverruns = (input.overrunCount - overrunBaseline).coerceAtLeast(0)
+                sampleInputOverruns()
                 val retained = captureTiming.captured(input, buffer, read)
                 buffer.position(0); buffer.limit(retained)
                 while (buffer.hasRemaining()) {
