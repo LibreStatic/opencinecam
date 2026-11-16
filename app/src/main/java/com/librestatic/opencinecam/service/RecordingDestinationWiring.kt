@@ -204,12 +204,13 @@ internal class CoalescedPass<T>(private val executor: java.util.concurrent.Execu
 
 /**
  * The failure a drive take is stopped with: the drive left ([writeFailed] false, a volume event) or a write to it
- * failed ([writeFailed] true, ENODEV before any event). Stop and save keeps what reached the drive.
+ * failed ([writeFailed] true, ENODEV before any event). Stop and save keeps what reached the drive. The message is
+ * only logged (the operator reads [stopReasonText]) and says nothing of the outcome: a continue-on-phone take goes on.
  */
 internal fun driveLostFailure(writeFailed: Boolean): StableFailure = StableFailure(
     RECORDING_DRIVE_COMPONENT, FailureCode.STORAGE_WRITE_FAILED, FailureSeverity.ERROR, Recoverability.USER_ACTION,
     if (writeFailed) "drive-write-failed" else "drive-disconnected",
-    "USB drive disconnected: the take was stopped and saved")
+    "USB drive disconnected")
 
 /** PLAN-072 Delivery 4: why a drive take whose drive was lost cannot continue on the phone. */
 internal enum class ContinuationUnavailable {
