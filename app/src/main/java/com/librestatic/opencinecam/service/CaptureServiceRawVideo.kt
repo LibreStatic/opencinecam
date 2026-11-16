@@ -867,9 +867,10 @@ internal fun CaptureService.finishAbandonedRawTake(result: RawTakeResult) {
     val stalledText = getString(R.string.raw_video_writer_stalled)
     cameraState.update { state ->
         if (state.phase != CameraUiPhase.PREVIEWING && state.phase != CameraUiPhase.SAVED) return@update state
+        // Only while the stalled take's message still shows: the operator has not moved on to anything else, and a take
+        // saved since keeps its review target.
+        val message = state.message?.takeIf { it.contains(stalledText) } ?: return@update state
         val lastSavedUri = result.uri?.toString() ?: state.lastSavedUri
-        // Only while the stalled take's message still shows: the operator has not moved on to anything else.
-        val message = state.message?.takeIf { it.contains(stalledText) } ?: return@update state.copy(lastSavedUri = lastSavedUri)
         // The stop reason ("Take stopped: …") stays; only the outcome changes.
         state.copy(phase = if (result.uri != null) CameraUiPhase.SAVED else state.phase, lastSavedUri = lastSavedUri,
             message = message.replace(stalledText, outcome))

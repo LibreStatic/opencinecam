@@ -522,8 +522,8 @@ class RawVideoRecorder(
             current.fail(RawTakeReasons.WRITER_STALLED)
             take = null
             return@synchronized result(current, uri = null, framesOnDisk = current.framesWritten, recovered = false,
-                outputError = "writer stopped making progress; the file stays pending for recovery at the next start",
-                writerStalled = true)
+                outputError = "writer stopped making progress; the file stays pending for recovery at the next start")
+                .copy(writerStalled = true)
         }
         current.thread.join()
         take = null
@@ -551,7 +551,7 @@ class RawVideoRecorder(
             outputError = "${problem.javaClass.simpleName}: ${problem.message.orEmpty().take(160)}"
             android.util.Log.e(TAG, "RAW take output could not be finalised", problem)
         }
-        return result(current, uri, framesOnDisk, recovered, outputError, writerStalled)
+        return result(current, uri, framesOnDisk, recovered, outputError).copy(writerStalled = writerStalled)
     }
 
     /** Writer thread, last act: marks the writer finished and, for an abandoned take, finalises it and tells the listener. */
@@ -596,8 +596,7 @@ class RawVideoRecorder(
         }
     }
 
-    private fun result(current: Take, uri: Uri?, framesOnDisk: Long, recovered: Boolean, outputError: String?,
-        writerStalled: Boolean = false) =
+    private fun result(current: Take, uri: Uri?, framesOnDisk: Long, recovered: Boolean, outputError: String?) =
         RawTakeResult(
             uri = uri,
             displayName = current.output.displayName,
@@ -613,7 +612,6 @@ class RawVideoRecorder(
             reason = current.failure.get(),
             recovered = recovered,
             outputError = outputError,
-            writerStalled = writerStalled,
             writerStats = current.writerStats,
             encoding = current.armed.config.encoding,
             nearLossless = current.armed.nearLossless,
