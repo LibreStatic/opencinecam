@@ -50,6 +50,7 @@
     <string name="rec_state_recording">REC</string>
     <string name="rec_state_finalizing">Wird finalisiert…</string>
     <string name="rec_state_saved">Clip gespeichert</string>
+    <string name="rec_state_pending">Clip ausstehend</string>
     <string name="rec_state_unavailable">Nicht verfügbar</string>
     <string name="error_open_settings">Einstellungen öffnen</string>
     <string name="error_failed_configuration">Fehlgeschlagen: %1$s</string>

@@ -27,6 +27,14 @@ class CaptureChromeStateTest {
         assertEquals(RecordButtonState.SAVED, recordButtonState(video(CameraUiPhase.SAVED)))
     }
 
+    @Test fun aTakeWaitingForItsDriveIsPendingNotSaved() {
+        val pending = video(CameraUiPhase.SAVED).copy(takePendingRecovery = true)
+        assertEquals(RecordButtonState.PENDING, recordButtonState(pending))
+        // The flag only speaks for a saved phase: a new take is READY/RECORDING whatever it still says.
+        assertEquals(RecordButtonState.READY, recordButtonState(pending.copy(phase = CameraUiPhase.PREVIEWING)))
+        assertEquals(RecordButtonState.RECORDING, recordButtonState(pending.copy(phase = CameraUiPhase.RECORDING)))
+    }
+
     @Test fun errorAndStartupPhasesAreUnavailable() {
         listOf(CameraUiPhase.ERROR, CameraUiPhase.OPENING, CameraUiPhase.PREPARING, CameraUiPhase.READY).forEach {
             assertEquals(it.name, RecordButtonState.UNAVAILABLE, recordButtonState(video(it)))

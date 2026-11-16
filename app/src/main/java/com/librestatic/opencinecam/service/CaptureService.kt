@@ -2943,6 +2943,7 @@ class CaptureService : Service() {
             recordingHeight = config.cropHeight,
             availableStorageBytes = free,
             recordingWarning = null,
+            takePendingRecovery = false,
             errorCode = null,
             rawVideoRingPercent = 0,
             rawVideoFramesWritten = 0L,
@@ -3062,6 +3063,7 @@ class CaptureService : Service() {
             messageTransient = false,
             errorCode = reason,
             recordingWarning = null,
+            takePendingRecovery = false,
             rawVideoRingPercent = null,
             rawVideoFramesWritten = null,
         ) }
@@ -3670,6 +3672,7 @@ class CaptureService : Service() {
                 recordingHeight = height,
                 availableStorageBytes = recordingVolumeFreeBytes(),
                 recordingWarning = recordingWarningText(),
+                takePendingRecovery = false,
                 errorCode = null,
             )
             activeRecordingPolicy = settings.recordingPolicy
@@ -4035,6 +4038,7 @@ class CaptureService : Service() {
                             else if (driveContinuation.isPending) CameraUiPhase.PREVIEWING else CameraUiPhase.ERROR,
                         recordingFinalizing = false,
                         recordingWarning = null,
+                        takePendingRecovery = false,
                         recordingPauseStatus = timing,
                         recordingAvTiming = avTiming,
                         recordingPausePending = false,
@@ -4079,12 +4083,13 @@ class CaptureService : Service() {
                     val driveGone = takeDrive != null && mountedRecordingVolumes().none { it.equals(takeDrive.volumeId, ignoreCase = true) }
                     if (driveGone) {
                         android.util.Log.w("RecordingDestination", "Drive take left for recovery: ${failure.message}")
+                        // Recovery on the drive's return says so, not that the process died.
+                        runCatching { output?.recoveryGroup?.leaveForRecovery(com.librestatic.opencinecam.storage.IncompleteTake.DRIVE_DISCONNECTED) }
                         val outcome = getString(R.string.capture_video_not_finalised_drive)
                         cameraState.update { current -> current.copy(
                             phase = CameraUiPhase.SAVED,
+                            takePendingRecovery = true,
                             recordingFinalizing = false,
-                        // Recovery on the drive's return says so, not that the process died.
-                        runCatching { output?.recoveryGroup?.leaveForRecovery(com.librestatic.opencinecam.storage.IncompleteTake.DRIVE_DISCONNECTED) }
                             recordingWarning = null,
                             recordingPausePending = false,
                             recordingWhiteBalanceStatus = RecordingWhiteBalanceStatus.IDLE,
