@@ -3,9 +3,9 @@ package com.librestatic.opencinecam.driver
 
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.librestatic.opencinecam.DetailGroupKind
-import com.librestatic.opencinecam.buildTakeDetails
-import com.librestatic.opencinecam.detailText
+import com.librestatic.opencinecam.gallery.DetailGroupKind
+import com.librestatic.opencinecam.gallery.buildTakeDetails
+import com.librestatic.opencinecam.gallery.detailText
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test

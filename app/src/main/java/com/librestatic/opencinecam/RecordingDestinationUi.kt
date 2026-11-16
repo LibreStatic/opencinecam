@@ -58,6 +58,8 @@ import com.librestatic.opencinecam.storage.RecordingDestinationStore
 import com.librestatic.opencinecam.storage.RecordingFolderAdoption
 import com.librestatic.opencinecam.storage.RecordingFolderPicker
 import com.librestatic.opencinecam.storage.RecordingFolderRejection
+import com.librestatic.opencinecam.ui.CineGlyph
+import com.librestatic.opencinecam.ui.CineIcon
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
 import com.librestatic.opencinecam.ui.viewfinder.chromePanel
 import kotlinx.coroutines.CancellationException

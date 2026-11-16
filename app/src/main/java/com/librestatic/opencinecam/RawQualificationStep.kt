@@ -91,6 +91,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.librestatic.opencinecam.diagnostics.label
 import com.librestatic.opencinecam.fold.FoldHinge
+import com.librestatic.opencinecam.gallery.label
 import com.librestatic.opencinecam.onboarding.FadingScroll
 import com.librestatic.opencinecam.onboarding.OnbAmber
 import com.librestatic.opencinecam.onboarding.OnbMuted
@@ -105,6 +106,9 @@ import com.librestatic.opencinecam.onboarding.PrimaryButton
 import com.librestatic.opencinecam.onboarding.TwoPaneMaxWidth
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.librestatic.opencinecam.service.CaptureService
+import com.librestatic.opencinecam.ui.AdaptiveWindow
+import com.librestatic.opencinecam.ui.CineGlyph
+import com.librestatic.opencinecam.ui.CineIcon
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
 import kotlin.math.ceil
 

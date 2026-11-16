@@ -12,6 +12,10 @@ import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.test.platform.app.InstrumentationRegistry
+import com.librestatic.opencinecam.gallery.GallerySettings
+import com.librestatic.opencinecam.gallery.MediaPlaybackDialog
+import com.librestatic.opencinecam.gallery.MediaReviewSelection
+import com.librestatic.opencinecam.gallery.PlaybackSettings
 import com.librestatic.opencinecam.storage.*
 import java.io.File
 import java.security.MessageDigest

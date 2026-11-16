@@ -8,8 +8,8 @@ import android.net.Uri
 import android.provider.MediaStore
 import android.util.AtomicFile
 import androidx.core.net.toUri
-import com.librestatic.opencinecam.ProxySettings
-import com.librestatic.opencinecam.ProxyWaitReason
+import com.librestatic.opencinecam.gallery.ProxySettings
+import com.librestatic.opencinecam.gallery.ProxyWaitReason
 import com.librestatic.opencinecam.transfers.MediaMutationBlocker
 import com.librestatic.opencinecam.transfers.MediaMutationBusyException
 import com.librestatic.opencinecam.transfers.WebDavTransferRuntime

@@ -2,6 +2,9 @@
 package com.librestatic.opencinecam.storage
 
 import com.librestatic.opencinecam.*
+import com.librestatic.opencinecam.gallery.MediaShareContent
+import com.librestatic.opencinecam.gallery.MediaShareMetadata
+import com.librestatic.opencinecam.gallery.MediaSharingSettings
 import com.librestatic.opencinecam.metadata.productionSlateJson
 import kotlinx.serialization.json.*
 import org.junit.Assert.*

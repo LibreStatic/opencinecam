@@ -46,6 +46,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.librestatic.opencinecam.ui.cineMarquee
+import com.librestatic.opencinecam.ui.FitText
+import com.librestatic.opencinecam.ui.HapticEvent
+import com.librestatic.opencinecam.ui.LocalAppHaptics
+import com.librestatic.opencinecam.ui.rememberMarqueeActive
 import com.librestatic.opencinecam.ui.viewfinder.chromePanel
 import kotlinx.coroutines.launch
 

@@ -57,9 +57,9 @@ import com.librestatic.opencinecam.fold.SubjectDisplayMode
 import com.librestatic.opencinecam.fold.SubjectDisplaySettings
 import com.librestatic.opencinecam.fold.SubjectSessionCues
 import com.librestatic.opencinecam.R
-import com.librestatic.opencinecam.CineIcon
-import com.librestatic.opencinecam.CineIconButton
-import com.librestatic.opencinecam.FitText
+import com.librestatic.opencinecam.ui.CineIcon
+import com.librestatic.opencinecam.ui.CineIconButton
+import com.librestatic.opencinecam.ui.FitText
 import com.librestatic.opencinecam.ui.viewfinder.chromePanel
 
 /** Smallest question size; the teleprompter preference never goes below it either. */

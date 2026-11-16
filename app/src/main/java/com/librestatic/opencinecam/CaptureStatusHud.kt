@@ -44,6 +44,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import com.librestatic.opencinecam.ui.viewfinder.chromePanel
+import com.librestatic.opencinecam.ui.WindowWidthClass
+import com.librestatic.opencinecam.ui.windowWidthClass
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.res.stringResource
@@ -58,6 +60,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.service.CaptureService
 import com.librestatic.opencinecam.subject.OutOfFrameHudChip
+import com.librestatic.opencinecam.ui.CineIcon
+import com.librestatic.opencinecam.ui.cineMarquee
+import com.librestatic.opencinecam.ui.FitText
+import com.librestatic.opencinecam.ui.rememberMarqueeActive
 import kotlinx.coroutines.delay
 import kotlin.math.max
 import androidx.compose.ui.text.rememberTextMeasurer

@@ -3,6 +3,8 @@
 
 package com.librestatic.opencinecam
 
+import com.librestatic.opencinecam.ui.WINDOW_LARGE_MIN_WIDTH_DP
+import com.librestatic.opencinecam.ui.WINDOW_MEDIUM_MIN_HEIGHT_DP
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

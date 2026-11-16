@@ -6,6 +6,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.librestatic.opencinecam.camera.PreviewGraphLoss
 import com.librestatic.opencinecam.camera.StillPhotoFormat
+import com.librestatic.opencinecam.ui.CineIcon
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
 
 /** The still [format] needs the RAW stream the session's graph dropped, so the shutter cannot take it. */

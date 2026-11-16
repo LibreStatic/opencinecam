@@ -51,8 +51,8 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
 import com.librestatic.opencinecam.ui.theme.LocalReducedMotion
-import com.librestatic.opencinecam.WindowWidthClass
-import com.librestatic.opencinecam.windowWidthClass
+import com.librestatic.opencinecam.ui.WindowWidthClass
+import com.librestatic.opencinecam.ui.windowWidthClass
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop

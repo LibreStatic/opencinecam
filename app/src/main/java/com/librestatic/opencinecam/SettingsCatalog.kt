@@ -2,6 +2,7 @@
 package com.librestatic.opencinecam
 
 import com.librestatic.opencinecam.diagnostics.label
+import com.librestatic.opencinecam.gallery.label
 import java.text.Normalizer
 import java.util.Locale
 

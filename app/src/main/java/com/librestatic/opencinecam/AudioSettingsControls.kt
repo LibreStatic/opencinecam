@@ -31,6 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.media.audio.AudioOutputFormat
+import com.librestatic.opencinecam.ui.CineSlider
 import com.librestatic.opencinecam.media.audio.AudioBitDepth
 import kotlin.math.roundToInt
 

@@ -39,6 +39,10 @@ import com.librestatic.opencinecam.subject.SubjectOutOfFrameSettings
 import com.librestatic.opencinecam.subject.SubjectSelfMonitorSettings
 import com.librestatic.opencinecam.subject.SubjectSlateSettings
 import com.librestatic.opencinecam.subject.SubjectTallySettings
+import com.librestatic.opencinecam.ui.CineGlyph
+import com.librestatic.opencinecam.ui.CineIcon
+import com.librestatic.opencinecam.ui.HapticEvent
+import com.librestatic.opencinecam.ui.LocalAppHaptics
 import com.librestatic.opencinecam.media.video.hevcSdrSupported
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -52,6 +56,10 @@ import com.librestatic.opencinecam.camera.ZoomLensSwitchMode
 import com.librestatic.opencinecam.diagnostics.benchmarkRequiredBytesPerSecond
 import com.librestatic.opencinecam.fold.FoldDisplaySettings
 import com.librestatic.opencinecam.fold.SubjectDisplaySettings
+import com.librestatic.opencinecam.gallery.GallerySettingsControls
+import com.librestatic.opencinecam.gallery.MediaSharingSettingsControls
+import com.librestatic.opencinecam.gallery.PlaybackSettingsControls
+import com.librestatic.opencinecam.gallery.ProxySettingsControls
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics

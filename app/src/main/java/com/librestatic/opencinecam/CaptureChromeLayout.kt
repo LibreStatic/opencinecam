@@ -3,6 +3,11 @@
 
 package com.librestatic.opencinecam
 
+import com.librestatic.opencinecam.ui.WindowHeightClass
+import com.librestatic.opencinecam.ui.windowHeightClass
+import com.librestatic.opencinecam.ui.WindowWidthClass
+import com.librestatic.opencinecam.ui.windowWidthClass
+
 /**
  * How the capture chrome is arranged around the viewfinder, chosen from the window classes.
  *

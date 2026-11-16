@@ -47,6 +47,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.librestatic.opencinecam.ui.CineGlyph
+import com.librestatic.opencinecam.ui.CineIcon
+import com.librestatic.opencinecam.ui.LocalAdaptiveWindow
+import com.librestatic.opencinecam.ui.WindowHeightClass
 
 /** One way to write a frame size everywhere: long side first, "×" between ("1280×960"). */
 fun formatFrameSize(width: Int, height: Int): String = "${maxOf(width, height)}×${minOf(width, height)}"

@@ -39,6 +39,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.ui.viewfinder.chromePanel
 import com.librestatic.opencinecam.camera.*
+import com.librestatic.opencinecam.ui.CineGlyph
+import com.librestatic.opencinecam.ui.CineIcon
+import com.librestatic.opencinecam.ui.CineIconButton
+import com.librestatic.opencinecam.ui.LocalAdaptiveWindow
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
 
 internal fun MonitorColor.composeColor(): Color = when (this) {

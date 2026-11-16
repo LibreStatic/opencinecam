@@ -2,16 +2,16 @@
 package com.librestatic.opencinecam.driver
 
 import androidx.exifinterface.media.ExifInterface
-import com.librestatic.opencinecam.AudioMetadata
-import com.librestatic.opencinecam.DetailFile
-import com.librestatic.opencinecam.OcrawSummary
-import com.librestatic.opencinecam.TakeDetailInputs
+import com.librestatic.opencinecam.gallery.AudioMetadata
+import com.librestatic.opencinecam.gallery.DetailFile
+import com.librestatic.opencinecam.gallery.OcrawSummary
+import com.librestatic.opencinecam.gallery.TakeDetailInputs
 import com.librestatic.opencinecam.media.ocraw.OcrawFrameHeader
 import com.librestatic.opencinecam.media.ocraw.OcrawFrameIndex
 import com.librestatic.opencinecam.media.ocraw.OcrawHeader
 import com.librestatic.opencinecam.media.ocraw.OcrawStreamFrame
 import com.librestatic.opencinecam.media.ocraw.OcrawTimeBase
-import com.librestatic.opencinecam.parseClipSidecarFacts
+import com.librestatic.opencinecam.gallery.parseClipSidecarFacts
 import com.librestatic.opencinecam.playback.ClipMetadata
 import com.librestatic.opencinecam.storage.LocalMediaKind
 import com.librestatic.opencinecam.storage.LocalMediaTake

@@ -14,6 +14,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.librestatic.opencinecam.fold.FoldHinge
 import com.librestatic.opencinecam.fold.FoldPane
+import com.librestatic.opencinecam.ui.AdaptiveWindow
+import com.librestatic.opencinecam.ui.LocalAdaptiveWindow
 import kotlin.math.roundToInt
 
 /**

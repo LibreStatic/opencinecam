@@ -46,11 +46,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
-import com.librestatic.opencinecam.CineGlyph
-import com.librestatic.opencinecam.CineIcon
-import com.librestatic.opencinecam.GalleryWarning
-import com.librestatic.opencinecam.MediaDialogFrame
-import com.librestatic.opencinecam.MediaDialogTake
+import com.librestatic.opencinecam.ui.CineGlyph
+import com.librestatic.opencinecam.ui.CineIcon
+import com.librestatic.opencinecam.gallery.GalleryWarning
+import com.librestatic.opencinecam.gallery.MediaDialogFrame
+import com.librestatic.opencinecam.gallery.MediaDialogTake
 import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.SettingsAccent
 import com.librestatic.opencinecam.SettingsMuted

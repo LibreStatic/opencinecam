@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam
 
+import com.librestatic.opencinecam.ui.HapticEvent
+
 enum class HapticLevel { OFF, SUBTLE, FULL }
 enum class HapticCategory { CAPTURE, CONTROLS, FOCUS_EXPOSURE, NAVIGATION }
 

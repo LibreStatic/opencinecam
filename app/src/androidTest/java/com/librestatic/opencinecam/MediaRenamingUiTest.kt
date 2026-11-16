@@ -11,6 +11,12 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
+import com.librestatic.opencinecam.gallery.GallerySettings
+import com.librestatic.opencinecam.gallery.MediaCatalogContent
+import com.librestatic.opencinecam.gallery.MediaCatalogSource
+import com.librestatic.opencinecam.gallery.MediaRenameDialogContent
+import com.librestatic.opencinecam.gallery.MediaRenameSource
+import com.librestatic.opencinecam.gallery.takeTitleText
 import com.librestatic.opencinecam.storage.*
 import java.io.IOException
 import java.util.concurrent.CopyOnWriteArrayList

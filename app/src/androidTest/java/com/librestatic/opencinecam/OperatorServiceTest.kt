@@ -14,6 +14,8 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.test.espresso.Espresso
 import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.camera.*
+import com.librestatic.opencinecam.gallery.GallerySettings
+import com.librestatic.opencinecam.gallery.takeTitleText
 import com.librestatic.opencinecam.media.audio.AudioBitDepth
 import com.librestatic.opencinecam.media.audio.AudioOutputFormat
 import com.librestatic.opencinecam.metadata.parseProductionSlateJson

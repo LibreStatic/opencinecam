@@ -1,6 +1,10 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam
 
+import com.librestatic.opencinecam.gallery.playbackFitScale
+import com.librestatic.opencinecam.gallery.PlaybackObservation
+import com.librestatic.opencinecam.gallery.PlaybackPhase
+import com.librestatic.opencinecam.gallery.withPlayerGeometry
 import org.junit.Assert.*
 import org.junit.Test
 

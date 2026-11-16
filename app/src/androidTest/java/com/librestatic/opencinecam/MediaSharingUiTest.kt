@@ -12,6 +12,12 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
+import com.librestatic.opencinecam.gallery.MediaShareContent
+import com.librestatic.opencinecam.gallery.MediaShareDialogContent
+import com.librestatic.opencinecam.gallery.MediaShareMetadata
+import com.librestatic.opencinecam.gallery.MediaSharePreparation
+import com.librestatic.opencinecam.gallery.MediaShareSource
+import com.librestatic.opencinecam.gallery.MediaSharingSettings
 import com.librestatic.opencinecam.storage.*
 import java.io.File
 import java.io.IOException

@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.librestatic.opencinecam.media.audio.PcmInputs
+import com.librestatic.opencinecam.ui.CineIcon
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
 
 /** The capture notices about the microphone input (PLAN-074 decisions 4 and 14), in the order they stack. */

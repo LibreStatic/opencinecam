@@ -25,6 +25,11 @@ import com.librestatic.opencinecam.diagnostics.facingLabel
 import com.librestatic.opencinecam.diagnostics.lensFocalSuffix
 import com.librestatic.opencinecam.fold.LocalFoldDisplayCoordinator
 import com.librestatic.opencinecam.service.CaptureService
+import com.librestatic.opencinecam.ui.CineGlyph
+import com.librestatic.opencinecam.ui.CineIcon
+import com.librestatic.opencinecam.ui.CineIconButton
+import com.librestatic.opencinecam.ui.HapticEvent
+import com.librestatic.opencinecam.ui.LocalAppHaptics
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
 import java.util.Locale
 

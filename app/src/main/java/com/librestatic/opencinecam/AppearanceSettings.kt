@@ -8,6 +8,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import com.librestatic.opencinecam.ui.CineIcon
 import com.librestatic.opencinecam.ui.theme.AppTheme
 import com.librestatic.opencinecam.ui.theme.AppThemeStore
 import com.librestatic.opencinecam.ui.theme.rememberAppTheme

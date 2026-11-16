@@ -10,6 +10,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.diagnostics.label
+import com.librestatic.opencinecam.gallery.label
+import com.librestatic.opencinecam.ui.CineIcon
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
 
 /** The left side of a settings row: the title and, under it, a one-line muted summary. */

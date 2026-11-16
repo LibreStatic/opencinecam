@@ -11,6 +11,11 @@ import com.librestatic.opencinecam.camera.HistogramSource
 import com.librestatic.opencinecam.camera.MonitoringOptions
 import com.librestatic.opencinecam.camera.monitoringSampleFresh
 import com.librestatic.opencinecam.camera.MonitoringSignalDomain
+import com.librestatic.opencinecam.ui.CineGlyph
+import com.librestatic.opencinecam.ui.CineIcon
+import com.librestatic.opencinecam.ui.FitText
+import com.librestatic.opencinecam.ui.HapticEvent
+import com.librestatic.opencinecam.ui.LocalAppHaptics
 import com.librestatic.opencinecam.camera.monitoringPreviewScale
 import android.view.Surface
 import android.os.SystemClock

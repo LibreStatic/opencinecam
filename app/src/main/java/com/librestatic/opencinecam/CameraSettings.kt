@@ -11,6 +11,14 @@ import com.librestatic.opencinecam.fold.SubjectDisplayMode
 import com.librestatic.opencinecam.fold.SubjectDisplaySettings
 import com.librestatic.opencinecam.fold.SubjectPreviewGuide
 import com.librestatic.opencinecam.fold.SubjectSlateField
+import com.librestatic.opencinecam.gallery.GalleryMediaKind
+import com.librestatic.opencinecam.gallery.GallerySettings
+import com.librestatic.opencinecam.gallery.MediaShareContent
+import com.librestatic.opencinecam.gallery.MediaShareMetadata
+import com.librestatic.opencinecam.gallery.MediaSharingSettings
+import com.librestatic.opencinecam.gallery.PlaybackSettings
+import com.librestatic.opencinecam.gallery.ProxySettings
+import com.librestatic.opencinecam.gallery.RawPlaybackMode
 import com.librestatic.opencinecam.camera.MonitoringOptions
 import com.librestatic.opencinecam.camera.MonitorColor
 import com.librestatic.opencinecam.camera.FalseColorPalette

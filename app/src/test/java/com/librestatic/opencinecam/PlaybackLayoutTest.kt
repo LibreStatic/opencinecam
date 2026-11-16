@@ -2,6 +2,7 @@
 package com.librestatic.opencinecam
 
 import com.librestatic.opencinecam.playback.*
+import com.librestatic.opencinecam.ui.AdaptiveWindow
 import java.util.Locale
 import org.junit.Assert.*
 import org.junit.Test
