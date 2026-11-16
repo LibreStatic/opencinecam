@@ -31,7 +31,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.librestatic.opencinecam.camera.SubjectPreviewStatus
 import com.librestatic.opencinecam.CameraUiState
-import com.librestatic.opencinecam.rotationDegrees
+import com.librestatic.opencinecam.capture.rotationDegrees
 import com.librestatic.opencinecam.fold.SubjectDisplaySettings
 import com.librestatic.opencinecam.fold.SubjectPreviewGuide
 import com.librestatic.opencinecam.liveCameraState

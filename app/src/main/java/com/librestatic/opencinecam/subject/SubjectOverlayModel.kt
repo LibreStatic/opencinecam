@@ -3,9 +3,9 @@ package com.librestatic.opencinecam.subject
 
 import com.librestatic.opencinecam.CameraUiPhase
 import com.librestatic.opencinecam.CameraUiState
-import com.librestatic.opencinecam.fittedPreviewViewport
-import com.librestatic.opencinecam.previewDisplayRatio
-import com.librestatic.opencinecam.PreviewViewport
+import com.librestatic.opencinecam.capture.fittedPreviewViewport
+import com.librestatic.opencinecam.capture.previewDisplayRatio
+import com.librestatic.opencinecam.capture.PreviewViewport
 import com.librestatic.opencinecam.CaptureMode
 import com.librestatic.opencinecam.fold.SubjectDisplaySettings
 import com.librestatic.opencinecam.fold.SubjectPreviewGuide

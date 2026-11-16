@@ -2,8 +2,8 @@
 package com.librestatic.opencinecam.service
 
 import com.librestatic.opencinecam.CaptureMode
-import com.librestatic.opencinecam.LensLockOption
-import com.librestatic.opencinecam.LensLockRoute
+import com.librestatic.opencinecam.capture.LensLockOption
+import com.librestatic.opencinecam.capture.LensLockRoute
 import com.librestatic.opencinecam.camera.LensLockBinding
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

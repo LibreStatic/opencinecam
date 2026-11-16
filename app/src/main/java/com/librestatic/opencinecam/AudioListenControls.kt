@@ -29,6 +29,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.librestatic.opencinecam.capture.PanelColumn
+import com.librestatic.opencinecam.capture.PanelHeader
+import com.librestatic.opencinecam.capture.PanelNote
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
 import kotlin.math.roundToInt
 

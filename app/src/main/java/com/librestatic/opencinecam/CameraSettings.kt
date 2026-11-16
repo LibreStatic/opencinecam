@@ -46,6 +46,12 @@ import com.librestatic.opencinecam.media.audio.ProfessionalAudioCapabilities
 import com.librestatic.opencinecam.camera.RecordingGeometryMode
 import com.librestatic.opencinecam.camera.AfLockBehavior
 import com.librestatic.opencinecam.camera.ZoomLensSwitchMode
+import com.librestatic.opencinecam.capture.CompositionGridMode
+import com.librestatic.opencinecam.capture.OperatorAction
+import com.librestatic.opencinecam.capture.OperatorPreferences
+import com.librestatic.opencinecam.capture.RawVideoConfigKeys
+import com.librestatic.opencinecam.capture.StartupMode
+import com.librestatic.opencinecam.capture.VolumeKeyPair
 import com.librestatic.opencinecam.camera.FocusPullEasing
 import com.librestatic.opencinecam.camera.AnamorphicSqueeze
 import com.librestatic.opencinecam.camera.AnamorphicOutputMode

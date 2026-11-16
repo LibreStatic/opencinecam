@@ -6,6 +6,8 @@ package com.librestatic.opencinecam
 import android.util.Size
 import com.librestatic.opencinecam.camera.Camera2CameraDescriptor
 import com.librestatic.opencinecam.camera.Camera2VideoProfile
+import com.librestatic.opencinecam.capture.ModeSwitchPlan
+import com.librestatic.opencinecam.capture.planModeSwitch
 import com.librestatic.opencinecam.driver.DriverCamera
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull

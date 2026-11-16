@@ -18,9 +18,9 @@ import com.librestatic.opencinecam.service.CaptureService.ServiceCalibrationRig
 // These are extensions so the service's state stays in one object; they keep the threading rules of its members.
 
 /** The lenses [cameraId] can be locked to, widest first (the engine caches the characteristics read). */
-internal fun CaptureService.lensLockOptions(cameraId: String?): List<com.librestatic.opencinecam.LensLockOption> =
+internal fun CaptureService.lensLockOptions(cameraId: String?): List<com.librestatic.opencinecam.capture.LensLockOption> =
     cameraId?.let { id ->
-        previewEngine.lensLockCandidates(id).map { com.librestatic.opencinecam.LensLockOption(it.physicalId, it.anchorRatio, it.focalMm) }
+        previewEngine.lensLockCandidates(id).map { com.librestatic.opencinecam.capture.LensLockOption(it.physicalId, it.anchorRatio, it.focalMm) }
     }.orEmpty()
 
 /**

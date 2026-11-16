@@ -71,7 +71,7 @@ import com.librestatic.opencinecam.fold.FoldDisplaySettings
 import com.librestatic.opencinecam.fold.FoldDisplayState
 import com.librestatic.opencinecam.fold.FoldPosture
 import com.librestatic.opencinecam.fold.LocalFoldDisplayStateWithoutCoordinator
-import com.librestatic.opencinecam.SelfCaptureChrome
+import com.librestatic.opencinecam.capture.SelfCaptureChrome
 import com.librestatic.opencinecam.fold.SubjectDisplayMode
 import com.librestatic.opencinecam.subject.SubjectDisplayScreen
 import com.librestatic.opencinecam.fold.SubjectDisplaySettings
@@ -97,25 +97,25 @@ import com.librestatic.opencinecam.core.model.PolicyMode
 import com.librestatic.opencinecam.core.model.StorageBenchmarkOutcome
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import com.librestatic.opencinecam.AdaptiveCaptureChrome
+import com.librestatic.opencinecam.capture.AdaptiveCaptureChrome
 import com.librestatic.opencinecam.ui.AdaptiveWindow
 import com.librestatic.opencinecam.CameraSettings
 import com.librestatic.opencinecam.CameraUiPhase
-import com.librestatic.opencinecam.OperatorAction
-import com.librestatic.opencinecam.OperatorPreferences
-import com.librestatic.opencinecam.VolumeKeyPair
+import com.librestatic.opencinecam.capture.OperatorAction
+import com.librestatic.opencinecam.capture.OperatorPreferences
+import com.librestatic.opencinecam.capture.VolumeKeyPair
 import com.librestatic.opencinecam.ModeGateState
-import com.librestatic.opencinecam.OnboardingRawStage
-import com.librestatic.opencinecam.RawQualificationConditions
-import com.librestatic.opencinecam.RawQualificationFrame
-import com.librestatic.opencinecam.RawQualificationItem
-import com.librestatic.opencinecam.RawQualificationItemStatus
-import com.librestatic.opencinecam.RawQualificationOutcomeKind
-import com.librestatic.opencinecam.RawQualificationStep
-import com.librestatic.opencinecam.RawVideoConfigOption
-import com.librestatic.opencinecam.rawQualificationPlanItems
-import com.librestatic.opencinecam.RawVideoQualificationInfo
-import com.librestatic.opencinecam.RawVideoQualificationUi
+import com.librestatic.opencinecam.capture.OnboardingRawStage
+import com.librestatic.opencinecam.capture.RawQualificationConditions
+import com.librestatic.opencinecam.capture.RawQualificationFrame
+import com.librestatic.opencinecam.capture.RawQualificationItem
+import com.librestatic.opencinecam.capture.RawQualificationItemStatus
+import com.librestatic.opencinecam.capture.RawQualificationOutcomeKind
+import com.librestatic.opencinecam.capture.RawQualificationStep
+import com.librestatic.opencinecam.capture.RawVideoConfigOption
+import com.librestatic.opencinecam.capture.rawQualificationPlanItems
+import com.librestatic.opencinecam.capture.RawVideoQualificationInfo
+import com.librestatic.opencinecam.capture.RawVideoQualificationUi
 import com.librestatic.opencinecam.rawvideo.RawQualificationEstimate
 import com.librestatic.opencinecam.rawvideo.RawQualificationPhase
 import com.librestatic.opencinecam.rawvideo.RawQualificationPlannedConfig
@@ -123,11 +123,11 @@ import com.librestatic.opencinecam.rawvideo.RawQualificationSpecs
 import com.librestatic.opencinecam.rawvideo.RawQualificationSpaceEstimate
 import com.librestatic.opencinecam.rawvideo.RawVideoQualifier
 import com.librestatic.opencinecam.CameraUiState
-import com.librestatic.opencinecam.CaptureInitialPane
+import com.librestatic.opencinecam.capture.CaptureInitialPane
 import com.librestatic.opencinecam.CaptureMode
-import com.librestatic.opencinecam.CaptureScopeVisibility
+import com.librestatic.opencinecam.capture.CaptureScopeVisibility
 import com.librestatic.opencinecam.gallery.CodecBadge
-import com.librestatic.opencinecam.CompositionGridMode
+import com.librestatic.opencinecam.capture.CompositionGridMode
 import com.librestatic.opencinecam.gallery.GalleryFacts
 import com.librestatic.opencinecam.gallery.rawCodecBadge
 import com.librestatic.opencinecam.gallery.TakeDetailInputs
@@ -138,12 +138,12 @@ import org.robolectric.RuntimeEnvironment
 import com.librestatic.opencinecam.gallery.GalleryCatalogCache
 import com.librestatic.opencinecam.gallery.GallerySettings
 import com.librestatic.opencinecam.HistogramMode
-import com.librestatic.opencinecam.HorizonRollMath
+import com.librestatic.opencinecam.capture.HorizonRollMath
 import com.librestatic.opencinecam.ui.LocalAdaptiveWindow
-import com.librestatic.opencinecam.LocalOperatorActions
+import com.librestatic.opencinecam.capture.LocalOperatorActions
 import com.librestatic.opencinecam.gallery.MediaCatalogContent
 import com.librestatic.opencinecam.gallery.MediaCatalogSource
-import com.librestatic.opencinecam.MonitoringOverlay
+import com.librestatic.opencinecam.capture.MonitoringOverlay
 import com.librestatic.opencinecam.onboarding.OnboardingScreen
 import com.librestatic.opencinecam.ProductionSlateSettings
 import com.librestatic.opencinecam.R
@@ -156,9 +156,9 @@ import com.librestatic.opencinecam.camera.MonitoringSignalDomain
 import com.librestatic.opencinecam.camera.detectFocusEdges
 import com.librestatic.opencinecam.camera.monitoringDisplayPoint
 import com.librestatic.opencinecam.camera.outputFrameInStream
-import com.librestatic.opencinecam.drawFocusPeaking
-import com.librestatic.opencinecam.focusPeakingPlacement
-import com.librestatic.opencinecam.previewDisplayRatio
+import com.librestatic.opencinecam.capture.drawFocusPeaking
+import com.librestatic.opencinecam.capture.focusPeakingPlacement
+import com.librestatic.opencinecam.capture.previewDisplayRatio
 import com.librestatic.opencinecam.storage.LocalMediaArtifact
 import com.librestatic.opencinecam.storage.LocalMediaCursor
 import com.librestatic.opencinecam.storage.LocalMediaEncoding
@@ -337,17 +337,17 @@ fun CaptureSlowMotionRecording() = CaptureChrome(
 
 /** The Razr Fold's three lenses as lock options: ultra-wide "3", wide "2" and tele "5" (anchors 0.55, 1 and 3). */
 private val DriverLensLockOptions = listOf(
-    com.librestatic.opencinecam.LensLockOption("3", 0.55f, 2.2f),
-    com.librestatic.opencinecam.LensLockOption("2", 1.0f, 6.9f),
-    com.librestatic.opencinecam.LensLockOption("5", 3.0f, 20.6f),
+    com.librestatic.opencinecam.capture.LensLockOption("3", 0.55f, 2.2f),
+    com.librestatic.opencinecam.capture.LensLockOption("2", 1.0f, 6.9f),
+    com.librestatic.opencinecam.capture.LensLockOption("5", 3.0f, 20.6f),
 )
 
 private fun driverLensLockState(
     lockedId: String?,
-    route: com.librestatic.opencinecam.LensLockRoute? = null,
+    route: com.librestatic.opencinecam.capture.LensLockRoute? = null,
     switched: Boolean = false,
 ): CameraUiState {
-    val lock = com.librestatic.opencinecam.LensLockUiState(DriverLensLockOptions, lockedId, route, switched)
+    val lock = com.librestatic.opencinecam.capture.LensLockUiState(DriverLensLockOptions, lockedId, route, switched)
     val base = driverCaptureState(CaptureMode.VIDEO)
     val anchors = DriverLensLockOptions.map { com.librestatic.opencinecam.camera.ZoomAnchor(it.anchorRatio, it.focalLengthMm, it.physicalId) }
     // Locked to the tele: its 1-8x digital range times its 3x anchor; unlocked: the logical 0.55-24x scale at 1x.
@@ -359,7 +359,7 @@ private fun driverLensLockState(
 
 /** Video locked to the tele ("5", served directly): the anchor bar is the lock bar and LENS LOCK is on. */
 @Composable
-fun CaptureLensLocked() = CaptureChrome(driverLensLockState("5", com.librestatic.opencinecam.LensLockRoute.DIRECT_PHYSICAL))
+fun CaptureLensLocked() = CaptureChrome(driverLensLockState("5", com.librestatic.opencinecam.capture.LensLockRoute.DIRECT_PHYSICAL))
 
 /** Video with the lens lock offered but off: the LENS LOCK key beside the lock keys, the normal anchors. */
 @Composable
@@ -367,7 +367,7 @@ fun CaptureLensLockAvailable() = CaptureChrome(driverLensLockState(null))
 
 /** Locked to the tele on the fallback route: the "Lens lock: digital crop" notice under the zoom. */
 @Composable
-fun CaptureLensLockCrop() = CaptureChrome(driverLensLockState("5", com.librestatic.opencinecam.LensLockRoute.GPU_CROP))
+fun CaptureLensLockCrop() = CaptureChrome(driverLensLockState("5", com.librestatic.opencinecam.capture.LensLockRoute.GPU_CROP))
 
 /** RAW photo on a camera that rejected the full graph: RAW and the analysis stream dropped, the notice under the zoom. */
 @Composable
@@ -509,8 +509,8 @@ fun CaptureLandscape() = CaptureChrome(driverCaptureState(CaptureMode.VIDEO))
 // RAW video (OCC-PLAN-071)
 
 /** An S24 Ultra-like main camera's qualified RAW10 configurations: the 4080×3060 sensor at 1.25 B/px, and two centre crops. */
-private val DriverRawVideoOptions: List<com.librestatic.opencinecam.RawVideoConfigOption> = buildList {
-    fun option(width: Int, height: Int, fps: Int, crop: Boolean) = com.librestatic.opencinecam.RawVideoConfigOption(
+private val DriverRawVideoOptions: List<com.librestatic.opencinecam.capture.RawVideoConfigOption> = buildList {
+    fun option(width: Int, height: Int, fps: Int, crop: Boolean) = com.librestatic.opencinecam.capture.RawVideoConfigOption(
         key = (if (crop) "${width}x$height" else "full") + "@$fps", label = "$width×$height · $fps fps",
         bytesPerSecond = width.toLong() * height * 5 / 4 * fps, isCrop = crop)
     listOf(15, 24, 30).forEach { add(option(4080, 3060, it, crop = false)) }
@@ -522,13 +522,13 @@ private val DriverRawVideoOptions: List<com.librestatic.opencinecam.RawVideoConf
  * [DriverRawVideoOptions] with block-pack twins of 4080×3060 · 30 fps and 3840×2160 · 30 fps, each right
  * after its uncompressed configuration (the gate's order); they read "· Near-lossless" while near-lossless is on.
  */
-private val DriverRawVideoOptionsCompressed: List<com.librestatic.opencinecam.RawVideoConfigOption> = DriverRawVideoOptions.flatMap { option ->
+private val DriverRawVideoOptionsCompressed: List<com.librestatic.opencinecam.capture.RawVideoConfigOption> = DriverRawVideoOptions.flatMap { option ->
     val twin = when (option.key) {
         "full@30" -> com.librestatic.opencinecam.camera.RawVideoConfig("0", 4080, 3060, 4080, 3060, 30, "bp")
         "3840x2160@30" -> com.librestatic.opencinecam.camera.RawVideoConfig("0", 4080, 3060, 3840, 2160, 30, "bp")
         else -> null
     }
-    listOfNotNull(option, twin?.let { com.librestatic.opencinecam.RawVideoConfigOption.of(it) })
+    listOfNotNull(option, twin?.let { com.librestatic.opencinecam.capture.RawVideoConfigOption.of(it) })
 }
 
 /**
@@ -581,7 +581,7 @@ fun CaptureRawVideoConfig() = CaptureChrome(driverRawVideoState(compressed = tru
 @Composable
 fun CaptureRawVideoRisky() = CaptureChrome(
     driverRawVideoState().let { state ->
-        val full60 = com.librestatic.opencinecam.RawVideoConfigOption("full@60", "4080×3060 · 60 fps", 936_360_000L, isCrop = false, isRisky = true,
+        val full60 = com.librestatic.opencinecam.capture.RawVideoConfigOption("full@60", "4080×3060 · 60 fps", 936_360_000L, isCrop = false, isRisky = true,
             burstSeconds = 75L)
         state.copy(rawVideoOptions = state.rawVideoOptions.take(3) + full60 + state.rawVideoOptions.drop(3),
             rawVideoSelectedKey = "full@60", targetFps = 60)
@@ -598,7 +598,7 @@ fun CaptureRawVideoRisky() = CaptureChrome(
 @Composable
 fun CaptureRawVideoReducedRate() = CaptureChrome(
     driverRawVideoState().let { state ->
-        val full60 = com.librestatic.opencinecam.RawVideoConfigOption("full@60", "4080×3060 · 60 fps", 936_360_000L, isCrop = false, isRisky = true,
+        val full60 = com.librestatic.opencinecam.capture.RawVideoConfigOption("full@60", "4080×3060 · 60 fps", 936_360_000L, isCrop = false, isRisky = true,
             burstSeconds = 75L, achievedFps = 51.9)
         val options = (state.rawVideoOptions.take(3) + full60 + state.rawVideoOptions.drop(3))
             .map { if (it.key == "3840x2160@60") it.copy(achievedFps = 49.1) else it }
@@ -609,9 +609,9 @@ fun CaptureRawVideoReducedRate() = CaptureChrome(
 )
 
 /** A judged configuration the chooser leaves out, on the S24-like main camera's 4080×3060 sensor. */
-private fun driverLeftOut(width: Int, height: Int, fps: Int, reason: com.librestatic.opencinecam.RawVideoLeftOutReason) =
-    com.librestatic.opencinecam.RawVideoLeftOutOption(
-        com.librestatic.opencinecam.RawVideoConfigOption.of(com.librestatic.opencinecam.camera.RawVideoConfig("0", 4080, 3060, width, height, fps)),
+private fun driverLeftOut(width: Int, height: Int, fps: Int, reason: com.librestatic.opencinecam.capture.RawVideoLeftOutReason) =
+    com.librestatic.opencinecam.capture.RawVideoLeftOutOption(
+        com.librestatic.opencinecam.capture.RawVideoConfigOption.of(com.librestatic.opencinecam.camera.RawVideoConfig("0", 4080, 3060, width, height, fps)),
         fps, reason)
 
 /**
@@ -627,12 +627,12 @@ fun CaptureRawVideoLeftOut() = CaptureChrome(
             availableStorageBytes = 41_000_000_000L,
             recordingDestination = com.librestatic.opencinecam.RecordingDestinationStatus(configuredDrive = true, onDrive = true,
                 driveLabel = "WD Elements", driveFreeBytes = 1_734_000_000_000L),
-            rawVideoProfile = com.librestatic.opencinecam.RawQualificationTarget(drive = true, driveLabel = "WD Elements"),
+            rawVideoProfile = com.librestatic.opencinecam.capture.RawQualificationTarget(drive = true, driveLabel = "WD Elements"),
             rawVideoLeftOut = listOf(
-                driverLeftOut(4080, 3060, 60, com.librestatic.opencinecam.RawVideoLeftOutReason.HEAT),
-                driverLeftOut(3840, 2160, 60, com.librestatic.opencinecam.RawVideoLeftOutReason.HEAT),
-                driverLeftOut(1920, 1080, 120, com.librestatic.opencinecam.RawVideoLeftOutReason.STORAGE),
-                driverLeftOut(1280, 720, 240, com.librestatic.opencinecam.RawVideoLeftOutReason.CAMERA_LIMIT),
+                driverLeftOut(4080, 3060, 60, com.librestatic.opencinecam.capture.RawVideoLeftOutReason.HEAT),
+                driverLeftOut(3840, 2160, 60, com.librestatic.opencinecam.capture.RawVideoLeftOutReason.HEAT),
+                driverLeftOut(1920, 1080, 120, com.librestatic.opencinecam.capture.RawVideoLeftOutReason.STORAGE),
+                driverLeftOut(1280, 720, 240, com.librestatic.opencinecam.capture.RawVideoLeftOutReason.CAMERA_LIMIT),
             ))
     },
     DriverRawVideoSettings,
@@ -702,7 +702,7 @@ private fun driverRawQualificationInfo(
     freeBytes: Long = 26_000_000_000L,
     minimumFreeBytes: Long = 3L shl 30,
     previousFailure: Boolean = false,
-    target: com.librestatic.opencinecam.RawQualificationTarget? = null,
+    target: com.librestatic.opencinecam.capture.RawQualificationTarget? = null,
 ): RawVideoQualificationInfo {
     val configs = driverRawPlannedConfigs(freeBytes)
     return RawVideoQualificationInfo(
@@ -724,7 +724,7 @@ private fun driverRawQualificationInfo(
 
 /** A USB drive the next RAW take would use (PLAN-072 Delivery 3), with 1.7 TB free. */
 private fun driverDriveQualificationInfo() = driverRawQualificationInfo(freeBytes = 1_734_000_000_000L,
-    target = com.librestatic.opencinecam.RawQualificationTarget(drive = true, driveLabel = "WD Elements"))
+    target = com.librestatic.opencinecam.capture.RawQualificationTarget(drive = true, driveLabel = "WD Elements"))
 
 /** RAW10 present but nothing qualified yet: the modes pane lists RAW video as choosable, with its gate label. */
 @Composable
@@ -796,7 +796,7 @@ fun RawQualificationReadyDrive() = RawQualificationDriver(DriverRawReady, null, 
 /** The step with a drive configured but not connected: the phone is qualified, and the step says so. */
 @Composable
 fun RawQualificationReadyDriveAbsent() = RawQualificationDriver(DriverRawReady, null,
-    driverRawQualificationInfo(target = com.librestatic.opencinecam.RawQualificationTarget(drive = false)))
+    driverRawQualificationInfo(target = com.librestatic.opencinecam.capture.RawQualificationTarget(drive = false)))
 
 /** The preconditions all pass with room for every configuration: only a compact free-space line. */
 @Composable
@@ -1051,10 +1051,10 @@ fun SettingsRawVideoLeftOut() = DriverTheme {
         state.copy(rawVideoOptions = state.rawVideoOptions.filterNot { it.key == "3840x2160@60" },
             recordingDestination = com.librestatic.opencinecam.RecordingDestinationStatus(configuredDrive = true,
                 fallback = com.librestatic.opencinecam.storage.DestinationFallback.DRIVE_NOT_CONNECTED, driveLabel = "WD Elements"),
-            rawVideoProfile = com.librestatic.opencinecam.RawQualificationTarget(drive = false),
+            rawVideoProfile = com.librestatic.opencinecam.capture.RawQualificationTarget(drive = false),
             rawVideoLeftOut = listOf(
-                driverLeftOut(4080, 3060, 60, com.librestatic.opencinecam.RawVideoLeftOutReason.HEAT),
-                driverLeftOut(3840, 2160, 60, com.librestatic.opencinecam.RawVideoLeftOutReason.HEAT),
+                driverLeftOut(4080, 3060, 60, com.librestatic.opencinecam.capture.RawVideoLeftOutReason.HEAT),
+                driverLeftOut(3840, 2160, 60, com.librestatic.opencinecam.capture.RawVideoLeftOutReason.HEAT),
             ))
     }
     SettingsScreen(state, settings, audioPermissionGranted = true, onRequestAudioPermission = {}, onOpenAbout = {},
@@ -1154,7 +1154,7 @@ fun Settings() = DriverTheme {
     var settings by remember { mutableStateOf(CameraSettings()) }
     var lockedLens by remember { mutableStateOf<String?>(null) }
     SettingsScreen(CameraUiState(phase = CameraUiPhase.PREVIEWING,
-        lensLock = com.librestatic.opencinecam.LensLockUiState(DriverLensLockOptions, lockedLens)), settings, audioPermissionGranted = false,
+        lensLock = com.librestatic.opencinecam.capture.LensLockUiState(DriverLensLockOptions, lockedLens)), settings, audioPermissionGranted = false,
         onRequestAudioPermission = {}, onOpenAbout = {}, onSettingsChange = { settings = it }, onSetLensLock = { lockedLens = it })
 }
 

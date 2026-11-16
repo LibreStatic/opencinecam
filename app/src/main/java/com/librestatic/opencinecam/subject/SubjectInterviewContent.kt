@@ -46,7 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.librestatic.opencinecam.CameraUiState
-import com.librestatic.opencinecam.STACKED_TOP_BAR_HEIGHT_DP
+import com.librestatic.opencinecam.capture.STACKED_TOP_BAR_HEIGHT_DP
 import com.librestatic.opencinecam.fold.DisplayOperation
 import com.librestatic.opencinecam.fold.DisplaySessionPhase
 import com.librestatic.opencinecam.fold.FoldDisplayState

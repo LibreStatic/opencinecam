@@ -37,9 +37,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.librestatic.opencinecam.dialogShortcuts
-import com.librestatic.opencinecam.ShortcutAction
-import com.librestatic.opencinecam.withShortcut
+import com.librestatic.opencinecam.capture.dialogShortcuts
+import com.librestatic.opencinecam.capture.ShortcutAction
+import com.librestatic.opencinecam.capture.withShortcut
 import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.ProductionSlateLocation
 import com.librestatic.opencinecam.ProductionSlateTimeOfDay

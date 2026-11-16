@@ -7,6 +7,7 @@ import android.util.Size
 import com.librestatic.opencinecam.camera.Camera2LogProfile
 import com.librestatic.opencinecam.camera.OpenCineLogQualificationStage
 import com.librestatic.opencinecam.camera.OpenCineLogSourcePath
+import com.librestatic.opencinecam.capture.ocLogQualificationLabel
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

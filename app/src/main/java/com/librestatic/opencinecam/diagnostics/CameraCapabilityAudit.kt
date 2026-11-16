@@ -9,7 +9,7 @@ import com.librestatic.opencinecam.camera.Camera2CameraDescriptor
 import com.librestatic.opencinecam.camera.OpenCineLogSourcePath
 import com.librestatic.opencinecam.camera.StreamUseCase
 import com.librestatic.opencinecam.camera.StreamUseCaseRejections
-import com.librestatic.opencinecam.exposureAvailability
+import com.librestatic.opencinecam.capture.exposureAvailability
 import com.librestatic.opencinecam.R
 import java.util.Locale
 import kotlin.math.roundToInt

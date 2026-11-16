@@ -56,8 +56,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
-import com.librestatic.opencinecam.ShortcutAction
-import com.librestatic.opencinecam.ShortcutHandler
+import com.librestatic.opencinecam.capture.ShortcutAction
+import com.librestatic.opencinecam.capture.ShortcutHandler
 import com.librestatic.opencinecam.playback.RawThumbnails
 import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.SettingsCard

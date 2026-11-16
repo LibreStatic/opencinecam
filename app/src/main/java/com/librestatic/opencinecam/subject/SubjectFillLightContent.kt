@@ -42,7 +42,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.CameraUiState
-import com.librestatic.opencinecam.CountdownBadge
+import com.librestatic.opencinecam.capture.CountdownBadge
 import com.librestatic.opencinecam.fold.FoldSlider
 import com.librestatic.opencinecam.fold.FoldToggle
 import com.librestatic.opencinecam.fold.LocalFoldDisplayCoordinator

@@ -35,6 +35,13 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
+import com.librestatic.opencinecam.capture.LocalShortcutDispatcher
+import com.librestatic.opencinecam.capture.OperatorPreferences
+import com.librestatic.opencinecam.capture.shortcutActionFor
+import com.librestatic.opencinecam.capture.ShortcutDispatcher
+import com.librestatic.opencinecam.capture.VolumeKeyGestures
+import com.librestatic.opencinecam.capture.VolumeKeyHandler
+import com.librestatic.opencinecam.capture.VolumeKeyScheduler
 import com.librestatic.opencinecam.fold.FoldDisplayCoordinator
 import com.librestatic.opencinecam.fold.LocalFoldDisplayCoordinator
 import com.librestatic.opencinecam.onboarding.OnboardingStore

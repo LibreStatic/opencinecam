@@ -5,6 +5,11 @@ import android.util.Size
 import com.librestatic.opencinecam.camera.Camera2CameraDescriptor
 import com.librestatic.opencinecam.camera.NightExtensionCapability
 import com.librestatic.opencinecam.camera.NightPhotoMode
+import com.librestatic.opencinecam.capture.CaptureHold
+import com.librestatic.opencinecam.capture.captureHold
+import com.librestatic.opencinecam.capture.CaptureSlot
+import com.librestatic.opencinecam.capture.captureSlotUnavailableReason
+import com.librestatic.opencinecam.capture.SlotUnavailableReason
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals

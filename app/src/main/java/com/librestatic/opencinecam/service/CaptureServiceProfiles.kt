@@ -8,8 +8,8 @@ import com.librestatic.opencinecam.CameraUiState
 import com.librestatic.opencinecam.CaptureMode
 import com.librestatic.opencinecam.logProfilesFor
 import com.librestatic.opencinecam.usesLogGraph
-import com.librestatic.opencinecam.toSpec
-import com.librestatic.opencinecam.VideoGeometryPolicy
+import com.librestatic.opencinecam.capture.toSpec
+import com.librestatic.opencinecam.capture.VideoGeometryPolicy
 import com.librestatic.opencinecam.camera.Camera2CameraDescriptor
 import com.librestatic.opencinecam.camera.Camera2PreviewEngine
 import com.librestatic.opencinecam.camera.OpenCineLogGpuPipeline

@@ -3,7 +3,7 @@ package com.librestatic.opencinecam.service
 
 import com.librestatic.opencinecam.CaptureMode
 import com.librestatic.opencinecam.CaptureNameSnapshot
-import com.librestatic.opencinecam.RawQualificationTarget
+import com.librestatic.opencinecam.capture.RawQualificationTarget
 import com.librestatic.opencinecam.RecordingDestinationStatus
 import com.librestatic.opencinecam.core.model.FailureCode
 import com.librestatic.opencinecam.core.model.FailureSeverity

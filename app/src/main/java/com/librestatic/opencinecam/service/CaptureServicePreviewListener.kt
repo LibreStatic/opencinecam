@@ -16,13 +16,13 @@ import android.os.Looper
 import com.librestatic.opencinecam.timelapseProjectRate
 import com.librestatic.opencinecam.projectLabel
 import com.librestatic.opencinecam.CameraUiPhase
-import com.librestatic.opencinecam.HardwareTruthHudState
+import com.librestatic.opencinecam.capture.HardwareTruthHudState
 import com.librestatic.opencinecam.metadata.hardwareTruthTake
 import com.librestatic.opencinecam.metadata.TakeVideoEncoder
 import com.librestatic.opencinecam.metadata.withHardwareTruth
-import com.librestatic.opencinecam.RouteTruth
-import com.librestatic.opencinecam.routeTruthOf
-import com.librestatic.opencinecam.readbackSamples
+import com.librestatic.opencinecam.capture.RouteTruth
+import com.librestatic.opencinecam.capture.routeTruthOf
+import com.librestatic.opencinecam.capture.readbackSamples
 import com.librestatic.opencinecam.CaptureMode
 import com.librestatic.opencinecam.usesLogGraph
 import com.librestatic.opencinecam.TimeLapseLimitMode
@@ -1103,17 +1103,17 @@ internal fun CaptureService.newPreviewListener(): Camera2PreviewListener = objec
             clearLensLockRoute()
             return
         }
-        serveLensLock(physicalId, uiZoomRange, com.librestatic.opencinecam.LensLockRoute.DIRECT_PHYSICAL)
+        serveLensLock(physicalId, uiZoomRange, com.librestatic.opencinecam.capture.LensLockRoute.DIRECT_PHYSICAL)
     }
 
     override fun onLensLockCrop(physicalId: String, uiZoomRange: ClosedFloatingPointRange<Float>) {
         android.util.Log.i("CaptureService", "Lens lock on $physicalId served by the GPU crop over $uiZoomRange")
         // The lock is served, so this is not a fallback: the logical calibration stays off.
         lensLockFallback = false
-        serveLensLock(physicalId, uiZoomRange, com.librestatic.opencinecam.LensLockRoute.GPU_CROP)
+        serveLensLock(physicalId, uiZoomRange, com.librestatic.opencinecam.capture.LensLockRoute.GPU_CROP)
         // Photo previews straight to the window by default; the crop needs the GPU viewfinder.
         mainHandler.post {
-            if (cameraState.value.lensLock.route != com.librestatic.opencinecam.LensLockRoute.GPU_CROP ||
+            if (cameraState.value.lensLock.route != com.librestatic.opencinecam.capture.LensLockRoute.GPU_CROP ||
                 cameraState.value.structuralSettingsFrozen || previewEngine.usesGpuViewfinder() || !desiredGpuViewfinder()) return@post
             attachedPreviewSurface?.takeIf { it.isValid }?.let { localBinder.attachPreview(it, attachedPreviewRotationDegrees) }
         }
@@ -1138,7 +1138,7 @@ internal fun CaptureService.newPreviewListener(): Camera2PreviewListener = objec
     }
 
     /** Publishes a served lock: the locked lens' own range on the logical scale; the anchors are the lock options. */
-    private fun serveLensLock(physicalId: String, uiZoomRange: ClosedFloatingPointRange<Float>, route: com.librestatic.opencinecam.LensLockRoute) {
+    private fun serveLensLock(physicalId: String, uiZoomRange: ClosedFloatingPointRange<Float>, route: com.librestatic.opencinecam.capture.LensLockRoute) {
         refreshLensLockState()
         cameraState.update { state ->
             val anchors = state.lensLock.options.map { ZoomAnchor(it.anchorRatio, it.focalLengthMm, it.physicalId) }

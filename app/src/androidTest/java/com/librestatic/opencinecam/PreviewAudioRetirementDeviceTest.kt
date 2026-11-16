@@ -16,6 +16,8 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.camera.AudioLevelSnapshot
 import com.librestatic.opencinecam.camera.Camera2PreviewEngine
 import com.librestatic.opencinecam.camera.DigitalRecordingGain
+import com.librestatic.opencinecam.capture.OperatorPreferences
+import com.librestatic.opencinecam.capture.StartupMode
 import com.librestatic.opencinecam.gallery.GalleryMediaKind
 import com.librestatic.opencinecam.gallery.GallerySettings
 import com.librestatic.opencinecam.gallery.MediaShareContent

@@ -4,7 +4,7 @@ package com.librestatic.opencinecam.subject
 import com.librestatic.opencinecam.camera.TimelapsePauseStatus
 import com.librestatic.opencinecam.CameraUiPhase
 import com.librestatic.opencinecam.CameraUiState
-import com.librestatic.opencinecam.PreviewViewport
+import com.librestatic.opencinecam.capture.PreviewViewport
 import com.librestatic.opencinecam.fold.SubjectDisplaySettings
 import com.librestatic.opencinecam.fold.SubjectPreviewGuide
 import org.junit.Assert.*

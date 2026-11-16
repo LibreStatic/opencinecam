@@ -30,6 +30,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.librestatic.opencinecam.capture.Amber
+import com.librestatic.opencinecam.capture.audioMeterModeLabel
+import com.librestatic.opencinecam.capture.Muted
+import com.librestatic.opencinecam.capture.VerifiedCyan
 import com.librestatic.opencinecam.media.audio.AudioOutputFormat
 import com.librestatic.opencinecam.ui.CineSlider
 import com.librestatic.opencinecam.media.audio.AudioBitDepth

@@ -68,9 +68,9 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import com.librestatic.opencinecam.dialogShortcuts
-import com.librestatic.opencinecam.ShortcutAction
-import com.librestatic.opencinecam.withShortcut
+import com.librestatic.opencinecam.capture.dialogShortcuts
+import com.librestatic.opencinecam.capture.ShortcutAction
+import com.librestatic.opencinecam.capture.withShortcut
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.librestatic.opencinecam.media.ocraw.OcrawMissingReason
 import com.librestatic.opencinecam.playback.*

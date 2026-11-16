@@ -1,14 +1,14 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam.service
 
-import com.librestatic.opencinecam.AF_MODES
-import com.librestatic.opencinecam.AWB_MODES
+import com.librestatic.opencinecam.capture.AF_MODES
+import com.librestatic.opencinecam.capture.AWB_MODES
 import com.librestatic.opencinecam.CameraUiState
-import com.librestatic.opencinecam.EDGE_MODES
-import com.librestatic.opencinecam.OPTICAL_MODES
-import com.librestatic.opencinecam.PROCESSING_MODES
-import com.librestatic.opencinecam.TONEMAP_MODES
-import com.librestatic.opencinecam.VIDEO_MODES
+import com.librestatic.opencinecam.capture.EDGE_MODES
+import com.librestatic.opencinecam.capture.OPTICAL_MODES
+import com.librestatic.opencinecam.capture.PROCESSING_MODES
+import com.librestatic.opencinecam.capture.TONEMAP_MODES
+import com.librestatic.opencinecam.capture.VIDEO_MODES
 import com.librestatic.opencinecam.camera.WhiteBalanceSelection
 import com.librestatic.opencinecam.storage.ClipCameraSettings
 import com.librestatic.opencinecam.storage.ClipSampledRange

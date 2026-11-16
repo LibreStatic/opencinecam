@@ -24,8 +24,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
-import com.librestatic.opencinecam.dialogShortcuts
-import com.librestatic.opencinecam.ShortcutAction
+import com.librestatic.opencinecam.capture.dialogShortcuts
+import com.librestatic.opencinecam.capture.ShortcutAction
 import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.SettingsAccent
 import com.librestatic.opencinecam.SettingsMuted

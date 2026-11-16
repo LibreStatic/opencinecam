@@ -4,14 +4,14 @@
 package com.librestatic.opencinecam.rawvideo
 
 import com.librestatic.opencinecam.ModeGateState
-import com.librestatic.opencinecam.RawQualificationItemStatus
+import com.librestatic.opencinecam.capture.RawQualificationItemStatus
 import com.librestatic.opencinecam.camera.RawBenchmarkStatus
 import com.librestatic.opencinecam.camera.RawLiveRun
 import com.librestatic.opencinecam.camera.RawStorageSweep
 import com.librestatic.opencinecam.camera.RawThroughputBenchmark
 import com.librestatic.opencinecam.camera.RawThroughputSample
 import com.librestatic.opencinecam.camera.RawVideoConfig
-import com.librestatic.opencinecam.rawQualificationRunStatus
+import com.librestatic.opencinecam.capture.rawQualificationRunStatus
 import com.librestatic.opencinecam.service.rawVideoGate
 import com.librestatic.opencinecam.service.rawVideoUsableConfigs
 import com.librestatic.opencinecam.storage.RawVideoQualificationStore

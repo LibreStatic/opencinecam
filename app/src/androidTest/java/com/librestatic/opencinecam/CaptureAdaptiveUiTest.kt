@@ -37,6 +37,8 @@ import com.librestatic.opencinecam.camera.AudioChannelLevel
 import com.librestatic.opencinecam.camera.AudioLevelSnapshot
 import com.librestatic.opencinecam.camera.LockState
 import com.librestatic.opencinecam.camera.ZoomAnchor
+import com.librestatic.opencinecam.capture.AdaptiveCaptureChrome
+import com.librestatic.opencinecam.capture.CompositionGridMode
 import org.junit.Rule
 import org.junit.Test
 import org.junit.Assert.assertFalse
