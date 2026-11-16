@@ -110,7 +110,7 @@ internal fun CaptureService.createTakeOutput(slate: ProductionSlateSettings?, ca
         val now = resolveTakeDestination()
         if (continuation != null || now.destination !is RecordingDestination.Phone) throw gone
         // Refused for the phone's free space: the refusal is already shown, and the take start is not a failure.
-        if (!admitChangedTakeDestination()) throw TakeStartRefused(gone)
+        if (!admitChangedTakeDestination(now.destination)) throw TakeStartRefused(gone)
         android.util.Log.w("RecordingDestination", "The drive's permission went at take start: the take goes to the phone")
         return VideoOutput.create(this, slate, captureNames, now.destination).also { holdTakeDestination(now) }
     }
@@ -126,14 +126,15 @@ internal fun CaptureService.storageRefusalText(admission: StorageAdmission.Refus
 
 /**
  * Main, before an encoded take's foreground start and output: the take was admitted for the destination resolved
- * then, before the awaited transfer and audio retirement and the white balance convergence. When the one resolved now
- * differs (the drive left or arrived meanwhile), the take is admitted again against its free space; false, with the
+ * then, before the awaited transfer and audio retirement and the white balance convergence. When [resolved] (the one
+ * resolved now when null; a caller that already resolved it passes it, so admission and output agree) differs
+ * (the drive left or arrived meanwhile), the take is admitted again against its free space; false, with the
  * refusal shown, when it does not fit. A continuation was admitted for the phone, where it always goes.
  */
-internal fun CaptureService.admitChangedTakeDestination(): Boolean {
+internal fun CaptureService.admitChangedTakeDestination(resolved: RecordingDestination? = null): Boolean {
     val intent = recordingLutIntent.get()?.takeIf { it.owner === transferCapture.get() } ?: return true
     if (intent.continuation != null) return true
-    val destination = resolveTakeDestination().destination
+    val destination = resolved ?: resolveTakeDestination().destination
     if (destination == intent.admittedDestination) return true
     android.util.Log.w("RecordingDestination", "The take's destination changed since its admission; admitting it again")
     when (val admission = admitRecordingStorage(settings.recordingPolicy, takeProjectedBytesPerMinute, destinationFreeBytes(destination))) {
