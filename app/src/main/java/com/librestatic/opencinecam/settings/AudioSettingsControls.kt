@@ -42,6 +42,13 @@ import com.librestatic.opencinecam.ui.CineSlider
 import com.librestatic.opencinecam.media.audio.AudioBitDepth
 import kotlin.math.roundToInt
 
+/** The PCM tuples the rows may offer for [format]: FLAC records 16-bit only, as [normalizedFor] enforces. */
+internal fun pcmChoices(
+    format: AudioOutputFormat,
+    configurations: List<com.librestatic.opencinecam.media.audio.PcmAudioConfiguration>,
+): List<com.librestatic.opencinecam.media.audio.PcmAudioConfiguration> =
+    if (format == AudioOutputFormat.FLAC) configurations.filter { it.bitDepth == AudioBitDepth.PCM_16 } else configurations
+
 @Composable
 internal fun ProfessionalAudioSettings(
     state: CameraUiState,
@@ -66,8 +73,7 @@ internal fun ProfessionalAudioSettings(
         }
         fun update(candidate: CameraSettings) = onSettingsChange(candidate.normalizedFor(capabilities))
         fun selectPcm(configuration: com.librestatic.opencinecam.media.audio.PcmAudioConfiguration) =
-            onSettingsChange(settings.copy(
-                audioOutputFormat = settings.audioOutputFormat,
+            update(settings.copy(
                 audioSampleRateHz = configuration.sampleRate,
                 audioBitDepth = configuration.bitDepth,
                 audioChannels = configuration.channels,
@@ -78,9 +84,10 @@ internal fun ProfessionalAudioSettings(
             selected = settings.audioOutputFormat.name,
         ) { name -> update(settings.copy(audioOutputFormat = AudioOutputFormat.valueOf(name))) }
 
+        val pcm = pcmChoices(settings.audioOutputFormat, capabilities.pcmConfigurations)
         val rates = if (settings.audioOutputFormat == AudioOutputFormat.AAC_MP4) {
             capabilities.aacSampleRates
-        } else capabilities.pcmConfigurations.map { it.sampleRate }.distinct().sorted()
+        } else pcm.map { it.sampleRate }.distinct().sorted()
         AudioChoiceRow(
             title = stringResource(R.string.audio_sample_rate),
             choices = rates.map { it.toString() to formatAudioRate(it) },
@@ -88,7 +95,7 @@ internal fun ProfessionalAudioSettings(
         ) { rate ->
             val selectedRate = rate.toInt()
             if (settings.audioOutputFormat != AudioOutputFormat.AAC_MP4) {
-                capabilities.pcmConfigurations.filter { it.sampleRate == selectedRate }
+                pcm.filter { it.sampleRate == selectedRate }
                     .minWithOrNull(compareBy<com.librestatic.opencinecam.media.audio.PcmAudioConfiguration> {
                         kotlin.math.abs(it.bitDepth.bits - settings.audioBitDepth.bits)
                     }.thenBy { kotlin.math.abs(it.channels - settings.audioChannels) })
@@ -105,7 +112,7 @@ internal fun ProfessionalAudioSettings(
                 selected = settings.audioBitDepth.name,
             ) { depth ->
                 val selectedDepth = AudioBitDepth.valueOf(depth)
-                capabilities.pcmConfigurations.filter { it.bitDepth == selectedDepth }
+                pcm.filter { it.bitDepth == selectedDepth }
                     .minWithOrNull(compareBy<com.librestatic.opencinecam.media.audio.PcmAudioConfiguration> {
                         kotlin.math.abs(it.sampleRate - settings.audioSampleRateHz)
                     }.thenBy { kotlin.math.abs(it.channels - settings.audioChannels) })
@@ -115,7 +122,7 @@ internal fun ProfessionalAudioSettings(
 
         val channels = if (settings.audioOutputFormat == AudioOutputFormat.AAC_MP4) {
             capabilities.aacChannelCounts
-        } else capabilities.channelCounts
+        } else pcm.map { it.channels }.distinct().sorted()
         AudioChoiceRow(
             title = stringResource(R.string.audio_channels),
             choices = channels.map { it.toString() to stringResource(if (it == 1) R.string.audio_mono else R.string.audio_stereo) },
@@ -123,7 +130,7 @@ internal fun ProfessionalAudioSettings(
         ) { count ->
             val selectedChannels = count.toInt()
             if (settings.audioOutputFormat != AudioOutputFormat.AAC_MP4) {
-                capabilities.pcmConfigurations.filter { it.channels == selectedChannels }
+                pcm.filter { it.channels == selectedChannels }
                     .minWithOrNull(compareBy<com.librestatic.opencinecam.media.audio.PcmAudioConfiguration> {
                         kotlin.math.abs(it.sampleRate - settings.audioSampleRateHz)
                     }.thenBy { kotlin.math.abs(it.bitDepth.bits - settings.audioBitDepth.bits) })
