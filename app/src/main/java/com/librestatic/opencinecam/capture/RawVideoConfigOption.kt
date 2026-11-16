@@ -62,6 +62,14 @@ data class RawVideoConfigOption(
     val capacityBytesPerSecond: Long
         get() = if (isCompressed) (bytesPerSecond / COMPRESSED_CAPACITY_RATIO).toLong() else bytesPerSecond
 
+    /**
+     * An estimate of the rate reaching storage, in decimal MB/s, for a compressed option; null for an
+     * uncompressed one. It uses the conservative [COMPRESSED_CAPACITY_RATIO], so it is shown beside the
+     * uncompressed rate and never used for throughput (PLAN-071 decision 1).
+     */
+    val estimatedWrittenMegabytesPerSecond: Double?
+        get() = if (isCompressed) capacityBytesPerSecond / 1_000_000.0 else null
+
     companion object {
         /** Compression ratio assumed for compressed capacity estimates (never for throughput). */
         const val COMPRESSED_CAPACITY_RATIO = 1.8

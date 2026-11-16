@@ -86,6 +86,20 @@ class RawVideoUiTest {
         assertEquals(468L, rawRateMegabytes(lj92))
     }
 
+    @Test fun compressedOptionEstimatesTheWrittenRateAtTheConservativeRatio() {
+        val bp = full30.copy(key = "full@30+bp", isCompressed = true)
+        val expected = Math.round(full30.bytesPerSecond / RawVideoConfigOption.COMPRESSED_CAPACITY_RATIO / 1e6)
+        assertEquals(expected, rawWrittenRateMegabytes(bp))
+        assertEquals(468L, rawRateMegabytes(bp))
+        val state = CameraUiState(selectedMode = CaptureMode.RAW_VIDEO, rawVideoOptions = listOf(bp), rawVideoSelectedKey = bp.key)
+        assertEquals(expected, rawVideoStatusFacts(state)!!.writtenMegabytesPerSecond)
+    }
+
+    @Test fun uncompressedOptionHasNoWrittenEstimate() {
+        assertNull(full30.estimatedWrittenMegabytesPerSecond)
+        assertNull(rawWrittenRateMegabytes(full30))
+    }
+
     @Test fun ringLevelsTurnAmberAtHalfAndRedAtEightyPercent() {
         assertEquals(RawRingLevel.NORMAL, rawRingLevel(0))
         assertEquals(RawRingLevel.NORMAL, rawRingLevel(49))

@@ -9,6 +9,7 @@
     <string name="raw_video_crop_note">A crop writes only the centre of the sensor: the same readout, a narrower field of view.</string>
     <string name="raw_video_config_frozen">The configuration changes between takes.</string>
     <string name="raw_video_rate">%1$d MB/s</string>
+    <string name="raw_video_rate_compressed">%1$d MB/s (≈%2$d MB/s written)</string>
     <string name="raw_video_rate_and_time">%1$s · %2$s left</string>
     <string name="raw_video_label_crop">%1$s · crop</string>
     <string name="raw_video_label_compressed">Compressed</string>

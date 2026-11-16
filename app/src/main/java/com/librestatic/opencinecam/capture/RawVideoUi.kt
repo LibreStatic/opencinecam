@@ -73,6 +73,9 @@ internal fun rawRecordMinutesLeft(freeBytes: Long?, bytesPerSecond: Long): Long?
 /** The data rate in whole decimal megabytes per second, as the qualification report states it. */
 internal fun rawRateMegabytes(option: RawVideoConfigOption): Long = option.megabytesPerSecond.roundToLong()
 
+/** The estimated written rate in whole MB/s of a compressed option ([RawVideoConfigOption.estimatedWrittenMegabytesPerSecond]); null when uncompressed. */
+internal fun rawWrittenRateMegabytes(option: RawVideoConfigOption): Long? = option.estimatedWrittenMegabytesPerSecond?.roundToLong()
+
 /**
  * The choice the chooser marks: the persisted key when it still names one of [options], else the
  * empty key (Automatic), which is also what the service falls back to for a stale key.
@@ -118,6 +121,8 @@ internal data class RawStatusFacts(
     val timeLeftMs: Long?,
     /** The configuration is block-pack, so its label reads near-lossless when that is active. */
     val isBlockPack: Boolean = false,
+    /** The estimated written MB/s of a compressed configuration; null when uncompressed. */
+    val writtenMegabytesPerSecond: Long? = null,
 )
 
 /**
@@ -129,8 +134,15 @@ internal fun rawVideoStatusFacts(state: CameraUiState): RawStatusFacts? {
     if (state.selectedMode != CaptureMode.RAW_VIDEO) return null
     val option = rawVideoActiveOption(state) ?: return null
     return RawStatusFacts(option.label, option.isCrop, rawRateMegabytes(option),
-        rawRecordTimeLeftMs(captureStatusFreeBytes(state), option.capacityBytesPerSecond), option.isBlockPack)
+        rawRecordTimeLeftMs(captureStatusFreeBytes(state), option.capacityBytesPerSecond), option.isBlockPack,
+        rawWrittenRateMegabytes(option))
 }
+
+/** "468 MB/s", or with the estimated written rate of a compressed option "468 MB/s (≈260 MB/s written)". */
+@Composable
+internal fun rawRateText(megabytes: Long, writtenMegabytes: Long?): String =
+    if (writtenMegabytes == null) stringResource(R.string.raw_video_rate, megabytes)
+    else stringResource(R.string.raw_video_rate_compressed, megabytes, writtenMegabytes)
 
 /**
  * "468 MB/s · 3 h 24 min left", or only the rate when the free space is unknown; a reduced-rate
@@ -138,7 +150,7 @@ internal fun rawVideoStatusFacts(state: CameraUiState): RawStatusFacts? {
  */
 @Composable
 internal fun rawOptionDetail(option: RawVideoConfigOption, freeBytes: Long?): String {
-    val rate = stringResource(R.string.raw_video_rate, rawRateMegabytes(option))
+    val rate = rawRateText(rawRateMegabytes(option), rawWrittenRateMegabytes(option))
     // A compressed option's capacity assumes a conservative ratio; its rate stays the uncompressed one it qualified at.
     val left = rawRecordTimeLeftMs(freeBytes, option.capacityBytesPerSecond)
     val detail = if (left == null) rate else stringResource(R.string.raw_video_rate_and_time, rate, formatRecordTimeLeft(left))
