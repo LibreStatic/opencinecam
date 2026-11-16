@@ -58,7 +58,7 @@ internal fun Camera2PreviewEngine.openRawVideoStream(descriptor: Camera2CameraDe
     val plan = rawVideoFrameRatePlan(fpsRanges, config.fps, declaredMinFrameDurationNs, qtiOverride)
     Log.i(TAG, "RAW video stream ${config.rawWidth}x${config.rawHeight} @${config.fps} on camera ${descriptor.cameraId}, " +
         "graph range ${(decision as RawVideoGraphDecision.Accepted).fpsRange}, AE range ${plan.aeRange}, " +
-        "declared min frame ${declaredMinFrameDurationNs} ns, QTI override ${plan.vendorFrameDurationNs ?: "off"}")
+        "declared min frame $declaredMinFrameDurationNs ns, QTI override ${plan.vendorFrameDurationNs ?: "off"}")
     return stream
 }
 

@@ -130,7 +130,6 @@ private class FakeSink(private val loop: ManualLoop, private val events: Mutable
     override fun release() { released = true; events += "sink-release" }
 }
 
-
 /**
  * An audio output on the virtual clock: it plays [speed] sample frames per take frame of loop time from
  * [play], never past what was written, and takes at most [capacityFrames] ahead of the played position.
@@ -538,7 +537,6 @@ class RawPlaybackSessionTest {
         assertTrue(session.retirement.isDone)
         assertTrue(observations.isEmpty())
     }
-
 
     // ---- Audio (PLAN-071 §7.1) ----
 

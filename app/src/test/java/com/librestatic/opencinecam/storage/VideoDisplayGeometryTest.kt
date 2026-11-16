@@ -65,5 +65,4 @@ class VideoDisplayGeometryTest {
         assertThrows(IllegalArgumentException::class.java) { videoDisplayGeometry(96, 64, sarWidth = 2, legacyDisplayWidth = 192, legacyDisplayHeight = 62) }
         assertThrows(IllegalArgumentException::class.java) { videoDisplayGeometry(96, 64, cropBottom = 64, legacyDisplayWidth = 192, legacyDisplayHeight = 62) }
     }
-
 }

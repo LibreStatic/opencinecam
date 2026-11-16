@@ -50,9 +50,9 @@ class VideoFileGeometryValidator(private val context: Context) {
                 sarWidth = sarWidth,
                 sarHeight = sarHeight,
                 message = when {
-                    !dimensionsMatch -> "Encoded dimensions are ${width}×${height}; expected ${expected.encodedSize.width}×${expected.encodedSize.height}."
+                    !dimensionsMatch -> "Encoded dimensions are $width×$height; expected ${expected.encodedSize.width}×${expected.encodedSize.height}."
                     !rotationMatches -> "Container rotation is $rotation°; expected ${expected.containerRotationDegrees}°."
-                    !sarMatches -> "Pixel aspect ratio is ${sarWidth}:${sarHeight}; expected 1:1."
+                    !sarMatches -> "Pixel aspect ratio is $sarWidth:$sarHeight; expected 1:1."
                     else -> "Video geometry matches the latched recording contract."
                 },
             )

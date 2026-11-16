@@ -211,7 +211,6 @@ object ColorSolver {
         val fx = f(x); val fy = f(y); val fz = f(z)
         return doubleArrayOf(116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz))
     }
-
 }
 
 /** Applies a solved correction to scene-linear colour. */

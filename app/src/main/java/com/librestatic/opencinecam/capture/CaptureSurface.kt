@@ -287,7 +287,6 @@ internal fun CaptureSurface(
                 drawScopesPanel = !fullChrome,
             )
         }
-
         }
         Box(paneModifier(panes?.controls).testTag("fold-controls-pane")) {
         if (state.selfRecordingActive && settings.subjectDisplay.selfMinimalControls) {
@@ -343,7 +342,6 @@ internal fun CaptureSurface(
             onOpenRawQualification = onOpenRawQualification,
         )
         }
-
         }
         Box(paneModifier(panes?.preview)) {
         if (state.countdownSeconds > 0) CountdownBadge(state.countdownSeconds, Modifier.align(Alignment.Center))

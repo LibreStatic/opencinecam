@@ -92,4 +92,3 @@ object FocusMeteringMapper {
         return normalized
     }
 }
-

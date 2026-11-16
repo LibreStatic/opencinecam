@@ -535,17 +535,17 @@ internal fun CaptureService.newPreviewListener(): Camera2PreviewListener = objec
         cameraState.value = cameraState.value.copy(
             phase = CameraUiPhase.RECORDING,
             message = if (cameraState.value.selectedMode == CaptureMode.HLG) {
-                "REC ${width}×$height · ${hdrTakeFormat(cameraState.value).label} BT.2020 · HEVC Main10 · ${cameraState.value.targetFps} fps · $activeRecordingAudioLabel"
+                "REC $width×$height · ${hdrTakeFormat(cameraState.value).label} BT.2020 · HEVC Main10 · ${cameraState.value.targetFps} fps · $activeRecordingAudioLabel"
             } else if (cameraState.value.selectedMode.usesLogGraph) {
                 val source = if (cameraState.value.activeLogProfile?.sourcePath == OpenCineLogSourcePath.SDR_BT709_ISP) {
                     getString(R.string.capture_source_hfr_isp_derived) + " · " + getString(R.string.capture_source_depth_not_claimed)
                 } else getString(R.string.capture_source_hlg_derived)
-                "REC ${width}×$height · ${if (recordingLutIntent.get()?.lut != null) "LUT → SDR BT.709" else "OCLog2"} · HEVC Main10 · $source · ${cameraState.value.targetFps} fps · $activeRecordingAudioLabel"
+                "REC $width×$height · ${if (recordingLutIntent.get()?.lut != null) "LUT → SDR BT.709" else "OCLog2"} · HEVC Main10 · $source · ${cameraState.value.targetFps} fps · $activeRecordingAudioLabel"
             } else if (cameraState.value.selectedMode == CaptureMode.TIME_LAPSE) {
                 val intervalLabel = formatTimelapseInterval(cameraState.value.timelapseIntervalMs)
                 getString(R.string.timelapse_recording, intervalLabel, cameraState.value.recordingProjectRate?.projectLabel() ?: settings.timelapseProjectRate.projectLabel())
             } else {
-                "REC ${width}×$height · ${previewEngine.activeVideoCodec()?.label ?: "H.264"} · $activeRecordingAudioLabel" +
+                "REC $width×$height · ${previewEngine.activeVideoCodec()?.label ?: "H.264"} · $activeRecordingAudioLabel" +
                     cameraState.value.recordingProjectRate?.let { " · " + getString(R.string.project_active_rate, it.projectLabel()) }.orEmpty()
             },
             recordingElapsedMs = 0L,
@@ -763,8 +763,7 @@ internal fun CaptureService.newPreviewListener(): Camera2PreviewListener = objec
                         null
                     }
                 var clipSeparateAudio: ClipSeparateAudio? = null
-                fun noteAudioPrepared(sidecar: AudioSidecarRecorder, prepared: com.librestatic.opencinecam.storage.PreparedAudioSidecar?):
-                    com.librestatic.opencinecam.storage.PreparedAudioSidecar? {
+                fun noteAudioPrepared(sidecar: AudioSidecarRecorder, prepared: com.librestatic.opencinecam.storage.PreparedAudioSidecar?): com.librestatic.opencinecam.storage.PreparedAudioSidecar? {
                     val result = prepared?.result
                     if (prepared != null && result != null) clipSeparateAudio = ClipSeparateAudio(
                         result.container, result.sampleRateHz, result.bitDepth.bits, prepared.artifacts.map { it.displayName })

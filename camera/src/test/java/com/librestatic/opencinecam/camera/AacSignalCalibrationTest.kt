@@ -73,5 +73,4 @@ class AacSignalCalibrationTest {
         assertSame(newer, AacCodecCalibrator.cached(config))
         assertTrue(AacCodecCalibrator.invalidate(newer)); assertNull(AacCodecCalibrator.cached(config))
     }
-
 }

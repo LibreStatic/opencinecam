@@ -89,4 +89,3 @@ class SubjectOutOfFrameUiTest {
         compose.onAllNodesWithTag("subject-out-of-frame").assertCountEquals(0)
     }
 }
-

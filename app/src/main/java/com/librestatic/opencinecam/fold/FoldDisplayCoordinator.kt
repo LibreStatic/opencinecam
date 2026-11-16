@@ -304,4 +304,3 @@ internal fun SubjectStateForwarder(state: CameraUiState, onState: (CameraUiState
  */
 internal fun transferBrightnessRequest(state: FoldDisplayState, brightness: Float): Float? =
     brightness.takeIf { state.phase == DisplaySessionPhase.ACTIVE && state.operation == DisplayOperation.TRANSFER }
-

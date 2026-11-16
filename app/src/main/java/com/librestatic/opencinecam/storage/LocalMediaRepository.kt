@@ -76,7 +76,6 @@ class LocalMediaRepository(context: Context) {
         }
     }
 
-
     /**
      * Targeted re-observation for sharing. It never searches the library or repairs capture state. A drive take
      * (PLAN-072) is re-read from its folder through SAF instead; an unplugged drive is [DriveNotConnectedException].
@@ -111,7 +110,6 @@ class LocalMediaRepository(context: Context) {
         checkShareRunning()
         return MediaShareSnapshot(fresh, documents)
     }
-
 
     /** Deletion requires a complete provider enumeration, including pending rows. A gallery page
      * may display a bounded incomplete take, but that is never authority to delete a truncated set. */

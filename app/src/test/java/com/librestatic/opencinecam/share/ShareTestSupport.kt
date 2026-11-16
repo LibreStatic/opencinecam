@@ -93,7 +93,7 @@ internal class RawHttpClient(host: InetAddress, port: Int, private val user: Str
     fun digest(method: String, uri: String, nonceCount: Int? = null, pass: String? = password): String? {
         val c = challenge ?: return null
         val count = "%08x".format(nonceCount ?: ++nc)
-        val cnonce = "c0ffee${count}"
+        val cnonce = "c0ffee$count"
         val ha1 = DigestAuthenticator.md5Hex("$user:${c["realm"]}:$pass")
         val ha2 = DigestAuthenticator.md5Hex("$method:$uri")
         val response = DigestAuthenticator.md5Hex("$ha1:${c["nonce"]}:$count:$cnonce:auth:$ha2")

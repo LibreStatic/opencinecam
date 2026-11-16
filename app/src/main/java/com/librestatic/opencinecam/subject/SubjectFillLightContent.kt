@@ -179,4 +179,3 @@ private fun FillLightPresetRow(subject: SubjectDisplaySettings, onSelect: (FillL
         }
     }
 }
-

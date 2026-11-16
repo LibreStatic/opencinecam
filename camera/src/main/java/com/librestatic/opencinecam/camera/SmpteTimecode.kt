@@ -102,7 +102,6 @@ data class TimecodeRate(
         check(frames.bitLength() <= 63) { "Elapsed timecode frame count exceeds Long range" }
         return frames.toLong()
     }
-
 }
 
 enum class TimecodeMode { FREE_RUN, RECORD_RUN, REGEN }
