@@ -184,7 +184,8 @@ internal fun Camera2PreviewEngine.lensLockPlan(
     if (lensLockCropForced()) return crop("forced by debug.opencinecam.lenslock.forcecrop")
     val physical = physicalDescriptor(binding, logical) ?: return crop(LensLockUnavailable.DESCRIPTOR)
     if (stillFormat == StillPhotoFormat.HEIC && physical.heicSize == null) return crop(LensLockUnavailable.FORMAT)
-    if (openCineLog && !physical.supportsOpenCineLog) return crop(LensLockUnavailable.LOG)
+    // Constrained high-speed LOG profiles cannot run the direct path: the lens needs a regular one.
+    if (openCineLog && physical.logProfiles.all { it.constrainedHighSpeed }) return crop(LensLockUnavailable.LOG)
     val mappedVideo = videoProfile?.let { requested ->
         val candidates = physical.videoProfiles.filterNot { it.constrainedHighSpeed }
         LensLockMapping.profileIndex(requested.size.width, requested.size.height, requested.fps,
