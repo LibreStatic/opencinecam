@@ -65,6 +65,21 @@ class IncompleteTakeRecoveryTest {
         assertTrue(json.getString("incompleteNote").contains("repair"))
     }
 
+    @Test fun aStoredReasonReplacesProcessDeathInTheSidecarsAndTheirNote() {
+        val clipText = """{"schemaVersion":"1.0.0","recordingId":"$id","events":[]}"""
+        val fake = Rows()
+        val inserted = mutableListOf<String>()
+        recoverIncompleteTake(id, listOf(
+            row("DCIM", "v", "take.mp4", "video/mp4", 100),
+            row("Download", "c", "take.clip.json", "application/json", 60),
+        ), fake, { name -> inserted += name; "new:$name" }, { mapOf("c" to clipText)[it] }, reason = IncompleteTake.DRIVE_DISCONNECTED)
+        listOf("new:take.incomplete.json", "c").forEach { handle ->
+            val json = parse(fake.written.getValue(handle))
+            assertEquals(handle, "drive-disconnected", json.getJSONArray("failureReasons").getString(0))
+            assertTrue(handle, json.getString("incompleteNote").contains("USB drive was disconnected"))
+        }
+    }
+
     @Test fun anExistingPendingSidecarIsUpdatedNotDuplicated() {
         val sidecar = row("Download", "s", "take.timing.json", "application/json", 90)
         val existing = """{"schema":"opencinecam.av-timing.v1","videoUri":"content://media/external_primary/v","bundleId":"$id"}"""

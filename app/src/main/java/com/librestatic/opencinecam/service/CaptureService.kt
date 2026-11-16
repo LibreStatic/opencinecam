@@ -4083,6 +4083,8 @@ class CaptureService : Service() {
                         cameraState.update { current -> current.copy(
                             phase = CameraUiPhase.SAVED,
                             recordingFinalizing = false,
+                        // Recovery on the drive's return says so, not that the process died.
+                        runCatching { output?.recoveryGroup?.leaveForRecovery(com.librestatic.opencinecam.storage.IncompleteTake.DRIVE_DISCONNECTED) }
                             recordingWarning = null,
                             recordingPausePending = false,
                             recordingWhiteBalanceStatus = RecordingWhiteBalanceStatus.IDLE,

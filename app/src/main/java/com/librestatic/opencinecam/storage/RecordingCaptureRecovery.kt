@@ -112,16 +112,17 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
             { throw IllegalStateException("Recording recovery journal is corrupt") })
         try {
             db.execSQL("PRAGMA synchronous=FULL")
-            check(db.version in 0..2) { "Unsupported recording recovery journal version" }
+            check(db.version in 0..3) { "Unsupported recording recovery journal version" }
             if (db.version == 0) db.transaction {
                 execSQL("CREATE TABLE captures(id TEXT PRIMARY KEY NOT NULL, committed INTEGER NOT NULL CHECK(committed IN (0,1)), " +
-                    "tree TEXT, volume TEXT, folder TEXT)")
-                version = 2
-            } else if (db.version == 1) db.transaction {
+                    "tree TEXT, volume TEXT, folder TEXT, reason TEXT)")
+                version = 3
+            } else if (db.version < 3) db.transaction {
                 // Version 1 rows are MediaStore takes: the new columns stay NULL. A column already present is kept.
+                // Version 3 adds `reason`: why a take was left for recovery (NULL: the process died).
                 val columns = rawQuery("PRAGMA table_info(captures)", null).use { c -> buildSet { while (c.moveToNext()) add(c.getString(1)) } }
-                listOf("tree", "volume", "folder").filter { it !in columns }.forEach { execSQL("ALTER TABLE captures ADD COLUMN $it TEXT") }
-                version = 2
+                listOf("tree", "volume", "folder", "reason").filter { it !in columns }.forEach { execSQL("ALTER TABLE captures ADD COLUMN $it TEXT") }
+                version = 3
             }
             check(count(db, phone = true) <= MAX_PHONE_TAKES && count(db, phone = false) <= MAX_DRIVE_TAKES) { "Recording recovery capacity exceeded" }
             return db
@@ -225,6 +226,12 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
         check(db.delete("captures", "id = ? AND committed = 0", arrayOf(oldest[0])) == 1)
         android.util.Log.w("RecordingRecovery", "Recovery journal full: forgot interrupted take ${oldest[0]} on drive ${oldest[2]}, " +
             "deferred since its drive went; its files stay on the drive")
+    }
+
+    /** Take [id] was left pending for [reason] (an [IncompleteTake] reason): recovery writes it into the sidecar. A no-op once committed. */
+    internal fun markLeft(id: String, reason: String) = synchronized(recordingRecoveryLock) {
+        open().use { db -> db.update("captures", ContentValues().apply { put("reason", reason) }, "id = ? AND committed = 0", arrayOf(id)) }
+        Unit
     }
 
     /** The live registry gives take [id] up; the next [recover] may resolve it. */
@@ -451,9 +458,10 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
     private fun publishIncomplete(journal: JournalAccess, id: String, store: RecordingRowStore): Int {
         requireId(id)
         check(journal.step { state(it, id) } == 0L) { "Only an uncommitted take can be recovered" }
+        val reason = journal.step { db -> db.rawQuery("SELECT reason FROM captures WHERE id = ?", arrayOf(id)).use { c -> if (c.moveToFirst()) c.getString(0) else null } }
         val published = recoverIncompleteTake(id, store.recovered(id), store.clipRows,
             insertSidecar = { name -> store.insert(id, "Download", name, "application/json") },
-            readText = ::readRecoveredSidecar, backups = sidecarBackups)
+            readText = ::readRecoveredSidecar, backups = sidecarBackups, reason = reason)
         if (published == 0) return 0
         store.commit(id)
         journal.step { db ->
@@ -1039,6 +1047,15 @@ class RecordingRecoveryGroup internal constructor(private val journal: Recording
 
     /** Row operations for a member's own incomplete publication (`finalizeClip`). */
     internal val clipRows: ClipRows<Uri> get() = store.clipRows
+
+    /**
+     * The take is left pending for recovery because of [reason] (an [IncompleteTake] reason, e.g. [IncompleteTake.DRIVE_DISCONNECTED]):
+     * the journal keeps it, and the recovered sidecar says so instead of claiming the process died. A no-op once the take terminated.
+     */
+    fun leaveForRecovery(reason: String) = synchronized(lock) {
+        if (committed || discarded) return@synchronized
+        journal.markLeft(id, reason)
+    }
 
     /**
      * The take's owner is done with it: no in-process step will publish, salvage or discard it any more. A take still

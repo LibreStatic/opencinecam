@@ -26,9 +26,9 @@ internal const val RECOVERED_SIDECAR_LIMIT = 1 shl 20
 /**
  * ADR-0011 crash recovery of one uncommitted take that no process owns any more. Each media row is
  * decided by [decideClipRecovery]: an empty one is deleted with its sidecar, one with bytes is published
- * (IS_PENDING=0) with a sidecar that says `takeStatus: incomplete`, reason `process-death`. The sidecar
- * is the take's pending one when it exists, else a new `<stem>.incomplete.json`. Motion logs travel with
- * their video. Returns how many rows were published; failures propagate so the journal entry survives
+ * (IS_PENDING=0) with a sidecar that says `takeStatus: incomplete`, reason `process-death` (or the [reason] the
+ * journal kept, e.g. a pulled drive). The sidecar is the take's pending one when it exists, else a new
+ * `<stem>.incomplete.json`. Motion logs travel with their video. Returns how many rows were published; failures propagate so the journal entry survives
  * for another attempt (publishing is idempotent). [readText] gives null only for a sidecar recovery ignores (too large,
  * or unreadable on the phone); a read that fails on a drive throws, so the sidecar is never rewritten as a minimal one.
  */
@@ -39,6 +39,7 @@ internal fun <U> recoverIncompleteTake(
     insertSidecar: (name: String) -> U,
     readText: (U) -> String?,
     backups: RecoveredSidecarBackups = RecoveredSidecarBackups.NONE,
+    reason: String? = null,
 ): Int {
     val media = rows.filter { it.root != "Download" }
     val json = rows.filter { it.root == "Download" && it.mime == "application/json" }
@@ -73,7 +74,7 @@ internal fun <U> recoverIncompleteTake(
         val markable = clipSidecar?.takeIf { keep && (clipSaved != null || it.bytes != 0L) }
         val clipText = clipSaved ?: markable?.handle?.let(readText)
         if (clipSaved == null && clipKey != null && clipText != null && clipSidecarToMark(clipText)) backups.write(clipKey, clipText)
-        if (markable != null && clipText != null) markRecoveredClipSidecar(bundleId, markable, clipText, clipRows)
+        if (markable != null && clipText != null) markRecoveredClipSidecar(bundleId, markable, clipText, clipRows, reason)
         val restored = markable?.handle?.takeIf { clipSaved != null }
         val sidecar = existing?.handle ?: if (keep) insertSidecar(if (video) "$stem.incomplete.json" else "$stem.audio.incomplete.json") else null
         val attachments = if (video) (others.filter { it.handle !in consumed } + listOfNotNull(clipSidecar)).also { list -> list.forEach { consumed += it.handle } } else emptyList()
@@ -81,7 +82,7 @@ internal fun <U> recoverIncompleteTake(
         val publishable = attachments.filter { it.bytes != 0L || it.handle == restored }.map { it.handle }
         val result = finalizeClip(
             clipRows, clip.handle, sidecar, muxerFinalized = false, bytesWritten = bytes,
-            sidecarBytes = { recoveredSidecar(bundleId, clip, video, existingText).toByteArray() },
+            sidecarBytes = { recoveredSidecar(bundleId, clip, video, existingText, reason).toByteArray() },
             correlationId = bundleId, attachments = if (keep) publishable else attachments.map { it.handle },
             // The take's own sidecar is rewritten in place: a failed rewrite keeps it for the retry.
             keepSidecarOnFailure = existing != null,
@@ -111,7 +112,7 @@ private fun isSidecarDocument(text: String): Boolean = text.length <= RECOVERED_
     runCatching { Json.parseToJsonElement(text) is JsonObject }.getOrDefault(false)
 
 /** The pending sidecar of the take with the marker, or a minimal document the catalog accepts. */
-internal fun <U> recoveredSidecar(bundleId: String, clip: RecoveredRow<U>, video: Boolean, existing: String?): String {
+internal fun <U> recoveredSidecar(bundleId: String, clip: RecoveredRow<U>, video: Boolean, existing: String?, reason: String? = null): String {
     val base = existing?.takeIf(::isSidecarDocument)
         ?: buildJsonObject {
             put("schema", if (video) "opencinecam.recording.v1" else "opencinecam-audio-sidecar-v1")
@@ -119,10 +120,14 @@ internal fun <U> recoveredSidecar(bundleId: String, clip: RecoveredRow<U>, video
             put("bundleId", bundleId)
         }.toString()
     return IncompleteTake.mark(
-        base, listOf(IncompleteTake.PROCESS_DEATH),
-        note = "Recording was interrupted before the file was finalized; the container may need repair.",
+        base, listOf(reason ?: IncompleteTake.PROCESS_DEATH), note = interruptionNote(reason),
     )
 }
+
+/** What the sidecar says happened: the process died unless the journal recorded another [reason]. */
+private fun interruptionNote(reason: String?): String =
+    if (reason == IncompleteTake.DRIVE_DISCONNECTED) "The USB drive was disconnected before the file was finalized; the container may need repair."
+    else "Recording was interrupted before the file was finalized; the container may need repair."
 
 /**
  * ADR-0011 for the clip sidecar of an interrupted take: it was written pending as if the take would
@@ -131,12 +136,11 @@ internal fun <U> recoveredSidecar(bundleId: String, clip: RecoveredRow<U>, video
  * published as it is. A rewrite that fails throws: it may have left the sidecar truncated, so the take stays journalled
  * and the retry restores the sidecar from the copy [recoverIncompleteTake] kept.
  */
-private fun <U> markRecoveredClipSidecar(bundleId: String, clip: RecoveredRow<U>, text: String, clipRows: ClipRows<U>) {
+private fun <U> markRecoveredClipSidecar(bundleId: String, clip: RecoveredRow<U>, text: String, clipRows: ClipRows<U>, reason: String? = null) {
     if (!clipSidecarToMark(text)) return
     val marked = try {
         IncompleteTake.mark(
-            text, listOf(IncompleteTake.PROCESS_DEATH),
-            note = "Recording was interrupted before the file was finalized; the container may need repair.",
+            text, listOf(reason ?: IncompleteTake.PROCESS_DEATH), note = interruptionNote(reason),
         )
     } catch (failure: Exception) {
         runCatching { android.util.Log.w("IncompleteTakeRecovery", "Clip sidecar of take $bundleId could not be marked incomplete; it is published as it is", failure) }
