@@ -5,7 +5,6 @@ import android.Manifest
 import android.content.ContentValues
 import android.content.Intent
 import android.net.Uri
-import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import android.provider.MediaStore
 import androidx.core.net.toUri
@@ -16,8 +15,6 @@ import com.librestatic.opencinecam.gallery.ProxySettings
 import com.librestatic.opencinecam.metadata.productionSlateJson
 import java.io.File
 import java.util.UUID
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
@@ -30,7 +27,6 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
 import org.junit.Assert.*

@@ -19,7 +19,6 @@ import android.os.HandlerThread
 import android.os.StatFs
 import android.os.SystemClock
 import android.util.Log
-import android.util.Range
 import android.util.Size
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry

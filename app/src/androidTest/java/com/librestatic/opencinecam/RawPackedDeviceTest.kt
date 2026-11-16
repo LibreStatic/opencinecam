@@ -28,7 +28,6 @@ import com.librestatic.opencinecam.media.raw.RawFrame
 import com.librestatic.opencinecam.media.raw.RawFrameMetadata
 import com.librestatic.opencinecam.media.raw.RawUnpacker
 import java.io.File
-import java.nio.ByteBuffer
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit

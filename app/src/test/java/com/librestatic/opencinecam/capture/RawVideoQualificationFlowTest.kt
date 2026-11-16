@@ -3,7 +3,6 @@
 
 package com.librestatic.opencinecam.capture
 
-import com.librestatic.opencinecam.camera.RawVideoConfig
 import com.librestatic.opencinecam.CameraUiPhase
 import com.librestatic.opencinecam.CameraUiState
 import com.librestatic.opencinecam.CaptureMode

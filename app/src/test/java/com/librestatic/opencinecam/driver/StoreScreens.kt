@@ -41,7 +41,6 @@ import com.librestatic.opencinecam.capture.CaptureInitialPane
 import com.librestatic.opencinecam.capture.CaptureLayoutFamily
 import com.librestatic.opencinecam.CaptureMode
 import com.librestatic.opencinecam.capture.CaptureScopeVisibility
-import com.librestatic.opencinecam.capture.CompositionGridMode
 import com.librestatic.opencinecam.settings.HistogramMode
 import com.librestatic.opencinecam.capture.HorizonRollMath
 import com.librestatic.opencinecam.ui.LocalAdaptiveWindow
@@ -58,7 +57,6 @@ import com.librestatic.opencinecam.camera.MonitoringSignalDomain
 import com.librestatic.opencinecam.camera.analyzeMonitoringRgb
 import com.librestatic.opencinecam.camera.detectFocusEdges
 import com.librestatic.opencinecam.camera.monitoringDisplayPoint
-import com.librestatic.opencinecam.capture.fittedPreviewViewport
 import com.librestatic.opencinecam.capture.previewDisplayRatio
 import com.librestatic.opencinecam.capture.reservedPreviewViewport
 import com.librestatic.opencinecam.capture.captureLayoutFamily

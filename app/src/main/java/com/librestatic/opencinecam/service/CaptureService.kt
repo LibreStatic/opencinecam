@@ -69,7 +69,6 @@ import com.librestatic.opencinecam.camera.AfLockBehavior
 import com.librestatic.opencinecam.camera.FocusPullEasing
 import com.librestatic.opencinecam.camera.SmpteTimecode
 import com.librestatic.opencinecam.camera.TimecodeRate
-import com.librestatic.opencinecam.camera.TimecodeMode
 import com.librestatic.opencinecam.camera.TimecodeTracker
 import com.librestatic.opencinecam.camera.HdrVideoFormat
 import com.librestatic.opencinecam.camera.OpenCineLogSourcePath

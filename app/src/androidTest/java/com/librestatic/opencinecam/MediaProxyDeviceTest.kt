@@ -2,7 +2,6 @@
 package com.librestatic.opencinecam
 
 import android.content.ContentValues
-import android.net.Uri
 import android.provider.MediaStore
 import android.util.Log
 import androidx.compose.material3.MaterialTheme
