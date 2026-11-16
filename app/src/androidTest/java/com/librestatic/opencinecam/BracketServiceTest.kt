@@ -66,7 +66,7 @@ class BracketServiceTest {
             compose.runOnUiThread {owner.prepare(640,480);owner.selectMode(CaptureMode.BRACKET,reopen=false)}
             val d=requireNotNull(owner.cameraStates.value.descriptor)
             val outer=owner.javaClass.getDeclaredField("this\$0").apply {isAccessible=true}.get(owner)
-            val engine=CaptureService::class.java.getDeclaredMethod("getPreviewEngine").apply {isAccessible=true}.invoke(outer) as Camera2PreviewEngine
+            val engine=CaptureService::class.java.getDeclaredMethod("getPreviewEngine\$app").apply {isAccessible=true}.invoke(outer) as Camera2PreviewEngine
             val executor=Camera2PreviewEngine::class.java.getDeclaredField("cameraExecutor").apply {isAccessible=true}.get(engine) as java.util.concurrent.Executor
             val writer=CaptureService::class.java.getDeclaredField("storageExecutor").apply {isAccessible=true}.get(outer) as java.util.concurrent.ThreadPoolExecutor
             compose.setContent {AndroidView(factory={ host -> SurfaceView(host).apply {

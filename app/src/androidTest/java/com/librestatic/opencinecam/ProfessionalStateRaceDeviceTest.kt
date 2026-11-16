@@ -63,7 +63,7 @@ class ProfessionalStateRaceDeviceTest {
                     set(value) {flow.value=value}
             }
             stateField.set(service,probe)
-            val apply=CaptureService::class.java.getDeclaredMethod("applyProfessionalSettings").apply {isAccessible=true}
+            val apply=CaptureService::class.java.getDeclaredMethod("applyProfessionalSettings\$app").apply {isAccessible=true}
             val worker=Thread({
                 try {apply.invoke(service)} catch(failure:Throwable) {threadFailure.set(failure)} finally {done.countDown()}
             },"E7-professional-state-race")

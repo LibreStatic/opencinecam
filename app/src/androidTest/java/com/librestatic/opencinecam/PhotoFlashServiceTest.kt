@@ -100,7 +100,7 @@ class PhotoFlashServiceTest {
             val mode = if (manual || queuedManual) ExposureMode.MANUAL else ExposureMode.AUTO
             val expected = selection.resolve(d.photoFlashCapabilities, mode)
             val outer = owner.javaClass.getDeclaredField("this\$0").apply { isAccessible = true }.get(owner)
-            val engine = CaptureService::class.java.getDeclaredMethod("getPreviewEngine").apply { isAccessible = true }.invoke(outer) as Camera2PreviewEngine
+            val engine = CaptureService::class.java.getDeclaredMethod("getPreviewEngine\$app").apply { isAccessible = true }.invoke(outer) as Camera2PreviewEngine
             if (exteriorLease) {
                 auxiliary = android.media.ImageReader.newInstance(128, 96, android.graphics.PixelFormat.RGBA_8888, 2)
                 compose.runOnUiThread {

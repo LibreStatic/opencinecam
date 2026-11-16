@@ -67,7 +67,7 @@ class OperatorLutServiceTest {
             connected = context.bindService(Intent(context,CaptureService::class.java),connection,Context.BIND_AUTO_CREATE)
             assertTrue(connected); compose.waitUntil(10_000) { bound.get()!=null }
             val owner = requireNotNull(bound.get())
-            engine = CaptureService::class.java.getDeclaredMethod("getPreviewEngine").apply { isAccessible = true }
+            engine = CaptureService::class.java.getDeclaredMethod("getPreviewEngine\$app").apply { isAccessible = true }
                 .invoke(field<CaptureService>(owner, "this$0")) as Camera2PreviewEngine
             compose.runOnUiThread { owner.prepare(640,480); owner.selectMode(CaptureMode.VIDEO,reopen=false) }
             compose.setContent { AndroidView(factory={ host -> SurfaceView(host).apply {

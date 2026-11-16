@@ -194,7 +194,7 @@ Add a zero-argument `@Composable fun` to `DriverScreens.kt`. Follow these rules:
 - Pass fake state (`CameraUiState(...)`, `CameraSettings(...)`, a fake `MediaCatalogSource`) and no-op callbacks. Leave `binder = null`.
 - When a screen builds its own repository or service, render the stateless content composable it delegates to, as `Gallery` does with `MediaCatalogContent`. If no such seam exists, extract one in production code; that is the only production refactor this tooling justifies.
 - Fakes stay in the test source set; never add them to `main`.
-- `start <Fqn>` (or `reset <Fqn>`) also accepts any fully qualified zero-argument top-level composable, private `@Preview`s included, e.g. `com.librestatic.opencinecam.CameraScreenKt.LandscapeChromePreview`. Previews that do not apply `OpenCineCamTheme` themselves render with plain Material light defaults, so for real review add a `DriverScreens.kt` entry instead.
+- `start <Fqn>` (or `reset <Fqn>`) also accepts any fully qualified zero-argument top-level composable, private `@Preview`s included, e.g. `com.librestatic.opencinecam.AdaptiveCaptureChromeKt.CaptureSlotsPreview`. Previews that do not apply `OpenCineCamTheme` themselves render with plain Material light defaults, so for real review add a `DriverScreens.kt` entry instead.
 
 ### Known limits
 

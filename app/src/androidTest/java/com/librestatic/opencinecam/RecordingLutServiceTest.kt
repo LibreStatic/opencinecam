@@ -186,7 +186,7 @@ class RecordingLutServiceTest {
             compose.waitUntil(10_000) { binder.get() != null }
             owner = requireNotNull(binder.get())
             service = field(owner, "this\$0")
-            engine = CaptureService::class.java.getDeclaredMethod("getPreviewEngine").apply { isAccessible = true }.invoke(service) as Camera2PreviewEngine
+            engine = CaptureService::class.java.getDeclaredMethod("getPreviewEngine\$app").apply { isAccessible = true }.invoke(service) as Camera2PreviewEngine
             CaptureService::class.java.getDeclaredField("transferRuntime").apply { isAccessible = true }.set(service, runtime)
             runtime.refresh()
             assertTrue(entered.await(10, TimeUnit.SECONDS))

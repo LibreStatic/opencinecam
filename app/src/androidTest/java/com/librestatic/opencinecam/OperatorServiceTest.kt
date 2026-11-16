@@ -89,7 +89,7 @@ class OperatorServiceTest {
     private fun verifyGpuReattachment(owner: CaptureService.LocalBinder) {
         fun field(target:Any,name:String):Any?=target.javaClass.getDeclaredField(name).apply {isAccessible=true}.get(target)
         val service=requireNotNull(field(owner,"this\$0"))
-        val engine=requireNotNull(CaptureService::class.java.getDeclaredMethod("getPreviewEngine").apply {isAccessible=true}.invoke(service))
+        val engine=requireNotNull(CaptureService::class.java.getDeclaredMethod("getPreviewEngine\$app").apply {isAccessible=true}.invoke(service))
         val executor=field(engine,"cameraExecutor") as java.util.concurrent.Executor
         val pipeline=requireNotNull(field(engine,"logPipeline"))
         val gpuHandler=field(pipeline,"handler") as android.os.Handler

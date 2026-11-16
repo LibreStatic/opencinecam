@@ -4,7 +4,7 @@ This page follows one video take from the record press to a published file. It c
 
 ## Where it lives
 
-- [CaptureService.kt](../../app/src/main/java/com/librestatic/opencinecam/service/CaptureService.kt): the bound and started service that owns a take. `LocalBinder.capturePrimary`, `stopRecording`, `setRecordingPaused`, `recoverPreview`, and the engine callbacks `onRecordingStarted`, `onRecordingStopped` and `onFailure`.
+- [CaptureService.kt](../../app/src/main/java/com/librestatic/opencinecam/service/CaptureService.kt): the bound and started service that owns a take. `LocalBinder.capturePrimary`, `stopRecording`, `setRecordingPaused`, `recoverPreview`, and (in [CaptureServicePreviewListener.kt](../../app/src/main/java/com/librestatic/opencinecam/service/CaptureServicePreviewListener.kt)) the engine callbacks `onRecordingStarted`, `onRecordingStopped` and `onFailure`.
 - [CaptureStateMachine.kt](../../core/model/src/main/kotlin/com/librestatic/opencinecam/core/model/CaptureStateMachine.kt): `CaptureState`, `CaptureCommand`, `CaptureStateMachine`, `HardwareOwnership` and `SerializedCaptureActor`.
 - [CaptureStateCommands.kt](../../app/src/main/java/com/librestatic/opencinecam/service/CaptureStateCommands.kt): maps service events to commands. [DispatchedTakeAdmission.kt](../../app/src/main/java/com/librestatic/opencinecam/service/DispatchedTakeAdmission.kt): releases a take's reservation exactly once.
 - [RecordingForegroundController.kt](../../app/src/main/java/com/librestatic/opencinecam/service/RecordingForegroundController.kt): the camera and microphone foreground service and its notification.
