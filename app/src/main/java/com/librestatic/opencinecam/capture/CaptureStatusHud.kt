@@ -199,9 +199,11 @@ internal fun StatusInfoBar(state: CameraUiState, settings: CameraSettings) {
             // and the time the free space lasts at it (PLAN-071). Its sound is PCM, on with the audio setting.
             add("RAW10")
             val facts = rawVideoStatusFacts(state)
-            facts?.let { val label = rawLocalizedLabel(it.label, it.isBlockPack && rawVideoNearLosslessActive(state, settings)); add(if (it.isCrop) stringResource(R.string.raw_video_label_crop, label) else label); add(rawRateText(it.megabytesPerSecond, it.writtenMegabytesPerSecond)) }
+            facts?.let { val label = rawLocalizedLabel(it.label, it.isBlockPack && rawVideoNearLosslessActive(state, settings)); add(if (it.isCrop) stringResource(R.string.raw_video_label_crop, label) else label); add(rawRateText(it.megabytesPerSecond, null)) }
             add(if (settings.audioEnabled) "PCM " + formatAudioRate(settings.audioSampleRateHz) else stringResource(R.string.status_audio_off))
             facts?.timeLeftMs?.let { add(stringResource(R.string.status_time_left, formatRecordTimeLeft(it))) }
+            // The written estimate goes last, so the ellipsis cuts it before the time left.
+            facts?.writtenMegabytesPerSecond?.let { add(stringResource(R.string.raw_video_rate_written, it)) }
         } else if (video) {
             add(when (state.selectedMode) {
                 CaptureMode.LOG -> "HEVC 10-bit LOG"
