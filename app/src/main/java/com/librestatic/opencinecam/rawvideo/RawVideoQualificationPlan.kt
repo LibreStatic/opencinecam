@@ -874,21 +874,25 @@ object RawQualificationRisk {
      * from a sweep with no cliff, are classified too). Never stored: `burstSeconds` keeps meaning the measured figure.
      */
     fun effectiveBurstSeconds(record: RawVideoQualificationRecord): Long? =
-        record.burstSeconds ?: if (isStorageFailure(record.qualification)) estimateBurstSeconds(record.qualification) else null
+        record.burstSeconds ?: if (isStorageFailure(record.qualification)) {
+            estimateBurstSeconds(record.qualification, RawQualificationFrameRate.effectiveStreamBytesPerSecond(record.config, record.achievedFps))
+        } else null
 
     /**
      * How long the ring lasts when the storage writes at the sweep's median under the judged stream: the ring
      * at the judged rate over the shortfall. [RawVideoQualification.streamBytesPerSecond] is always the RAW stream; a
      * compressed twin's required median is divided by its compression ratio, so the ratio is recovered from it and the
      * judged stream and the ring (which holds RAW frames) are both divided by it, as [RawStorageCliff.burstSeconds] does.
+     * [achievedStreamBytesPerSecond] is the RAW stream the camera achieved
+     * ([RawQualificationFrameRate.effectiveStreamBytesPerSecond]): a reduced-rate run fills the ring at that rate.
      * Null when the median is unknown or keeps up with the judged stream (only the margin was missed).
      */
-    fun estimateBurstSeconds(q: RawVideoQualification): Long? {
+    fun estimateBurstSeconds(q: RawVideoQualification, achievedStreamBytesPerSecond: Long = q.streamBytesPerSecond): Long? {
         val median = q.sweepMedianBytesPerSecond ?: return null
         if (q.streamBytesPerSecond <= 0 || q.requiredMedianBytesPerSecond <= 0 || q.ringBytes <= 0) return null
         val marginStream = q.streamBytesPerSecond * RawThroughputBenchmark.MARGIN_BASIS_POINTS / 10_000.0
         val ratio = (marginStream / q.requiredMedianBytesPerSecond).coerceAtLeast(1.0)
-        val judgedStream = q.streamBytesPerSecond / ratio
+        val judgedStream = achievedStreamBytesPerSecond.coerceAtMost(q.streamBytesPerSecond) / ratio
         if (median >= judgedStream) return null
         return kotlin.math.floor((q.ringBytes / ratio) / (judgedStream - median)).toLong()
     }

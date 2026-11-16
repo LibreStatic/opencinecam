@@ -613,6 +613,26 @@ class RawVideoQualificationPlanTest {
         assertTrue(RawQualificationRisk.isRisky(storage(320_000_000L, required = 336_750_000L)))
     }
 
+    @Test fun aReducedRateStorageFailureEstimatesItsBurstAtTheAchievedStream() {
+        val full60 = config("full@60")
+        val base = record(full60, framesWritten = 590)
+        val stream = full60.streamBytesPerSecond
+        val ring = 1_061_208_000L
+        val reduced = base.copy(qualification = base.qualification.copy(status = RawBenchmarkStatus.FAIL,
+            reasonCode = RawThroughputBenchmark.REASON_SWEEP_MEDIAN_MARGIN_FAIL,
+            reasonCodes = listOf(RawThroughputBenchmark.REASON_SWEEP_MEDIAN_MARGIN_FAIL, RawThroughputBenchmark.REASON_BUFFER_BACKLOG_EXCEEDED),
+            streamBytesPerSecond = stream, requiredMedianBytesPerSecond = stream * RawThroughputBenchmark.MARGIN_BASIS_POINTS / 10_000L,
+            sweepMedianBytesPerSecond = 800_000_000L, ringBytes = ring),
+            burstSeconds = null, ringBytes = ring, achievedFps = 51.9)
+        val achieved = RawQualificationFrameRate.effectiveStreamBytesPerSecond(full60, 51.9)
+        assertTrue(achieved < stream)
+        // The ring fills at the 51.9 fps stream, not the nominal 60 fps one: well past the floor, so risky.
+        assertEquals(kotlin.math.floor(ring.toDouble() / (achieved - 800_000_000L)).toLong(), RawQualificationRisk.effectiveBurstSeconds(reduced))
+        assertTrue(RawQualificationRisk.isRisky(reduced))
+        // At the nominal rate the same figures would read too slow.
+        assertTrue(RawQualificationRisk.estimateBurstSeconds(reduced.qualification)!! < RawQualificationRisk.MIN_RISKY_BURST_SECONDS)
+    }
+
     @Test fun aTooSlowConfigurationIsNotChoosableButDoesNotBlockItsCompressedTwin() {
         val full60 = config("full@60")
         val full30 = config("full@30")
