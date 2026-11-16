@@ -69,7 +69,7 @@ class MonitoringServiceTest {
             val descriptor = requireNotNull(owner.cameraStates.value.descriptor)
             assertNotNull("This fixture requires the actual YUV analysis output", descriptor.analysisSize)
             val outer = owner.javaClass.getDeclaredField("this\$0").apply { isAccessible = true }.get(owner)
-            val engine = CaptureService::class.java.getDeclaredMethod("getPreviewEngine").apply { isAccessible = true }
+            val engine = CaptureService::class.java.getDeclaredMethod("getPreviewEngine\$app").apply { isAccessible = true }
                 .invoke(outer) as Camera2PreviewEngine
             val executor = field(engine, "cameraExecutor") as Executor
             cameraExecutor = executor
@@ -187,7 +187,7 @@ class MonitoringServiceTest {
             val descriptor = requireNotNull(owner.cameraStates.value.descriptor)
             assertNotNull("This regression requires the actual YUV analysis output", descriptor.analysisSize)
             val outer = owner.javaClass.getDeclaredField("this\$0").apply { isAccessible = true }.get(owner)
-            val engine = CaptureService::class.java.getDeclaredMethod("getPreviewEngine").apply { isAccessible = true }
+            val engine = CaptureService::class.java.getDeclaredMethod("getPreviewEngine\$app").apply { isAccessible = true }
                 .invoke(outer) as Camera2PreviewEngine
             val executor = field(engine, "cameraExecutor") as Executor
             cameraExecutor = executor

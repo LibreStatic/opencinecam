@@ -270,7 +270,7 @@ class PreviewAudioRetirementDeviceTest {
             assertTrue(bound); compose.waitUntil(10_000) { binder.get() != null }
             val owner = requireNotNull(binder.get())
             service = field(owner, "this\$0") as CaptureService
-            engine = CaptureService::class.java.getDeclaredMethod("getPreviewEngine").apply { isAccessible = true }.invoke(service) as Camera2PreviewEngine
+            engine = CaptureService::class.java.getDeclaredMethod("getPreviewEngine\$app").apply { isAccessible = true }.invoke(service) as Camera2PreviewEngine
             val executor = field(engine, "cameraExecutor") as Executor
             compose.runOnUiThread { owner.prepare(640, 480); owner.selectMode(CaptureMode.VIDEO, reopen = false) }
             val descriptor = requireNotNull(owner.cameraStates.value.descriptor)

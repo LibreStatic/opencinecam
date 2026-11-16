@@ -125,7 +125,7 @@ class PhotoFormatServiceTest {
             compose.runOnUiThread {owner.prepare(640,480);owner.selectMode(CaptureMode.PHOTO,reopen=false)}
             val d=requireNotNull(owner.cameraStates.value.descriptor)
             val outer=owner.javaClass.getDeclaredField("this\$0").apply {isAccessible=true}.get(owner)
-            val engine=CaptureService::class.java.getDeclaredMethod("getPreviewEngine").apply {isAccessible=true}.invoke(outer) as Camera2PreviewEngine
+            val engine=CaptureService::class.java.getDeclaredMethod("getPreviewEngine\$app").apply {isAccessible=true}.invoke(outer) as Camera2PreviewEngine
             cameraEngine.set(engine)
             engineExecutor.set(Camera2PreviewEngine::class.java.getDeclaredField("cameraExecutor").apply {isAccessible=true}.get(engine) as java.util.concurrent.Executor)
             storageWriter.set(CaptureService::class.java.getDeclaredField("storageExecutor").apply {isAccessible=true}.get(outer) as java.util.concurrent.ThreadPoolExecutor)

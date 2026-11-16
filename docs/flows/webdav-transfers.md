@@ -18,7 +18,7 @@ All paths are under [`app/src/main/java/com/librestatic/opencinecam/`](../../app
 | HTTP | [`transfers/WebDavUploadTransport.kt`](../../app/src/main/java/com/librestatic/opencinecam/transfers/WebDavUploadTransport.kt) (`PUT`), [`transfers/WebDavRemoteReconciler.kt`](../../app/src/main/java/com/librestatic/opencinecam/transfers/WebDavRemoteReconciler.kt) (`GET`), [`transfers/WebDavLanTls.kt`](../../app/src/main/java/com/librestatic/opencinecam/transfers/WebDavLanTls.kt) |
 | Automatic upload | [`transfers/WebDavAutoUploadScheduler.kt`](../../app/src/main/java/com/librestatic/opencinecam/transfers/WebDavAutoUploadScheduler.kt), [`transfers/WebDavAutoUploadWorker.kt`](../../app/src/main/java/com/librestatic/opencinecam/transfers/WebDavAutoUploadWorker.kt) |
 | Manual send UI | [`WebDavTransferSettingsSection.kt`](../../app/src/main/java/com/librestatic/opencinecam/WebDavTransferSettingsSection.kt) |
-| Recording fence in the service | [`service/CaptureService.kt`](../../app/src/main/java/com/librestatic/opencinecam/service/CaptureService.kt) (`admitTransferPublication`, `reserveCapture`) |
+| Recording fence in the service | [`service/CaptureServiceTakes.kt`](../../app/src/main/java/com/librestatic/opencinecam/service/CaptureServiceTakes.kt) (`admitTransferPublication`), [`service/CaptureService.kt`](../../app/src/main/java/com/librestatic/opencinecam/service/CaptureService.kt) (`reserveCapture`) |
 | Manifest | [`AndroidManifest.xml`](../../app/src/main/AndroidManifest.xml): `FOREGROUND_SERVICE_DATA_SYNC` and WorkManager's `SystemForegroundService` with `foregroundServiceType="dataSync"` |
 
 ### Configuration and credentials
