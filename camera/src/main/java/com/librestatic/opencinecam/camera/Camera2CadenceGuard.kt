@@ -329,17 +329,14 @@ internal fun Camera2PreviewEngine.setCadenceEngaged(engaged: Boolean, frameDurat
             "heldExposure=${"%.2f ms".format(heldExposure / 1e6)} startExposure=${"%.2f ms".format(cadenceHoldExposureNs() / 1e6)} startIso=$initial " +
             "exposureRamp=${if (ramping) "${cadenceExposureRamp.totalSteps} steps ~400 ms" else "none"}")
         cadenceHeldIso = initial
-    } else if (!engaged) {
-        cadenceExposureRamp.stop()
-        cadenceIsoLoop.release()
-        cadenceAeLumas.clear()
-        cadenceHeldIso = null
     }
     cadenceEngaged = engaged
     Log.i(CADENCE_TAG, (if (engaged) "engaged" else "released") +
         ": frameDuration=${frameDurationNs?.let { "%.2f ms".format(it / 1e6) }} iso=$iso target=${requestedTargetFps}fps")
     // The hold delivers the target fps only once the exposure ramp has landed (reported then).
     if (!engaged || !cadenceExposureRamp.active) listener?.onCadenceGuardChanged(engaged)
+    // A released request reads only cadenceEngaged, so the hold state is dropped once the session took it:
+    // a refused release keeps the hold in force, and its held ISO with it.
     if (!reapplyRepeating()) {
         // The session kept its previous request: report what is really in force and stop trying.
         cadenceEngaged = !engaged
@@ -347,6 +344,11 @@ internal fun Camera2PreviewEngine.setCadenceEngaged(engaged: Boolean, frameDurat
         cadenceFaulted = true
         cadenceGuard.reset()
         listener?.onCadenceGuardChanged(cadenceEngaged)
+    } else if (!engaged) {
+        cadenceExposureRamp.stop()
+        cadenceIsoLoop.release()
+        cadenceAeLumas.clear()
+        cadenceHeldIso = null
     }
 }
 

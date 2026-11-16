@@ -82,12 +82,15 @@ internal fun takeLengthLimitMs(mode: CaptureMode, settings: CameraSettings, high
 /**
  * What choosing a mode on the dial does: the settings to store and apply (null when unchanged), the
  * pipeline mode to select (null when it stays), otherwise the rate to select (null when it stays),
- * and the real-time rate Video returns to after slow motion.
+ * the size to select with that rate when slow motion moves a running Video session to another size
+ * (null when the size stays: a rate alone would be snapped against the old size), and the real-time
+ * rate Video returns to after slow motion.
  */
 internal data class ModeSwitchPlan(
     val settings: CameraSettings?,
     val pipelineMode: CaptureMode?,
     val targetFps: Int?,
+    val targetSize: Pair<Int, Int>?,
     val normalVideoFps: Int,
 )
 
@@ -100,7 +103,9 @@ internal data class ModeSwitchPlan(
 internal fun planModeSwitch(mode: CaptureMode, state: CameraUiState, settings: CameraSettings, normalVideoFps: Int): ModeSwitchPlan {
     val slow = mode == CaptureMode.SLOW_MOTION
     val leavingSlowMotion = mode == CaptureMode.VIDEO && settings.videoOffSpeed
-    val normalFps = if (slow && !settings.videoOffSpeed && state.targetFps < SLOW_MOTION_MIN_FPS) state.targetFps else normalVideoFps
+    // Only Video's live rate is a real-time Video rate; another mode's (LOG, time-lapse, stills) is not.
+    val videoRate = if (state.selectedMode == CaptureMode.VIDEO) state.targetFps else settings.videoFps
+    val normalFps = if (slow && !settings.videoOffSpeed && videoRate < SLOW_MOTION_MIN_FPS) videoRate else normalVideoFps
     val profile = if (slow) state.descriptor?.let { descriptor ->
         slowMotionProfile(descriptor.videoProfiles.map { it.toSpec() }, state.targetVideoWidth, state.targetVideoHeight)
     } else null
@@ -123,6 +128,8 @@ internal fun planModeSwitch(mode: CaptureMode, state: CameraUiState, settings: C
             leavingSlowMotion -> normalFps
             else -> null
         },
+        targetSize = profile?.let { it.width to it.height }
+            ?.takeIf { pipelineMode == state.selectedMode && it != (state.targetVideoWidth to state.targetVideoHeight) },
         normalVideoFps = normalFps,
     )
 }

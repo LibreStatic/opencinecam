@@ -51,7 +51,32 @@ class ModeSwitchPlanTest {
         val stored = plan.settings!!
         assertEquals(Triple(1920, 1080, 240), Triple(stored.videoWidth, stored.videoHeight, stored.videoFps))
         assertEquals(240, plan.targetFps)
+        // The size moves with the rate: a rate alone would be snapped against 4K and stay there.
+        assertEquals(1920 to 1080, plan.targetSize)
         assertEquals(60, plan.normalVideoFps)
+    }
+
+    @Test fun slowMotionAtASizeWithHighSpeedOnlyChangesTheRate() {
+        val plan = planModeSwitch(CaptureMode.SLOW_MOTION, state(CaptureMode.VIDEO, fps = 30), CameraSettings(), 24)
+        assertEquals(240, plan.targetFps)
+        assertNull(plan.targetSize)
+    }
+
+    @Test fun slowMotionFromAnotherModeAtAnotherSizeLeavesTheSizeToTheModeChange() {
+        val plan = planModeSwitch(CaptureMode.SLOW_MOTION, state(CaptureMode.PHOTO, fps = 30, width = 3840, height = 2160), CameraSettings(), 25)
+        assertEquals(CaptureMode.VIDEO, plan.pipelineMode)
+        assertEquals(1920 to 1080, plan.settings!!.videoWidth to plan.settings!!.videoHeight)
+        assertNull(plan.targetSize)
+    }
+
+    @Test fun slowMotionFromLogRemembersVideosStoredRateNotLogs() {
+        val plan = planModeSwitch(CaptureMode.SLOW_MOTION, state(CaptureMode.LOG, fps = 24), CameraSettings(videoFps = 30), 25)
+        assertEquals(30, plan.normalVideoFps)
+    }
+
+    @Test fun slowMotionFromTimeLapseRemembersVideosStoredRate() {
+        val plan = planModeSwitch(CaptureMode.SLOW_MOTION, state(CaptureMode.TIME_LAPSE, fps = 30), CameraSettings(videoFps = 25), 24)
+        assertEquals(25, plan.normalVideoFps)
     }
 
     @Test fun slowMotionFromAnotherModeOpensVideoOnce() {
@@ -93,6 +118,7 @@ class ModeSwitchPlanTest {
         assertEquals(settings.copy(videoOffSpeed = false, videoFps = 25), plan.settings)
         assertNull(plan.pipelineMode)
         assertEquals(25, plan.targetFps)
+        assertNull(plan.targetSize)
         assertEquals(25, plan.normalVideoFps)
     }
 
@@ -106,20 +132,20 @@ class ModeSwitchPlanTest {
 
     @Test fun anotherModeOnlySelectsIt() {
         val plan = planModeSwitch(CaptureMode.PHOTO, state(CaptureMode.VIDEO, fps = 30), CameraSettings(), normalVideoFps = 30)
-        assertEquals(ModeSwitchPlan(settings = null, pipelineMode = CaptureMode.PHOTO, targetFps = null, normalVideoFps = 30), plan)
+        assertEquals(ModeSwitchPlan(settings = null, pipelineMode = CaptureMode.PHOTO, targetFps = null, targetSize = null, normalVideoFps = 30), plan)
     }
 
     @Test fun anotherModeKeepsTheOffSpeedSetting() {
         // Leaving slow motion for a mode other than Video keeps it for the return to the dial's slow motion.
         val settings = CameraSettings(videoOffSpeed = true, videoFps = 240)
         val plan = planModeSwitch(CaptureMode.LOG, state(CaptureMode.VIDEO, fps = 240), settings, normalVideoFps = 25)
-        assertEquals(ModeSwitchPlan(settings = null, pipelineMode = CaptureMode.LOG, targetFps = null, normalVideoFps = 25), plan)
+        assertEquals(ModeSwitchPlan(settings = null, pipelineMode = CaptureMode.LOG, targetFps = null, targetSize = null, normalVideoFps = 25), plan)
     }
 
     @Test fun theSelectedModeChangesNothing() {
         val plan = planModeSwitch(CaptureMode.PHOTO, state(CaptureMode.PHOTO, fps = 30), CameraSettings(), normalVideoFps = 30)
-        assertEquals(ModeSwitchPlan(settings = null, pipelineMode = null, targetFps = null, normalVideoFps = 30), plan)
+        assertEquals(ModeSwitchPlan(settings = null, pipelineMode = null, targetFps = null, targetSize = null, normalVideoFps = 30), plan)
         val video = planModeSwitch(CaptureMode.VIDEO, state(CaptureMode.VIDEO, fps = 30), CameraSettings(), normalVideoFps = 24)
-        assertEquals(ModeSwitchPlan(settings = null, pipelineMode = null, targetFps = null, normalVideoFps = 24), video)
+        assertEquals(ModeSwitchPlan(settings = null, pipelineMode = null, targetFps = null, targetSize = null, normalVideoFps = 24), video)
     }
 }
