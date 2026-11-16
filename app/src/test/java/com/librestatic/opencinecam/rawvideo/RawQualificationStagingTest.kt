@@ -596,7 +596,7 @@ class RawQualificationStagingTest {
             .let { it.copy(status = RawBenchmarkStatus.FAIL, reasonCode = razrLongRun.first(), reasonCodes = razrLongRun) }
         val stored = requireNotNull(RawQualificationStaging.storageLoadQualification(q, RawStageResult.PASS))
         assertEquals(RawBenchmarkStatus.FAIL, stored.status)
-        assertTrue(RawQualificationRisk.isRisky(stored))
+        assertTrue(RawQualificationRisk.isStorageFailure(stored))
         assertTrue(RawQualificationStaging.REASON_FPS_DROPPED_UNDER_STORAGE_LOAD in stored.reasonCodes)
         assertNull(RawQualificationStaging.storageLoadQualification(q, RawStageResult.fail(listOf("fps-not-reached"))))
         // A compressed twin judged from that risky run inherits the storage reasons, not the informational one.
@@ -679,7 +679,7 @@ class RawQualificationStagingTest {
         val storage = v2.copy(status = RawBenchmarkStatus.FAIL, reasonCode = RawThroughputBenchmark.REASON_RING_OVERFLOW,
             reasonCodes = listOf(RawThroughputBenchmark.REASON_RING_OVERFLOW))
         val risky = RawQualificationRecords.storedQualification(storage, listOf(reduced))
-        assertTrue(RawQualificationRisk.isRisky(risky))
+        assertTrue(RawQualificationRisk.isStorageFailure(risky))
         assertTrue(reduced in risky.reasonCodes)
     }
 
@@ -903,7 +903,7 @@ class RawQualificationStagingTest {
             RawStorageSweep(RawVideoQualifier.DESTINATION_ID, List(60) { RawThroughputSample(1_000, 1_200_000_000, 0) }), null)
             .copy(status = RawBenchmarkStatus.PASS, reasonCode = RawThroughputBenchmark.REASON_PASS, reasonCodes = listOf(RawThroughputBenchmark.REASON_PASS))
         val judged = RawQualificationStaging.withSustainedRate(q, full24, 1.0, razr)
-        assertTrue(RawQualificationRisk.isRisky(judged))
+        assertTrue(RawQualificationRisk.isStorageFailure(judged))
         val record = RawQualificationRecords.withBurstSeconds(
             RawQualificationRecords.forRun("fp", RawVideoQualifier.DESTINATION_ID, full24, 1_061_208_000L, judged, emptyList(), 0L), razr)
         assertEquals(com.librestatic.opencinecam.camera.RawStorageCliff.burstSeconds(razr, full24.streamBytesPerSecond, 1_061_208_000L), record.burstSeconds)
@@ -945,7 +945,7 @@ class RawQualificationStagingTest {
         // The sweep alone: no rule. With the long runs' 233 MB/s, raw full@24 (about 375 MB/s) is risky, with a burst.
         assertTrue(RawQualificationStaging.sustainedRateReasons(full24.streamBytesPerSecond, capped).isEmpty())
         val rejudged = RawQualificationStaging.rejudgeWithLongRunSustained(record, full24.streamBytesPerSecond, 1.0, derived)
-        assertTrue(RawQualificationRisk.isRisky(rejudged.qualification))
+        assertTrue(RawQualificationRisk.isStorageFailure(rejudged.qualification))
         assertEquals(listOf(RawQualificationRisk.REASON_SUSTAINED_RATE_EXCEEDED), rejudged.qualification.reasonCodes)
         assertTrue(rejudged.burstSeconds != null && rejudged.burstSeconds!! > 0)
         // A configuration under the derived rate stays ready.
@@ -1047,7 +1047,7 @@ class RawQualificationStagingTest {
         assertEquals(RawBenchmarkStatus.FAIL, stored.status)
         assertEquals(marginFail, stored.reasonCode)
         assertFalse(RawThroughputBenchmark.REASON_LIVE_RUN_MISSING in stored.reasonCodes)
-        assertTrue(RawQualificationRisk.isRisky(stored))
+        assertTrue(RawQualificationRisk.isStorageFailure(stored))
     }
 
     @Test fun twinsTheSweepRulesOutGetNoLongRunAndTheCapCountsOnlyTheRest() {

@@ -433,6 +433,24 @@ class RawVideoGateTest {
         assertEquals(60, option.fps)
     }
 
+    @Test fun aStorageFailureUnderTheBurstFloorIsLeftOutAsStorageTooSlow() {
+        val tooSlow = verdict(fullAt60, RawBenchmarkStatus.FAIL, sweepFail).let { it.copy(burstSeconds = 9L) }
+        val leftOut = rawVideoLeftOutConfigs("0", sizes, listOf(tooSlow), "dest", emptyList())
+        assertEquals(listOf(RawQualificationItemStatus.STORAGE_LIMIT), leftOut.map { it.status })
+        assertEquals(RawVideoLeftOutReason.STORAGE, rawVideoLeftOutOptions(leftOut).single().reason)
+        // A minute or more, or unknown, is risky (usable by hand), so it is not left out.
+        val risky = tooSlow.copy(burstSeconds = 75L)
+        assertTrue(rawVideoLeftOutConfigs("0", sizes, listOf(risky), "dest", listOf(fullAt60)).isEmpty())
+    }
+
+    @Test fun aStorageFailureWithNoBurstButASlowMedianIsLeftOutAsStorageTooSlow() {
+        val base = verdict(fullAt60, RawBenchmarkStatus.FAIL, sweepFail)
+        val q = base.qualification
+        val slow = base.copy(burstSeconds = null, qualification = q.copy(streamBytesPerSecond = 450_000_000L,
+            requiredMedianBytesPerSecond = 505_125_000L, sweepMedianBytesPerSecond = 94_649_675L, ringBytes = 4_290_000_000L))
+        assertEquals(listOf(RawQualificationItemStatus.STORAGE_LIMIT), rawVideoLeftOutConfigs("0", sizes, listOf(slow), "dest", emptyList()).map { it.status })
+    }
+
     @Test fun aSpaceSkipReadsNotQualified() {
         val leftOut = rawVideoLeftOutConfigs("0", sizes, listOf(verdict(fullAt60, RawBenchmarkStatus.UNKNOWN, RAW_QUALIFICATION_SPACE_SKIP)), "dest", emptyList())
         assertEquals(listOf(RawQualificationItemStatus.SKIPPED_SPACE), leftOut.map { it.status })

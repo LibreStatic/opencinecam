@@ -10,6 +10,7 @@ import com.librestatic.opencinecam.capture.RawVideoConfigOption
 import com.librestatic.opencinecam.capture.RawVideoLeftOutOption
 import com.librestatic.opencinecam.capture.RawVideoLeftOutReason
 import com.librestatic.opencinecam.capture.rawQualificationRunStatus
+import com.librestatic.opencinecam.rawvideo.RawQualificationRisk
 import com.librestatic.opencinecam.camera.RawThroughputBenchmark
 import com.librestatic.opencinecam.camera.RawVideoConfig
 import com.librestatic.opencinecam.camera.RawVideoQualificationRecord
@@ -110,7 +111,7 @@ internal fun rawVideoLeftOutConfigs(
         .groupBy { it.config }
         .mapValues { (_, records) -> records.maxBy(RawVideoQualificationRecord::measuredAtEpochMs) }
     fun statusOf(record: RawVideoQualificationRecord): RawQualificationItemStatus =
-        rawQualificationRunStatus(record.qualification.status.name, record.qualification.reasonCode, record.qualification.reasonCodes)
+        rawQualificationRunStatus(record.qualification.status.name, record.qualification.reasonCode, record.qualification.reasonCodes, RawQualificationRisk.effectiveBurstSeconds(record))
     fun usableStatus(status: RawQualificationItemStatus) = status == RawQualificationItemStatus.PASSED || status == RawQualificationItemStatus.RISKY
     return newest.values
         .filter { it.config.encoding == RawVideoConfig.ENCODING_RAW10 || it.config.encoding == RawVideoConfig.ENCODING_BLOCK_PACK }

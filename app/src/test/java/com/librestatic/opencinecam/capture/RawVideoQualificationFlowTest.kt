@@ -340,6 +340,17 @@ class RawVideoQualificationFlowTest {
         }
     }
 
+    @Test fun aStorageOnlyFailureUnderTheBurstFloorIsStorageLimit() {
+        val codes = listOf(RawQualificationRisk.REASON_SUSTAINED_RATE_EXCEEDED)
+        assertEquals(RawQualificationItemStatus.STORAGE_LIMIT, rawQualificationRunStatus("FAIL", codes[0], codes, burstSeconds = 9L))
+        assertEquals(RawQualificationItemStatus.RISKY, rawQualificationRunStatus("FAIL", codes[0], codes, burstSeconds = 60L))
+        assertEquals(RawQualificationItemStatus.RISKY, rawQualificationRunStatus("FAIL", codes[0], codes, burstSeconds = 75L))
+        // Burst not known yet (a run in progress) or unlimited: risky.
+        assertEquals(RawQualificationItemStatus.RISKY, rawQualificationRunStatus("FAIL", codes[0], codes, burstSeconds = null))
+        // A camera failure keeps its own status whatever the burst.
+        assertEquals(RawQualificationItemStatus.FAILED, rawQualificationRunStatus("FAIL", "dropped-frames", listOf("dropped-frames"), burstSeconds = 9L))
+    }
+
     @Test fun runStatusMapsResultRows() {
         assertEquals(RawQualificationItemStatus.PASSED, rawQualificationRunStatus("PASS", null))
         assertEquals(RawQualificationItemStatus.FAILED, rawQualificationRunStatus("FAIL", "dropped-frames"))

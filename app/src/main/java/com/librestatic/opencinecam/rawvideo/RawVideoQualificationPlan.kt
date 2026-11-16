@@ -849,9 +849,53 @@ object RawQualificationRisk {
         return failures.isNotEmpty() && failures.all { it in STORAGE_REASONS }
     }
 
-    /** A failed verdict whose reasons are all the storage's. */
-    fun isRisky(qualification: RawVideoQualification): Boolean =
+    /**
+     * A risky configuration must hold at least a minute before frames drop: the warning promises
+     * "frames may drop after about N min". A storage-only failure whose known burst is shorter is too
+     * slow, not risky, and is left out.
+     */
+    const val MIN_RISKY_BURST_SECONDS = 60L
+
+    /** A failed verdict whose reasons are all the storage's (risky or too slow, see [isRisky] and [isTooSlow]). */
+    fun isStorageFailure(qualification: RawVideoQualification): Boolean =
         qualification.status == RawBenchmarkStatus.FAIL && isStorageOnly(qualification.reasonCodes)
+
+    /** A storage failure whose [burstSeconds] is unknown (null: the cache does not limit, or no sweep yet) or lasts the floor. */
+    fun isRisky(qualification: RawVideoQualification, burstSeconds: Long?): Boolean =
+        isStorageFailure(qualification) && (burstSeconds == null || burstSeconds >= MIN_RISKY_BURST_SECONDS)
+
+    /** A storage failure whose known [burstSeconds] is under [MIN_RISKY_BURST_SECONDS]: not choosable. Still a storage failure, not a camera one. */
+    fun isTooSlow(qualification: RawVideoQualification, burstSeconds: Long?): Boolean =
+        isStorageFailure(qualification) && burstSeconds != null && burstSeconds < MIN_RISKY_BURST_SECONDS
+
+    /**
+     * The burst a storage failure is classified on: the stored, cache-limited [RawVideoQualificationRecord.burstSeconds] when
+     * there is one, else [estimateBurstSeconds] from the stored qualification itself (so records without a burst, old or
+     * from a sweep with no cliff, are classified too). Never stored: `burstSeconds` keeps meaning the measured figure.
+     */
+    fun effectiveBurstSeconds(record: RawVideoQualificationRecord): Long? =
+        record.burstSeconds ?: if (isStorageFailure(record.qualification)) estimateBurstSeconds(record.qualification) else null
+
+    /**
+     * How long the ring lasts when the storage writes at the sweep's median under the judged stream: the ring
+     * at the judged rate over the shortfall. [RawVideoQualification.streamBytesPerSecond] is always the RAW stream; a
+     * compressed twin's required median is divided by its compression ratio, so the ratio is recovered from it and the
+     * judged stream and the ring (which holds RAW frames) are both divided by it, as [RawStorageCliff.burstSeconds] does.
+     * Null when the median is unknown or keeps up with the judged stream (only the margin was missed).
+     */
+    fun estimateBurstSeconds(q: RawVideoQualification): Long? {
+        val median = q.sweepMedianBytesPerSecond ?: return null
+        if (q.streamBytesPerSecond <= 0 || q.requiredMedianBytesPerSecond <= 0 || q.ringBytes <= 0) return null
+        val marginStream = q.streamBytesPerSecond * RawThroughputBenchmark.MARGIN_BASIS_POINTS / 10_000.0
+        val ratio = (marginStream / q.requiredMedianBytesPerSecond).coerceAtLeast(1.0)
+        val judgedStream = q.streamBytesPerSecond / ratio
+        if (median >= judgedStream) return null
+        return kotlin.math.floor((q.ringBytes / ratio) / (judgedStream - median)).toLong()
+    }
+
+    fun isRisky(record: RawVideoQualificationRecord): Boolean = isRisky(record.qualification, effectiveBurstSeconds(record))
+
+    fun isTooSlow(record: RawVideoQualificationRecord): Boolean = isTooSlow(record.qualification, effectiveBurstSeconds(record))
 
     /**
      * The risky configurations of [cameraId] among [records]: like [RawVideoQualificationSet.qualifiedConfigs],
@@ -876,7 +920,7 @@ object RawQualificationRisk {
         destinationId: String,
         cameraId: String,
     ): List<RawVideoConfig> = newest(records, fingerprint, protocolVersion, destinationId, cameraId) {
-        it.status == RawBenchmarkStatus.FAIL && !isRisky(it)
+        it.qualification.status == RawBenchmarkStatus.FAIL && !isStorageFailure(it.qualification)
     }
 
     private fun newest(
@@ -885,11 +929,11 @@ object RawQualificationRisk {
         protocolVersion: Int,
         destinationId: String,
         cameraId: String,
-        predicate: (RawVideoQualification) -> Boolean,
+        predicate: (RawVideoQualificationRecord) -> Boolean,
     ): List<RawVideoConfig> = records.current(fingerprint, protocolVersion)
         .filter { it.destinationId == destinationId && it.config.cameraId == cameraId }
         .groupBy { it.config }
-        .mapNotNull { (config, entries) -> config.takeIf { predicate(entries.maxBy(RawVideoQualificationRecord::measuredAtEpochMs).qualification) } }
+        .mapNotNull { (config, entries) -> config.takeIf { predicate(entries.maxBy(RawVideoQualificationRecord::measuredAtEpochMs)) } }
 }
 
 object RawQualificationRecords {
@@ -941,15 +985,15 @@ object RawQualificationRecords {
     )
 
     /**
-     * [record] with its [RawVideoQualificationRecord.burstSeconds] when it is risky
-     * ([RawQualificationRisk.isRisky]): how long a take at its rate lasts before the storage's write
+     * [record] with its [RawVideoQualificationRecord.burstSeconds] when it is a storage failure
+     * ([RawQualificationRisk.isStorageFailure], so the burst floor can be applied): how long a take at its rate lasts before the storage's write
      * cache is full and the ring overflows, from the sweep's [sustained] phase ([RawStorageCliff.burstSeconds]),
      * at the stream the camera achieved ([RawQualificationFrameRate.effectiveStreamBytesPerSecond]).
      * A compressed configuration passes the [compressionRatio] its storage is judged at. Any other record,
      * or one the cache does not limit, keeps a null.
      */
     fun withBurstSeconds(record: RawVideoQualificationRecord, sustained: RawSustainedWrite?, compressionRatio: Double = 1.0): RawVideoQualificationRecord =
-        if (!RawQualificationRisk.isRisky(record.qualification)) record.copy(burstSeconds = null)
+        if (!RawQualificationRisk.isStorageFailure(record.qualification)) record.copy(burstSeconds = null)
         else record.copy(burstSeconds = RawStorageCliff.burstSeconds(sustained,
             RawQualificationFrameRate.effectiveStreamBytesPerSecond(record.config, record.achievedFps), record.ringBytes, compressionRatio))
 

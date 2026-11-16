@@ -530,13 +530,13 @@ class RawVideoQualificationPlanTest {
         val verdict = RawThroughputBenchmark.qualifyWithBuffer(razr, ring, slowSweep, live)
         assertEquals(RawBenchmarkStatus.FAIL, verdict.status)
         assertEquals(listOf(RawThroughputBenchmark.REASON_SWEEP_MEDIAN_MARGIN_FAIL), verdict.reasonCodes)
-        assertTrue(RawQualificationRisk.isRisky(RawQualificationRecords.storedQualification(verdict, emptyList())))
+        assertTrue(RawQualificationRisk.isStorageFailure(RawQualificationRecords.storedQualification(verdict, emptyList())))
         // The run's own failures (here the frame rate) keep it failed, not risky.
-        assertFalse(RawQualificationRisk.isRisky(RawQualificationRecords.storedQualification(verdict, listOf("fps-not-reached"))))
-        assertFalse(RawQualificationRisk.isRisky(RawQualificationRecords.storedQualification(verdict,
+        assertFalse(RawQualificationRisk.isStorageFailure(RawQualificationRecords.storedQualification(verdict, listOf("fps-not-reached"))))
+        assertFalse(RawQualificationRisk.isStorageFailure(RawQualificationRecords.storedQualification(verdict,
             listOf("fps-not-reached", RawQualificationFrameRate.REASON_CAMERA_FPS_LIMIT))))
         // A pass is not risky; neither is an empty list.
-        assertFalse(RawQualificationRisk.isRisky(v2(config("full@30"))))
+        assertFalse(RawQualificationRisk.isStorageFailure(v2(config("full@30"))))
         assertFalse(RawQualificationRisk.isStorageOnly(emptyList()))
         assertTrue(RawQualificationRisk.isStorageOnly(RawQualificationRisk.STORAGE_REASONS.toList()))
         assertFalse(RawQualificationRisk.isStorageOnly(listOf(RawThroughputBenchmark.REASON_RING_OVERFLOW, RawThroughputBenchmark.REASON_LIVE_RUN_TOO_SHORT)))
@@ -548,7 +548,7 @@ class RawVideoQualificationPlanTest {
         val full60 = config("full@60")
         val full30 = config("full@30")
         val risky = record(full60, framesWritten = 590, at = 1_000) // raw-frame-loss alone
-        assertTrue(RawQualificationRisk.isRisky(risky.qualification))
+        assertTrue(RawQualificationRisk.isStorageFailure(risky.qualification))
         val set = com.librestatic.opencinecam.camera.RawVideoQualificationSet(listOf(risky, record(full30)))
         fun riskyOf(records: com.librestatic.opencinecam.camera.RawVideoQualificationSet, fp: String = FP) =
             RawQualificationRisk.riskyConfigs(records, fp, RawThroughputBenchmark.PROTOCOL_VERSION, RawVideoQualifier.DESTINATION_ID, "0")
@@ -560,6 +560,69 @@ class RawVideoQualificationPlanTest {
         // A newer pass replaces it; a newer non-storage failure makes it plain failed.
         assertTrue(riskyOf(set.upsert(record(full60, at = 2_000))).isEmpty())
         assertTrue(riskyOf(set.upsert(record(full60, extra = listOf("writer-error"), framesWritten = 590, at = 2_000))).isEmpty())
+    }
+
+    @Test fun aStorageFailureIsRiskyOnlyWithAKnownBurstOfAtLeastAMinute() {
+        val full60 = config("full@60")
+        val storage = record(full60, framesWritten = 590) // raw-frame-loss alone
+        fun withBurst(burst: Long?) = storage.copy(burstSeconds = burst)
+        // 9 s (a USB drive at ~100 MB/s under 450 MB/s of RAW): too slow, though still a storage failure.
+        assertFalse(RawQualificationRisk.isRisky(withBurst(9L)))
+        assertTrue(RawQualificationRisk.isTooSlow(withBurst(9L)))
+        assertFalse(RawQualificationRisk.isRisky(withBurst(59L)))
+        assertTrue(RawQualificationRisk.isRisky(withBurst(RawQualificationRisk.MIN_RISKY_BURST_SECONDS)))
+        assertTrue(RawQualificationRisk.isRisky(withBurst(75L)))
+        assertFalse(RawQualificationRisk.isTooSlow(withBurst(75L)))
+        // Unknown burst: risky, as before.
+        assertTrue(RawQualificationRisk.isRisky(withBurst(null)))
+        assertFalse(RawQualificationRisk.isTooSlow(withBurst(null)))
+        // A camera failure is neither.
+        val camera = record(full60, extra = listOf("writer-error"), framesWritten = 590).copy(burstSeconds = 9L)
+        assertFalse(RawQualificationRisk.isRisky(camera))
+        assertFalse(RawQualificationRisk.isTooSlow(camera))
+        // A pass is neither.
+        assertFalse(RawQualificationRisk.isTooSlow(record(full60).copy(burstSeconds = 9L)))
+    }
+
+    @Test fun aStorageFailureWithNoStoredBurstIsClassifiedFromItsQualification() {
+        val base = record(config("full@30"), framesWritten = 590)
+        fun storage(median: Long?, stream: Long = 450_000_000L, required: Long = 505_125_000L, ring: Long = 4_290_000_000L) =
+            base.copy(qualification = base.qualification.copy(status = RawBenchmarkStatus.FAIL,
+                reasonCode = RawThroughputBenchmark.REASON_SWEEP_MEDIAN_MARGIN_FAIL,
+                reasonCodes = listOf(RawThroughputBenchmark.REASON_SWEEP_MEDIAN_MARGIN_FAIL, RawThroughputBenchmark.REASON_BUFFER_BACKLOG_EXCEEDED),
+                streamBytesPerSecond = stream, requiredMedianBytesPerSecond = required, sweepMedianBytesPerSecond = median, ringBytes = ring),
+                burstSeconds = null, ringBytes = ring)
+        // The Razr's USB drive: 94.6 MB/s under a 450 MB/s stream, a 4.29 GB ring: 12 s.
+        val drive = storage(94_649_675L)
+        assertEquals(12L, RawQualificationRisk.effectiveBurstSeconds(drive))
+        assertTrue(RawQualificationRisk.isTooSlow(drive))
+        assertFalse(RawQualificationRisk.isRisky(drive))
+        assertNull(drive.burstSeconds)
+        // Only the 1.1225x margin missed (median above the stream): unknown, still risky.
+        val marginOnly = storage(480_000_000L)
+        assertNull(RawQualificationRisk.effectiveBurstSeconds(marginOnly))
+        assertTrue(RawQualificationRisk.isRisky(marginOnly))
+        // Unknown median: risky. A stored burst wins over the estimate.
+        assertTrue(RawQualificationRisk.isRisky(storage(null)))
+        assertTrue(RawQualificationRisk.isRisky(drive.copy(burstSeconds = 75L)))
+        // A compressed twin (1.5x): required = stream * 1.1225 / 1.5; judged at 300 MB/s over a ring of 2.86 GB: 2.86e9 / (300e6 - 94.6e6) = 13 s.
+        val twin = storage(94_649_675L, required = 336_750_000L)
+        assertEquals(13L, RawQualificationRisk.effectiveBurstSeconds(twin))
+        assertTrue(RawQualificationRisk.isTooSlow(twin))
+        // The twin on a drive that keeps up at its compressed rate (median 320 MB/s >= 300 MB/s): risky.
+        assertTrue(RawQualificationRisk.isRisky(storage(320_000_000L, required = 336_750_000L)))
+    }
+
+    @Test fun aTooSlowConfigurationIsNotChoosableButDoesNotBlockItsCompressedTwin() {
+        val full60 = config("full@60")
+        val full30 = config("full@30")
+        val tooSlow = record(full60, framesWritten = 590, at = 1_000).copy(burstSeconds = 9L)
+        val riskyKept = record(full30, framesWritten = 590, at = 1_000).copy(burstSeconds = 75L)
+        val set = com.librestatic.opencinecam.camera.RawVideoQualificationSet(listOf(tooSlow, riskyKept))
+        val args = arrayOf(FP, RawThroughputBenchmark.PROTOCOL_VERSION, RawVideoQualifier.DESTINATION_ID, "0")
+        assertEquals(listOf(full30), RawQualificationRisk.riskyConfigs(set, args[0] as String, args[1] as Int, args[2] as String, args[3] as String))
+        // Storage-only failures, too slow or not, are not camera failures: a compressed twin can still qualify.
+        assertTrue(RawQualificationRisk.cameraFailedConfigs(set, args[0] as String, args[1] as Int, args[2] as String, args[3] as String).isEmpty())
     }
 
     @Test fun aRiskyRecordCarriesItsBurstSecondsAndOthersDoNot() {
@@ -653,7 +716,7 @@ class RawVideoQualificationPlanTest {
         val stored = record(config("1920x1080@60"), extra = extra).qualification
         assertEquals(RawBenchmarkStatus.FAIL, stored.status)
         assertEquals("fps-not-reached", stored.reasonCode)
-        assertFalse(RawQualificationRisk.isRisky(stored))
+        assertFalse(RawQualificationRisk.isStorageFailure(stored))
         assertEquals(RawQualificationItemStatus.FAILED, rawQualificationRunStatus("FAIL", stored.reasonCode, stored.reasonCodes))
     }
 
