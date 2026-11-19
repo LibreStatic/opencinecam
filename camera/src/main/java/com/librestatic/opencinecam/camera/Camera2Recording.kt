@@ -16,7 +16,7 @@ import com.librestatic.opencinecam.camera.Camera2PreviewEngine.Companion.RECORDE
 import com.librestatic.opencinecam.camera.Camera2PreviewEngine.Companion.TAG
 
 /** Starting/stopping the encoder leaves the preview camera session and subject leases intact. */
-internal fun Camera2PreviewEngine.startExistingGpuVideo(output: ParcelFileDescriptor, audio: Camera2EmbeddedAudioConfig?, geometry: RecordingGeometry, bitrate: Int, timelapse: TimelapseCapture? = null, projectRateOverride: CaptureFrameRate? = null, separateAudioClock: CaptureEpochClock? = null, recordingLut: MonitorLut? = null, videoCodec: VideoCodecPreference = VideoCodecPreference.H264): Boolean {
+internal fun Camera2PreviewEngine.startExistingGpuVideo(output: ParcelFileDescriptor, audio: Camera2EmbeddedAudioConfig?, geometry: RecordingGeometry, bitrate: Int, timelapse: TimelapseCapture? = null, projectRateOverride: CaptureFrameRate? = null, separateAudioClock: CaptureEpochClock? = null, recordingLut: MonitorLut? = null, videoCodec: VideoCodecPreference = VideoCodecPreference.H264, sampleListener: EncodedSampleListener? = null): Boolean {
     val pipeline = logPipeline ?: return false
     if (recording || session == null || !gpuPreviewEnabled) return false
     val cameraGeneration = generation
@@ -27,7 +27,7 @@ internal fun Camera2PreviewEngine.startExistingGpuVideo(output: ParcelFileDescri
     return pipeline.startRecording(output, bitrate, geometry, audio, minimumSensorTimestampNs = recordingWbMinimumTimestampNs,
         timelapse = timelapse, projectRateOverride = projectRateOverride, separateAudioClock = separateAudioClock,
         recordingLut = recordingLut, videoCodec = videoCodec,
-        encoderPolicy = encoderPolicy,
+        encoderPolicy = encoderPolicy, sampleListener = sampleListener,
         onSoftwareEncoder = { name ->
             if (generation == cameraGeneration && logPipeline === pipeline) listener?.onSoftwareVideoEncoder(name)
         },
@@ -81,12 +81,13 @@ internal fun Camera2PreviewEngine.startGpuVideo(
     separateAudioClock: CaptureEpochClock? = null,
     recordingLut: MonitorLut? = null,
     videoCodec: VideoCodecPreference = VideoCodecPreference.H264,
+    sampleListener: EncodedSampleListener? = null,
 ): Boolean {
     val device = camera ?: return false
     val preview = previewSurface ?: return false
     val descriptor = activeDescriptor ?: return false
     if (recording) return false
-    if (gpuPreviewEnabled) return startExistingGpuVideo(output, audio, recordingGeometry, videoBitrate, timelapse, projectRateOverride, separateAudioClock, recordingLut, videoCodec)
+    if (gpuPreviewEnabled) return startExistingGpuVideo(output, audio, recordingGeometry, videoBitrate, timelapse, projectRateOverride, separateAudioClock, recordingLut, videoCodec, sampleListener)
     if (logPipeline != null) return false
     val cameraGeneration = generation
     cameraExecutor.execute {
@@ -156,6 +157,7 @@ internal fun Camera2PreviewEngine.startGpuVideo(
                 separateAudioClock = separateAudioClock,
                 recordingLut = recordingLut,
                 videoCodec = videoCodec,
+                sampleListener = sampleListener,
                 onCodecFallback = { reason ->
                     if (generation == cameraGeneration && logPipeline === pipeline) listener?.onVideoCodecFallback(reason)
                 },

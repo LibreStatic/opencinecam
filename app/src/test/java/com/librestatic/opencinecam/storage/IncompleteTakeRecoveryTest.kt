@@ -178,6 +178,45 @@ class IncompleteTakeRecoveryTest {
         assertTrue(backups.texts.isEmpty())
     }
 
+    @Test fun aClipSidecarTheSalvageMarkedGetsTheRebuildAndKeepsItsReasons() {
+        val backups = Backups()
+        val marked = IncompleteTake.mark("""{"schemaVersion":"1.0.0","recordingId":"$id","lens":"tele","events":[]}""",
+            listOf(IncompleteTake.DRIVE_DISCONNECTED, "audio-input-overrun"))
+        val rows = listOf(row("DCIM", "v", "take.mp4", "video/mp4", 4096), row("Download", "c", "take$CLIP_SIDECAR_SUFFIX", "application/json", 90))
+        val rebuilt = Mp4RebuildResult.Rebuilt(videoSamples = 120, audioSamples = 188, durationUs = 4_000_000)
+        val failed = Rows(sidecarFailure = java.io.IOException("pulled"), failing = "c")
+        org.junit.Assert.assertThrows(java.io.IOException::class.java) {
+            recoverIncompleteTake(id, rows, failed, { "new:$it" }, { if (it == "c") marked else null }, backups,
+                reason = IncompleteTake.DRIVE_DISCONNECTED, moovRebuilds = mapOf("content://media/external_primary/v" to rebuilt))
+        }
+        // Backed up before the rewrite, like an unmarked one.
+        assertEquals(mapOf("$id/take$CLIP_SIDECAR_SUFFIX" to marked), backups.texts)
+
+        val fake = Rows()
+        recoverIncompleteTake(id, rows, fake, { "new:$it" }, { if (it == "c") "" else null }, backups,
+            reason = IncompleteTake.DRIVE_DISCONNECTED, moovRebuilds = mapOf("content://media/external_primary/v" to rebuilt))
+        val json = Json.parseToJsonElement(fake.written.getValue("c")).jsonObject
+        assertEquals("true", json.getValue("moovRebuilt").jsonPrimitive.content)
+        assertEquals("120", json.getValue("moovRebuiltSamples").jsonObject.getValue("video").jsonPrimitive.content)
+        assertEquals(listOf(IncompleteTake.DRIVE_DISCONNECTED, "audio-input-overrun"), IncompleteTake.reasonsOf(fake.written.getValue("c")))
+        assertEquals("tele", json.getValue("lens").jsonPrimitive.content)
+        assertTrue(backups.texts.isEmpty())
+    }
+
+    @Test fun aMarkedClipSidecarIsLeftAloneWithoutARebuildAndAnInvalidOneEvenWithIt() {
+        val marked = IncompleteTake.mark("""{"schemaVersion":"1.0.0","recordingId":"$id","events":[]}""", listOf(IncompleteTake.DRIVE_DISCONNECTED))
+        val rows = listOf(row("DCIM", "v", "take.mp4", "video/mp4", 4096), row("Download", "c", "take$CLIP_SIDECAR_SUFFIX", "application/json", 90))
+        val rebuilt = Mp4RebuildResult.Rebuilt(1, 1, 33_333)
+        val plain = Rows()
+        recoverIncompleteTake(id, rows, plain, { "new:$it" }, { if (it == "c") marked else null })
+        assertFalse("sidecar:c" in plain.events)
+        val invalid = Rows()
+        recoverIncompleteTake(id, rows, invalid, { "new:$it" }, { if (it == "c") "[not an object]" else null },
+            moovRebuilds = mapOf("content://media/external_primary/v" to rebuilt))
+        assertFalse("sidecar:c" in invalid.events)
+        assertTrue("publish:c" in invalid.events)
+    }
+
     @Test fun anEmptyClipSidecarWithoutABackupIsStillDeleted() {
         val fake = Rows()
         val published = recoverIncompleteTake(id, listOf(row("DCIM", "v", "take.mp4", "video/mp4", 10),

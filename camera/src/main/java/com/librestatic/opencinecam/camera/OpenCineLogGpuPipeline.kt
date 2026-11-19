@@ -894,6 +894,8 @@ class OpenCineLogGpuPipeline(
         onCodecFallback: ((String) -> Unit)? = null,
         /** A policy refusal of the start (stable code, message); replaces [onFailure] so the engine stays healthy. */
         onStartRefused: ((String, String) -> Unit)? = null,
+        /** Told what the muxer is given (tracks, then samples) so the app can keep a side index of the take; see [EncodedSampleListener]. */
+        sampleListener: EncodedSampleListener? = null,
     ): Boolean {
         require(!hdr10Output || hlgOutput) { "HDR10 output is a variant of the HDR graph." }
         require(separateAudioClock == null || audio == null && timelapse == null && projectRateOverride == null &&
@@ -1068,7 +1070,8 @@ class OpenCineLogGpuPipeline(
                         },
                         hlgOutput = hlgOutput, hdr10Output = hdr10Output,
                         lens = appliedLens?.let { LensTakeUsage(it, lensSplicedSha(hlgOutput, hdr10Output)) },
-                        exposureCompensation = if (appliedFrameGain) ExposureCompensationTakeUsage(lensSplicedSha(hlgOutput, hdr10Output)) else null)
+                        exposureCompensation = if (appliedFrameGain) ExposureCompensationTakeUsage(lensSplicedSha(hlgOutput, hdr10Output)) else null,
+                        sampleListener = sampleListener?.let(::GuardedEncodedSampleListener))
                     recording = active
                     codec.start()
                     codecStarted = true
@@ -1777,6 +1780,7 @@ class OpenCineLogGpuPipeline(
                         flags = sample.flags
                     },
                 )
+                active.sampleListener?.onSample(sample.video, sample.data.size, sample.presentationTimeUs, sample.flags)
                 noteVideoSample(sample.video, sample.presentationTimeUs)
             }
             pending.clear()
@@ -1833,6 +1837,7 @@ class OpenCineLogGpuPipeline(
                         check(videoTrack < 0) { "Video encoder emitted its format twice." }
                         if (active.clearsVuiTransfer) clearFormatTransfer(format)
                         videoTrack = active.muxer.addTrack(format)
+                        active.sampleListener?.onTrack(true, format, active.geometry.containerRotationDegrees)
                     } else {
                         check(audioTrack < 0) { "AAC encoder emitted its format twice." }
                         val csd = requireNotNull(format.getByteBuffer("csd-0")).duplicate().let { value -> ByteArray(value.remaining()).also { value.get(it) } }
@@ -1841,6 +1846,7 @@ class OpenCineLogGpuPipeline(
                             format.getInteger(MediaFormat.KEY_ENCODER_DELAY)
                         } else null
                         audioTrack = active.muxer.addTrack(format)
+                        active.sampleListener?.onTrack(false, format, 0)
                     }
                     startMuxerIfReady()
                     return true
@@ -1865,6 +1871,7 @@ class OpenCineLogGpuPipeline(
                             val writeStartNs = if (frameDiag != null) android.os.SystemClock.elapsedRealtimeNanos() else 0L
                             active.muxer.writeSampleData(if (video) videoTrack else audioTrack, sample, normalizedInfo)
                             if (video) frameDiag?.videoSampleWritten((android.os.SystemClock.elapsedRealtimeNanos() - writeStartNs) / 1_000)
+                            active.sampleListener?.onSample(video, normalizedInfo.size, normalizedPtsUs, normalizedInfo.flags)
                             noteVideoSample(video, normalizedPtsUs)
                         } else {
                             check(pending.size < maxPendingSamples) { "Muxer format/epoch negotiation buffer overflowed." }
@@ -2475,6 +2482,8 @@ class OpenCineLogGpuPipeline(
         val lens: LensTakeUsage? = null,
         /** The per-frame exposure gain, on for the whole take when it was on at REC start; null when off. */
         val exposureCompensation: ExposureCompensationTakeUsage? = null,
+        /** Guarded: a listener failure stops its calls for this take and never reaches the muxer path. */
+        val sampleListener: GuardedEncodedSampleListener? = null,
     ) {
         val clearsVuiTransfer: Boolean get() = vuiTransfer != null
         val lutEvidence = recordingLut?.let(::BakedLutEvidence)

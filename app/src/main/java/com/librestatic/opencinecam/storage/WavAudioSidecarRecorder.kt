@@ -80,6 +80,8 @@ class WavAudioSidecarRecorder private constructor(
     // the writer thread then fails its next write and stops, as on ENODEV.
     private val fileCloser = CloseOnce(output, descriptor)
     private val driveHandle = DriveDescriptors.registerDocument(uri, fileCloser)
+    // Its own duplicate, synced about once a second while recording (the final force only runs at finish).
+    private val driveFlush = DriveWriteFlusher.shared.add(uri, descriptor)
     private val capturedSampleRateHz = input.sampleRateHz
     private val captureTiming = SidecarCaptureTiming(capturedSampleRateHz, settings.audioChannels * settings.audioBitDepth.bits / 8, captureClock)
     override fun liveCaptureTiming() = runCatching { captureTiming.report() }.getOrNull()
@@ -354,7 +356,9 @@ class WavAudioSidecarRecorder private constructor(
 
     /** Closes the stream, then the descriptor, once; harmless after a [DriveDescriptors] release closed them. */
     private fun closeOutput() {
-        try { fileCloser.close() } finally { driveHandle.unregister() }
+        try { driveFlush?.close() } finally {
+            try { fileCloser.close() } finally { driveHandle.unregister() }
+        }
     }
 
     override fun close() {

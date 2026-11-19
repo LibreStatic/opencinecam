@@ -121,6 +121,14 @@ Status (2026-11-09): implemented on `feat/external-ssd-recording`, with host tes
   - qualifying a drive for RAW and recording a full-sensor 30 fps RAW take;
   - the gallery with the drive on and off.
 
+## 6b. Pull durability
+
+A drive pulled mid-take used to leave an MP4 with its `mdat` and no `moov`, which no player opens. Two pieces keep the take:
+
+- **Periodic fsync.** `DriveWriteFlusher` syncs a duplicate of each drive output's descriptor about once a second (registered with `DriveDescriptors`, ADR-0037), so what the drive acknowledged is on the medium. A pull loses about the last second of data.
+- **Side index and moov rebuild.** A GPU-pipeline video take on the drive writes `filesDir/take-index/<takeId>.ocix` (`TakeSampleIndexWriter`), fed by the pipeline's `EncodedSampleListener` with the track formats (codec configuration) and every sample the muxer is given, and flushed about once a second. At recovery, before the take is published as incomplete, `Mp4MoovRebuilder` appends a `moov` built from the index and fixes the `mdat` size. The file then plays, up to about the last second, and its sidecar carries `moovRebuilt` and the sample counts. A sized `mdat` followed by a torn box (the muxer's own `moov` cut by the pull) gets that box turned into a `free` before the new `moov` goes after it. A rebuild leaves a receipt, `<takeId>.ocix.rebuilt`, with the sample counts: when publishing fails after the rebuild, the retry finds the `moov` in place and still records `moovRebuilt` from it. The index and its receipt are deleted when the journal entry is committed, discarded or published, kept while it is deferred or fails, and orphans older than 24 h are swept on each recovery pass.
+- **Not covered.** Takes on the `MediaRecorder` path (direct high-speed, slow motion) get no index and are published as before. A rebuild that fails before writing leaves the file unchanged. An append or sync that fails after bytes reached the drive never overwrites sample bytes, but can leave the container metadata incomplete; when the drive went away, the take is retried on its next mount.
+
 ## 7. Out of scope
 
 - NTFS and other filesystems that some OEMs mount: they may work, but there is no promise.

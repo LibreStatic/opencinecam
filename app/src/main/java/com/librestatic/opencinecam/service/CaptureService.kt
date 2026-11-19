@@ -2824,6 +2824,7 @@ class CaptureService : Service() {
                             videoBitrate = settings.videoBitrateMbps * 1_000_000,
                             recordingLut = recordingLutForTake,
                             videoCodec = settings.videoCodec,
+                            sampleListener = output.sampleListener(),
                         ).also { accepted ->
                             if (!accepted) {
                                 // A preparation timeout may still own a duplicated native descriptor.
@@ -2971,6 +2972,7 @@ class CaptureService : Service() {
                             recordingLut = frozenRecordingLut(),
                             hlgOutput = hlgTake,
                             hdr10Output = hlgTake && hdrTakeFormat(current) == HdrVideoFormat.HDR10,
+                            sampleListener = output.sampleListener(),
                         ).also { accepted ->
                             if (!accepted) {
                                 // A preparation timeout may still own a duplicated native descriptor.
@@ -3048,6 +3050,7 @@ class CaptureService : Service() {
                             videoBitrate = settings.videoBitrateMbps * 1_000_000,
                             recordingLut = frozenRecordingLut(),
                             videoCodec = settings.videoCodec,
+                            sampleListener = output.sampleListener(),
                         ).also { accepted ->
                             if (!accepted) {
                                 // A preparation timeout may still own a duplicated native descriptor.

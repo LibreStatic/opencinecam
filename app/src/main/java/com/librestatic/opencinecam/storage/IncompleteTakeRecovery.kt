@@ -7,7 +7,9 @@ import com.librestatic.opencinecam.media.storage.ClipRows
 import com.librestatic.opencinecam.media.storage.decideClipRecovery
 import com.librestatic.opencinecam.media.storage.finalizeClip
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
@@ -40,6 +42,7 @@ internal fun <U> recoverIncompleteTake(
     readText: (U) -> String?,
     backups: RecoveredSidecarBackups = RecoveredSidecarBackups.NONE,
     reason: String? = null,
+    moovRebuilds: Map<String, Mp4RebuildResult.Rebuilt> = emptyMap(),
 ): Int {
     val media = rows.filter { it.root != "Download" }
     val json = rows.filter { it.root == "Download" && it.mime == "application/json" }
@@ -73,8 +76,8 @@ internal fun <U> recoverIncompleteTake(
         val clipSaved = clipKey?.let(backups::read)
         val markable = clipSidecar?.takeIf { keep && (clipSaved != null || it.bytes != 0L) }
         val clipText = clipSaved ?: markable?.handle?.let(readText)
-        if (clipSaved == null && clipKey != null && clipText != null && clipSidecarToMark(clipText)) backups.write(clipKey, clipText)
-        if (markable != null && clipText != null) markRecoveredClipSidecar(bundleId, markable, clipText, clipRows, reason)
+        if (clipSaved == null && clipKey != null && clipText != null && clipSidecarToMark(clipText, moovRebuilds[clip.uri])) backups.write(clipKey, clipText)
+        if (markable != null && clipText != null) markRecoveredClipSidecar(bundleId, markable, clipText, clipRows, reason, moovRebuilds[clip.uri])
         val restored = markable?.handle?.takeIf { clipSaved != null }
         val sidecar = existing?.handle ?: if (keep) insertSidecar(if (video) "$stem.incomplete.json" else "$stem.audio.incomplete.json") else null
         val attachments = if (video) (others.filter { it.handle !in consumed } + listOfNotNull(clipSidecar)).also { list -> list.forEach { consumed += it.handle } } else emptyList()
@@ -82,7 +85,7 @@ internal fun <U> recoverIncompleteTake(
         val publishable = attachments.filter { it.bytes != 0L || it.handle == restored }.map { it.handle }
         val result = finalizeClip(
             clipRows, clip.handle, sidecar, muxerFinalized = false, bytesWritten = bytes,
-            sidecarBytes = { recoveredSidecar(bundleId, clip, video, existingText, reason).toByteArray() },
+            sidecarBytes = { recoveredSidecar(bundleId, clip, video, existingText, reason, moovRebuilds[clip.uri]).toByteArray() },
             correlationId = bundleId, attachments = if (keep) publishable else attachments.map { it.handle },
             // The take's own sidecar is rewritten in place: a failed rewrite keeps it for the retry.
             keepSidecarOnFailure = existing != null,
@@ -112,7 +115,8 @@ private fun isSidecarDocument(text: String): Boolean = text.length <= RECOVERED_
     runCatching { Json.parseToJsonElement(text) is JsonObject }.getOrDefault(false)
 
 /** The pending sidecar of the take with the marker, or a minimal document the catalog accepts. */
-internal fun <U> recoveredSidecar(bundleId: String, clip: RecoveredRow<U>, video: Boolean, existing: String?, reason: String? = null): String {
+internal fun <U> recoveredSidecar(bundleId: String, clip: RecoveredRow<U>, video: Boolean, existing: String?, reason: String? = null,
+    rebuilt: Mp4RebuildResult.Rebuilt? = null): String {
     val base = existing?.takeIf(::isSidecarDocument)
         ?: buildJsonObject {
             put("schema", if (video) "opencinecam.recording.v1" else "opencinecam-audio-sidecar-v1")
@@ -120,13 +124,21 @@ internal fun <U> recoveredSidecar(bundleId: String, clip: RecoveredRow<U>, video
             put("bundleId", bundleId)
         }.toString()
     return IncompleteTake.mark(
-        base, listOf(reason ?: IncompleteTake.PROCESS_DEATH), note = interruptionNote(reason),
+        base, listOf(reason ?: IncompleteTake.PROCESS_DEATH), note = interruptionNote(reason, rebuilt), extra = moovRebuiltFields(rebuilt),
     )
 }
 
+/** What the sidecar adds when the container was repaired: the `moov` was rebuilt from the take's side index (PLAN-072). */
+private fun moovRebuiltFields(rebuilt: Mp4RebuildResult.Rebuilt?): Map<String, JsonElement> =
+    if (rebuilt == null) emptyMap() else mapOf(
+        "moovRebuilt" to JsonPrimitive(true),
+        "moovRebuiltSamples" to buildJsonObject { put("video", rebuilt.videoSamples); put("audio", rebuilt.audioSamples) },
+    )
+
 /** What the sidecar says happened: the process died unless the journal recorded another [reason]. */
-private fun interruptionNote(reason: String?): String =
-    if (reason == IncompleteTake.DRIVE_DISCONNECTED) "The USB drive was disconnected before the file was finalized; the container may need repair."
+private fun interruptionNote(reason: String?, rebuilt: Mp4RebuildResult.Rebuilt? = null): String =
+    if (rebuilt != null) "The recording was interrupted before the file was finalized; its container was rebuilt, and the last moments of the take may be missing."
+    else if (reason == IncompleteTake.DRIVE_DISCONNECTED) "The USB drive was disconnected before the file was finalized; the container may need repair."
     else "Recording was interrupted before the file was finalized; the container may need repair."
 
 /**
@@ -136,12 +148,13 @@ private fun interruptionNote(reason: String?): String =
  * published as it is. A rewrite that fails throws: it may have left the sidecar truncated, so the take stays journalled
  * and the retry restores the sidecar from the copy [recoverIncompleteTake] kept.
  */
-private fun <U> markRecoveredClipSidecar(bundleId: String, clip: RecoveredRow<U>, text: String, clipRows: ClipRows<U>, reason: String? = null) {
-    if (!clipSidecarToMark(text)) return
+private fun <U> markRecoveredClipSidecar(bundleId: String, clip: RecoveredRow<U>, text: String, clipRows: ClipRows<U>, reason: String? = null,
+    rebuilt: Mp4RebuildResult.Rebuilt? = null) {
+    if (!clipSidecarToMark(text, rebuilt)) return
+    // One the in-process salvage marked already keeps its reasons; the rebuild only adds what it did to the container.
+    val reasons = IncompleteTake.reasonsOf(text)?.takeIf { it.isNotEmpty() } ?: listOf(reason ?: IncompleteTake.PROCESS_DEATH)
     val marked = try {
-        IncompleteTake.mark(
-            text, listOf(reason ?: IncompleteTake.PROCESS_DEATH), note = interruptionNote(reason),
-        )
+        IncompleteTake.mark(text, reasons, note = interruptionNote(reason, rebuilt), extra = moovRebuiltFields(rebuilt))
     } catch (failure: Exception) {
         runCatching { android.util.Log.w("IncompleteTakeRecovery", "Clip sidecar of take $bundleId could not be marked incomplete; it is published as it is", failure) }
         return
@@ -149,8 +162,16 @@ private fun <U> markRecoveredClipSidecar(bundleId: String, clip: RecoveredRow<U>
     clipRows.writeSidecar(clip.handle, marked.toByteArray())
 }
 
-/** Whether recovery rewrites this clip sidecar: a document ([isSidecarDocument]) that does not already say why it is incomplete. */
-private fun clipSidecarToMark(text: String): Boolean = isSidecarDocument(text) && IncompleteTake.reasonsOf(text) == null
+/**
+ * Whether recovery rewrites this clip sidecar: a document ([isSidecarDocument]) that does not already say why it is
+ * incomplete, or one that does (the in-process salvage marked it) when the moov was [rebuilt] since and it does not say so.
+ */
+private fun clipSidecarToMark(text: String, rebuilt: Mp4RebuildResult.Rebuilt? = null): Boolean = isSidecarDocument(text) &&
+    (IncompleteTake.reasonsOf(text) == null || (rebuilt != null && !saysMoovRebuilt(text)))
+
+private fun saysMoovRebuilt(text: String): Boolean = runCatching {
+    ((Json.parseToJsonElement(text) as JsonObject)["moovRebuilt"] as? JsonPrimitive)?.content == "true"
+}.getOrDefault(false)
 
 /**
  * Durable copies of the sidecar texts [recoverIncompleteTake] is about to rewrite, by take and sidecar name (the key is

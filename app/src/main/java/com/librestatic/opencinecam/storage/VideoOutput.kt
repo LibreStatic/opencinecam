@@ -14,6 +14,7 @@ import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
 import java.io.File
+import com.librestatic.opencinecam.camera.EncodedSampleListener
 import com.librestatic.opencinecam.camera.RecordingGeometry
 import com.librestatic.opencinecam.media.storage.ClipFinalizationResult
 import com.librestatic.opencinecam.media.storage.ClipRecoveryDecision
@@ -49,10 +50,33 @@ class VideoOutput private constructor(
     // The muxer writes through its own duplicate; after an early release the close below does nothing.
     private val descriptorCloser = CloseOnce(descriptor)
     private val driveHandle = DriveDescriptors.registerDocument(uri, descriptorCloser)
+    // The flusher syncs its own duplicate about once a second (a pulled drive loses the last second, not the file);
+    // it is dropped before the file is published or renamed.
+    private val driveFlush = DriveWriteFlusher.shared.add(uri, descriptor)
+    // PLAN-072: a GPU-pipeline take on a drive keeps a side index so a pull that loses the moov can be repaired. The
+    // writer closes with the descriptor; the file stays until the journal resolves the take (RecordingCaptureRecovery).
+    private var takeIndex: TakeIndexListener? = null
     private val transaction = PendingOutputTransaction(uri, {
-        try { descriptorCloser.close() } finally { driveHandle.unregister() }
+        try { takeIndex?.close() } finally {
+            try { driveFlush?.close() } finally {
+                try { descriptorCloser.close() } finally { driveHandle.unregister() }
+            }
+        }
         descriptorRetired = true
     }, ::deleteOwned)
+
+    /**
+     * What the GPU pipeline reports its muxer samples to, or null off a drive (a phone take has no use for an index)
+     * and once the descriptor is retired. The index file is created with the first track, so a route that ignores the
+     * listener (MediaRecorder) leaves none.
+     */
+    @Synchronized
+    internal fun sampleListener(): EncodedSampleListener? {
+        if (driveFlush == null || descriptorRetired) return null
+        return takeIndex ?: TakeIndexFiles(context).let { files ->
+            TakeIndexListener(files.fileOf(recoveryGroup.id), files::ensureFolder)
+        }.also { takeIndex = it }
+    }
 
     /** The optional Gyroflow log of this take. Best effort: it never fails or delays the take. */
     @Synchronized
