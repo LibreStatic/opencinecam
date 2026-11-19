@@ -213,7 +213,13 @@ fun readTakeSampleIndex(file: File): TakeSampleIndex? {
             if (length < 0 || buffer.remaining() < length) break
             val json = String(bytes, buffer.position(), length, StandardCharsets.UTF_8)
             buffer.position(buffer.position() + length)
-            tracks[track] = try { TakeTrackInfo.fromJson(json) } catch (_: org.json.JSONException) { break }
+            tracks[track] = try {
+                TakeTrackInfo.fromJson(json)
+            } catch (_: org.json.JSONException) {
+                break
+            } catch (_: IllegalArgumentException) {
+                break // invalid Base64 in a csd field
+            }
         } else break
     }
     return TakeSampleIndex(tracks, samples)

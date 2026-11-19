@@ -99,9 +99,10 @@ class TakeIndexRecoveryTest {
         while (pos + 8 <= bytes.size) {
             val size32 = ByteBuffer.wrap(bytes, pos.toInt(), 4).int.toLong() and 0xFFFFFFFFL
             val type = String(bytes, pos.toInt() + 4, 4, Charsets.ISO_8859_1)
-            if (type == "moov") return true
             val size = if (size32 == 1L) ByteBuffer.wrap(bytes, pos.toInt() + 8, 8).long else size32
-            if (size < 8) return false
+            // Only a whole box counts: a torn moov header whose body runs past EOF is no moov.
+            if (size < 8 || size > bytes.size - pos) return false
+            if (type == "moov") return true
             pos += size
         }
         return false
@@ -187,6 +188,43 @@ class TakeIndexRecoveryTest {
         assertFalse(indexes.fileOf(id).exists())
     }
 
+    @Test fun aRebuildWhosePublicationFailedStillSaysSoOnTheRetry() {
+        val take = takeWithoutMoov()
+        val id = interrupted(take.file, IncompleteTake.DRIVE_DISCONNECTED)
+        writeIndex(id, take)
+        // The moov is rebuilt, then the sidecar cannot be read: the take is not published and stays journalled.
+        drive.unopenable = setOf("A001.timing.json")
+        journal().recover()
+        assertTrue(hasMoov(File(takeDir(), "A001.mp4").readBytes()))
+        assertFalse(File(takeDir(), "A001.timing.json").readText().contains("moovRebuilt"))
+        assertTrue(indexes.receiptOf(id).isFile)
+
+        // The retry finds the moov in place (NotNeeded) and reports the rebuild from the receipt.
+        drive.unopenable = emptySet()
+        assertEquals(RecordingRecoveryReport(incompleteGroups = 1), journal().recover())
+        val timing = File(takeDir(), "A001.timing.json").readText()
+        assertTrue(timing.contains("\"moovRebuilt\": true"))
+        assertTrue(timing.contains("\"video\": 3"))
+        assertFalse(indexes.fileOf(id).exists())
+        assertFalse(indexes.receiptOf(id).exists())
+    }
+
+    @Test fun aFinalizedFileHasNoReceiptAndIsNotLabelledRebuilt() {
+        val take = takeWithoutMoov()
+        val id = interrupted(take.file)
+        writeIndex(id, take)
+        // A receipt for another file of the take is never used for this one.
+        indexes.writeReceipt(id, "content://elsewhere/other.mp4", Mp4RebuildResult.Rebuilt(9, 9, 1))
+        // The muxer sized its mdat and wrote a moov after it.
+        val finalized = take.file + i32(8) + "moov".toByteArray()
+        val mdatStart = 24 + 3325
+        ByteBuffer.wrap(finalized, mdatStart + 8, 8).putLong((take.file.size - mdatStart).toLong())
+        File(takeDir(), "A001.mp4").writeBytes(finalized)
+        assertEquals(RecordingRecoveryReport(incompleteGroups = 1), journal().recover())
+        assertFalse(File(takeDir(), "A001.timing.json").readText().contains("moovRebuilt"))
+        assertFalse(indexes.receiptOf(id).exists())
+    }
+
     @Test fun aTakeWithoutAnIndexIsPublishedAsBefore() {
         val take = takeWithoutMoov()
         val id = interrupted(take.file)
@@ -246,8 +284,10 @@ class TakeIndexRecoveryTest {
         val fresh = UUID.randomUUID().toString()
         val journalled = UUID.randomUUID().toString()
         listOf(old, fresh, journalled).forEach { writeIndex(it, take) }
+        indexes.writeReceipt(old, "content://x/old.mp4", Mp4RebuildResult.Rebuilt(1, 0, 33_333))
         val longAgo = System.currentTimeMillis() - 25L * 60 * 60 * 1000
         assertTrue(indexes.fileOf(old).setLastModified(longAgo))
+        assertTrue(indexes.receiptOf(old).setLastModified(longAgo))
         assertTrue(indexes.fileOf(journalled).setLastModified(longAgo))
         // The journalled take is deferred (its drive is away), so its row, and with it the index, stays.
         drive.mounted = false
@@ -256,6 +296,7 @@ class TakeIndexRecoveryTest {
         journal().recover()
 
         assertFalse(indexes.fileOf(old).exists())
+        assertFalse(indexes.receiptOf(old).exists())
         assertTrue(indexes.fileOf(fresh).exists())
         assertTrue(indexes.fileOf(journalled).exists())
         assertNotNull(readTakeSampleIndex(indexes.fileOf(journalled)))

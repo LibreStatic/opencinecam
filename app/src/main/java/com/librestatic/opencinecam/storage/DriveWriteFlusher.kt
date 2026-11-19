@@ -59,12 +59,15 @@ internal class DriveWriteFlusher(
      */
     fun add(document: Uri, descriptor: ParcelFileDescriptor): Target? {
         if (driveVolumeOfDocument(document) == null) return null
+        // Taken before the duplicate: a release between it and the registration closed the original's peers but not
+        // this duplicate, so the guarded registration closes it and the take is not flushed.
+        val mark = DriveDescriptors.releaseMark(document)
         val dup = try { descriptor.dup() } catch (problem: Exception) {
             Log.w(LOG_TAG, "Drive output $document is not flushed: descriptor could not be duplicated", problem)
             return null
         }
         val target = Target(dup)
-        target.handle = DriveDescriptors.registerDocument(document, target.closer())
+        target.handle = DriveDescriptors.registerDocument(document, target.closer(), openedAfter = mark)
         if (target.handle === DriveDescriptorHandle.NONE) {
             target.close()
             return null

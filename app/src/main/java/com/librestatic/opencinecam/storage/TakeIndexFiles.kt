@@ -13,6 +13,10 @@ import java.io.File
  * PLAN-072: where the side index of a drive take lives, `filesDir/take-index/<takeId>.ocix`, keyed by the recording
  * journal's take id. The journal owns its life: it is deleted when the entry is resolved (committed, discarded or
  * published incomplete) and kept while the take waits for recovery, which reads it ([Mp4MoovRebuilder]).
+ *
+ * Next to it, `<takeId>.ocix.rebuilt` is the receipt of a moov the recovery rebuilt: a publication that fails after the
+ * rebuild finds the file complete on its retry ([Mp4RebuildResult.NotNeeded]), and the receipt keeps what the rebuild
+ * did for the sidecar. A file the muxer finalized has none. It goes with the index.
  */
 internal class TakeIndexFiles(context: Context) {
     private val folder = File(context.applicationContext.filesDir, FOLDER)
@@ -22,14 +26,49 @@ internal class TakeIndexFiles(context: Context) {
         return File(folder, "$takeId$EXTENSION")
     }
 
-    fun delete(takeId: String) { fileOf(takeId).delete() }
+    fun receiptOf(takeId: String): File {
+        RecordingCaptureRecovery.requireId(takeId)
+        return File(folder, "$takeId$EXTENSION$RECEIPT_SUFFIX")
+    }
 
-    /** Deletes the index files whose take has no journal entry in [known] and that are older than [maxAgeMs]; returns how many went. */
+    fun delete(takeId: String) {
+        receiptOf(takeId).delete()
+        fileOf(takeId).delete()
+    }
+
+    /** Keeps the receipt of [result], the moov rebuilt in the take's file [uri]: written to a `.part`, synced and renamed. */
+    fun writeReceipt(takeId: String, uri: String, result: Mp4RebuildResult.Rebuilt) {
+        ensureFolder()
+        val target = receiptOf(takeId)
+        val partial = File(folder, target.name + ".part")
+        val json = org.json.JSONObject().put("uri", uri).put("videoSamples", result.videoSamples)
+            .put("audioSamples", result.audioSamples).put("durationUs", result.durationUs).toString()
+        java.io.FileOutputStream(partial).use { it.write(json.toByteArray()); it.fd.sync() }
+        check(partial.renameTo(target)) { "Take rebuild receipt could not be kept" }
+    }
+
+    /** The rebuild of take [takeId]'s file [uri] a receipt records; null without one, for another file or unreadable. */
+    fun readReceipt(takeId: String, uri: String): Mp4RebuildResult.Rebuilt? = try {
+        val o = org.json.JSONObject(receiptOf(takeId).readText())
+        if (o.getString("uri") != uri) null
+        else Mp4RebuildResult.Rebuilt(o.getInt("videoSamples"), o.getInt("audioSamples"), o.getLong("durationUs"))
+    } catch (_: java.io.IOException) {
+        null
+    } catch (_: org.json.JSONException) {
+        null
+    }
+
+    /**
+     * Deletes the index files (and receipts) whose take has no journal entry in [known] and that are older than
+     * [maxAgeMs]; returns how many went.
+     */
     fun sweepOrphans(known: Set<String>, maxAgeMs: Long, now: Long = System.currentTimeMillis()): Int {
         var deleted = 0
         folder.listFiles()?.forEach { file ->
-            val id = file.name.removeSuffix(EXTENSION)
-            if (!file.name.endsWith(EXTENSION) || id in known || now - file.lastModified() < maxAgeMs) return@forEach
+            val id = file.name.removeSuffix(".part").removeSuffix(RECEIPT_SUFFIX).removeSuffix(EXTENSION)
+            val ours = file.name.endsWith(EXTENSION) || file.name.endsWith(EXTENSION + RECEIPT_SUFFIX) ||
+                file.name.endsWith("$EXTENSION$RECEIPT_SUFFIX.part")
+            if (!ours || id in known || now - file.lastModified() < maxAgeMs) return@forEach
             if (file.delete()) deleted++
         }
         return deleted
@@ -40,6 +79,7 @@ internal class TakeIndexFiles(context: Context) {
     companion object {
         const val FOLDER = "take-index"
         const val EXTENSION = ".ocix"
+        const val RECEIPT_SUFFIX = ".rebuilt"
         /** An index without a journal entry this old belongs to no take anyone can still recover. */
         const val ORPHAN_AGE_MS = 24L * 60 * 60 * 1000
     }
@@ -60,10 +100,12 @@ internal class TakeIndexListener(
 ) : EncodedSampleListener, AutoCloseable {
     @Volatile private var writer: TakeSampleIndexWriter? = null
     private var unavailable = false
+    private var closed = false
     private var lastFlushNs = 0L
 
     @Synchronized
     override fun onTrack(video: Boolean, format: MediaFormat, rotationDegrees: Int) {
+        if (closed) return
         val target = writer ?: createWriter() ?: return
         target.writeTrack(kind(video), TakeTrackInfo.fromMediaFormat(format, rotationDegrees))
         // The parameter sets are what a rebuilt moov cannot do without: they reach the kernel at once.
@@ -82,7 +124,7 @@ internal class TakeIndexListener(
     }
 
     private fun createWriter(): TakeSampleIndexWriter? {
-        if (unavailable) return null
+        if (unavailable || closed) return null
         return try {
             ensureFolder()
             TakeSampleIndexWriter(file).also { writer = it }
@@ -93,9 +135,10 @@ internal class TakeIndexListener(
         }
     }
 
-    /** Closes the writer, keeping the file: the journal decides when it goes. Idempotent. */
+    /** Closes the writer, keeping the file: the journal decides when it goes. Idempotent, and final: a later track creates no file. */
     @Synchronized
     override fun close() {
+        closed = true
         val target = writer ?: return
         try { target.close() } catch (failure: Exception) { Log.w("TakeIndex", "The take index could not be closed cleanly.", failure) }
     }

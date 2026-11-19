@@ -3,10 +3,14 @@
 
 package com.librestatic.opencinecam.storage
 
+import android.media.MediaFormat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import java.io.File
+import java.nio.ByteBuffer
+import java.nio.charset.StandardCharsets
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -101,5 +105,31 @@ class TakeSampleIndexTest {
         file.writeBytes(bytes)
         assertNotNull(readTakeSampleIndex(file))
         assertTrue(bytes.size > 5)
+    }
+
+    @Test fun aTrackRecordWithInvalidBase64EndsTheValidPrefix() {
+        val file = folder.newFile("base64.ocix")
+        TakeSampleIndexWriter(file).use {
+            it.writeTrack(TrackKind.VIDEO, video)
+            it.writeSample(TrackKind.VIDEO, 1000, 0, 1)
+        }
+        val json = """{"mime":"audio/mp4a-latm","sampleRate":48000,"channelCount":2,"csd0":"!"}""".toByteArray(StandardCharsets.UTF_8)
+        val record = ByteBuffer.allocate(6 + json.size).put('T'.code.toByte()).put(TrackKind.AUDIO.code.toByte()).putInt(json.size).put(json)
+        file.appendBytes(record.array())
+        val index = readTakeSampleIndex(file)!!
+        assertEquals(setOf(TrackKind.VIDEO), index.tracks.keys)
+        assertEquals(listOf(1000), index.samplesOf(TrackKind.VIDEO).map { it.size })
+        assertTrue(index.samplesOf(TrackKind.AUDIO).isEmpty())
+    }
+
+    @Test fun aListenerClosedBeforeItsFirstTrackCreatesNoFile() {
+        val file = File(folder.root, "take-index/closed.ocix")
+        val listener = TakeIndexListener(file, ensureFolder = { file.parentFile!!.mkdirs() })
+        listener.close()
+        val format = MediaFormat.createAudioFormat("audio/mp4a-latm", 48000, 2)
+        listener.onTrack(video = false, format = format, rotationDegrees = 0)
+        listener.onSample(video = false, size = 10, presentationTimeUs = 0, flags = 1)
+        listener.close()
+        assertFalse(file.exists())
     }
 }

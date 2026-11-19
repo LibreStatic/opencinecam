@@ -434,6 +434,8 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
      * keyed by the row's uri for [recoverIncompleteTake]. The MP4 is opened registered with [DriveDescriptors] (ADR-0037),
      * so a drive that leaves again ends the repair with an I/O error. No index, or a repair that failed, changes nothing:
      * the take publishes as before. An I/O error while the drive no longer answers propagates, so the entry is retried.
+     * A rebuild leaves a receipt next to the index ([TakeIndexFiles.writeReceipt]): when the publication after it fails,
+     * the retry finds the moov in place and reports the rebuild from the receipt, so the sidecar still says what was done.
      */
     private fun rebuildDriveMoov(id: String, store: SafRecordingRows): Map<String, Mp4RebuildResult.Rebuilt> {
         val index = readTakeSampleIndex(takeIndexes.fileOf(id)) ?: return emptyMap()
@@ -453,7 +455,15 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
             return emptyMap()
         }
         android.util.Log.i("RecordingRecovery", "Take $id: moov rebuild $result")
-        return if (result is Mp4RebuildResult.Rebuilt) mapOf(mp4.uri to result) else emptyMap()
+        val rebuilt = when (result) {
+            is Mp4RebuildResult.Rebuilt -> result.also { rebuilt ->
+                runCatching { takeIndexes.writeReceipt(id, mp4.uri, rebuilt) }
+                    .onFailure { android.util.Log.w("RecordingRecovery", "Take $id: the rebuild receipt could not be kept", it) }
+            }
+            Mp4RebuildResult.NotNeeded -> takeIndexes.readReceipt(id, mp4.uri)
+            is Mp4RebuildResult.Failed -> null
+        }
+        return if (rebuilt != null) mapOf(mp4.uri to rebuilt) else emptyMap()
     }
 
     /** Deletes the index files of takes the journal no longer knows, once they are old enough that none can be recovering. */

@@ -366,22 +366,145 @@ class Mp4MoovRebuilderTest {
     }
 
     @Test fun ffprobeAcceptsTheRebuiltFile() {
-        val ffprobe = try { ProcessBuilder("which", "ffprobe").start().inputStream.bufferedReader().readText().trim() } catch (e: Exception) { "" }
-        assumeTrue("ffprobe not installed", ffprobe.isNotEmpty())
+        assumeTrue("ffprobe not installed", have("ffprobe"))
         val s = synthetic(tornTail())
         val (access, _) = rebuild(s, indexFor(s))
-        val dir = File(System.getProperty("user.home"), ".cache/claude-tmp/libremagic").apply { mkdirs() }
-        val file = File.createTempFile("rebuilt", ".mp4", dir)
+        val file = File.createTempFile("rebuilt", ".mp4", scratch())
         try {
             file.writeBytes(access.data)
-            val p = ProcessBuilder(ffprobe, "-v", "error", "-show_streams", file.path).redirectErrorStream(false).start()
-            val out = p.inputStream.bufferedReader().readText()
-            p.waitFor(30, TimeUnit.SECONDS)
+            val (code, out) = run("ffprobe", "-v", "error", "-show_streams", file.path, mergeErrors = false, timeoutSeconds = 30)
+            assertEquals(out, 0, code)
             assertTrue(out, "codec_type=video" in out && "codec_type=audio" in out)
             assertTrue(out, "codec_name=hevc" in out && "codec_name=aac" in out)
         } finally {
             file.delete()
         }
+    }
+
+    // ---- a sized mdat with a torn tail, zero padding, a torn access unit at EOF, an interrupted append ---------------
+
+    /** [synthetic] with its mdat sized to the payload (as the muxer sizes it at stop), then [tail]. */
+    private fun sized(tail: ByteArray): Synthetic {
+        val s = synthetic(ByteArray(0))
+        val file = s.file.copyOf()
+        ByteBuffer.wrap(file, s.mdatStart.toInt() + 8, 8).putLong(file.size - s.mdatStart)
+        return Synthetic(file + tail, s.mdatStart, s.chunkStarts, s.auSizes, s.audioSizes, s.payloadEnd)
+    }
+
+    /** The moov is the last top-level box and complete: its declared size runs exactly to EOF. */
+    private fun assertReachableMoov(data: ByteArray) {
+        val last = top(data).last()
+        assertEquals("moov", last.type)
+        assertEquals(data.size - last.start, ByteBuffer.wrap(data, last.start, 4).int)
+    }
+
+    @Test fun aSizedMdatWithATornMoovGetsAFreeOverTheTornBoxAndAReachableMoov() {
+        // The muxer's own moov was cut by the pull: its declared size runs past EOF.
+        val s = sized(i32(5000) + "moov".toByteArray() + ByteArray(200) { 3 })
+        val (access, result) = rebuild(s, indexFor(s))
+        assertEquals(10, (result as Mp4RebuildResult.Rebuilt).videoSamples)
+        assertEquals(7, result.audioSamples)
+        val boxes = top(access.data)
+        assertEquals(listOf("ftyp", "free", "mdat", "free", "moov"), boxes.map { it.type })
+        assertEquals(s.payloadEnd, boxes[3].start)
+        assertEquals(s.file.size, boxes[4].start)
+        assertEquals(s.file.size - s.payloadEnd, ByteBuffer.wrap(access.data, s.payloadEnd, 4).int)
+        assertReachableMoov(access.data)
+        // Nothing up to the end of the mdat changed.
+        assertArrayEquals(s.file.copyOf(s.payloadEnd), access.data.copyOf(s.payloadEnd))
+        assertEquals(s.auSizes, stsz(trak(boxes[4], "vide")!!))
+        assertEquals(Mp4RebuildResult.NotNeeded, Mp4MoovRebuilder.rebuildMoov(access, indexFor(s)))
+    }
+
+    @Test fun completeBoxesBeforeTheTornOneAreKept() {
+        val kept = i32(16) + "skip".toByteArray() + ByteArray(8) { 9 }
+        val s = sized(kept + i32(5000) + "moov".toByteArray() + ByteArray(40))
+        val (access, result) = rebuild(s, indexFor(s))
+        assertTrue(result is Mp4RebuildResult.Rebuilt)
+        val boxes = top(access.data)
+        assertEquals(listOf("ftyp", "free", "mdat", "skip", "free", "moov"), boxes.map { it.type })
+        assertEquals(s.payloadEnd + 16, boxes[4].start)
+        assertArrayEquals(kept, access.data.copyOfRange(s.payloadEnd, s.payloadEnd + 16))
+        assertReachableMoov(access.data)
+    }
+
+    @Test fun aSizedMdatWithAFewStrayBytesIsPaddedToAFree() {
+        val s = sized(byteArrayOf(1, 2, 3))
+        val (access, result) = rebuild(s, indexFor(s))
+        assertTrue(result is Mp4RebuildResult.Rebuilt)
+        val boxes = top(access.data)
+        assertEquals(listOf("ftyp", "free", "mdat", "free", "moov"), boxes.map { it.type })
+        assertEquals(8, boxes[3].end - boxes[3].start)
+        assertEquals(s.payloadEnd + 8, boxes[4].start)
+        assertReachableMoov(access.data)
+        assertArrayEquals(s.file.copyOf(s.payloadEnd), access.data.copyOf(s.payloadEnd))
+    }
+
+    /** Writes like [MemoryAccess] until [failAt], the first write longer than 16 bytes, which lands half and throws. */
+    private class InterruptedAccess(val memory: MemoryAccess) : Mp4Access by memory {
+        var interrupted = false
+        override fun write(position: Long, data: ByteArray) {
+            if (!interrupted && data.size > 16) {
+                interrupted = true
+                memory.write(position, data.copyOf(data.size / 2))
+                throw java.io.IOException("the drive went away")
+            }
+            memory.write(position, data)
+        }
+    }
+
+    @Test fun aWriteErrorPropagatesAndARetryAfterACutAppendRebuildsAReachableMoov() {
+        for (s in listOf(sized(i32(5000) + "moov".toByteArray() + ByteArray(200) { 3 }), synthetic(tornTail()))) {
+            val first = InterruptedAccess(MemoryAccess(s.file.copyOf()))
+            org.junit.Assert.assertThrows(java.io.IOException::class.java) { Mp4MoovRebuilder.rebuildMoov(first, indexFor(s)) }
+            assertTrue(first.memory.data.size > s.file.size)
+            // Sample bytes are untouched whatever the cut.
+            assertArrayEquals(s.file.copyOfRange(s.mdatStart.toInt() + 16, s.payloadEnd), first.memory.data.copyOfRange(s.mdatStart.toInt() + 16, s.payloadEnd))
+
+            val retry = MemoryAccess(first.memory.data)
+            val result = Mp4MoovRebuilder.rebuildMoov(retry, indexFor(s))
+            assertEquals(10, (result as Mp4RebuildResult.Rebuilt).videoSamples)
+            assertEquals(7, result.audioSamples)
+            assertReachableMoov(retry.data)
+            assertEquals(s.auSizes, stsz(trak(top(retry.data).last(), "vide")!!))
+        }
+    }
+
+    @Test fun anAccessUnitBeforeZeroPaddingIsKeptOnlyAtItsIndexedSize() {
+        val (head, _) = mp4Head()
+        val au = hevcAu(true, 1)
+        val file = head + au + ByteArray(4096)
+        fun index(size: Int) = TakeSampleIndex(
+            mapOf(TrackKind.VIDEO to TakeTrackInfo("video/hevc", 1920, 1080, csd0 = hevcCsd)),
+            mapOf(TrackKind.VIDEO to listOf(IndexedSample(size, 0, 1))),
+        )
+        val complete = Mp4MoovRebuilder.rebuildMoov(MemoryAccess(file.copyOf()), index(au.size))
+        assertEquals(1, (complete as Mp4RebuildResult.Rebuilt).videoSamples)
+        // The indexed picture was longer: slices are missing before the zeros, so it is not recovered.
+        val short = MemoryAccess(file.copyOf())
+        assertTrue(Mp4MoovRebuilder.rebuildMoov(short, index(au.size + 20)) is Mp4RebuildResult.Failed)
+        assertArrayEquals(file, short.data)
+    }
+
+    @Test fun aTornAccessUnitAtTheEndIsNotTakenForAnAudioFrameOfItsLength() {
+        val (head, _) = mp4Head()
+        val aus = listOf(hevcAu(true, 1), hevcAu(false, 2), hevcAu(false, 3))
+        val frames = listOf(aac(300, 1), aac(310, 2))
+        val torn = aus[2].copyOf(40) // the first slice's length says 83 bytes; 36 of them remain
+        val file = head + aus[0] + aus[1] + frames[0] + frames[1] + torn
+        val index = TakeSampleIndex(
+            mapOf(TrackKind.VIDEO to TakeTrackInfo("video/hevc", 1920, 1080, csd0 = hevcCsd), TrackKind.AUDIO to TakeTrackInfo("audio/mp4a-latm", sampleRate = 48000, channelCount = 2, csd0 = asc)),
+            mapOf(
+                TrackKind.VIDEO to aus.mapIndexed { i, au -> IndexedSample(au.size, i * 33_333L, if (i == 0) 1 else 0) },
+                // The next audio frame is exactly as long as what is left of the torn access unit.
+                TrackKind.AUDIO to (frames.map { it.size } + torn.size).mapIndexed { i, size -> IndexedSample(size, i * 21_333L, 1) },
+            ),
+        )
+        val access = MemoryAccess(file)
+        val result = Mp4MoovRebuilder.rebuildMoov(access, index)
+        assertEquals(2, (result as Mp4RebuildResult.Rebuilt).videoSamples)
+        assertEquals(2, result.audioSamples)
+        assertEquals(listOf(300, 310), stsz(trak(top(access.data).last(), "soun")!!))
     }
 
     // ---- scale, mono AAC, the real channel, a real encoder -------------------------------------------------------
@@ -487,11 +610,29 @@ class Mp4MoovRebuilderTest {
         }
     }
 
-    private fun run(vararg cmd: String): Pair<Int, String> {
-        val p = ProcessBuilder(*cmd).redirectErrorStream(true).start()
-        val out = p.inputStream.bufferedReader().readText()
-        if (!p.waitFor(120, TimeUnit.SECONDS)) p.destroyForcibly()
-        return p.exitValue() to out
+    private fun scratch() = File(System.getProperty("user.home"), ".cache/claude-tmp/libremagic").apply { mkdirs() }
+
+    /**
+     * Runs [cmd] with its output in a file, so a process that stalls cannot block the test on a full pipe: the timed
+     * wait comes first, and a process still alive after it is killed.
+     */
+    private fun run(vararg cmd: String, mergeErrors: Boolean = true, timeoutSeconds: Long = 120): Pair<Int, String> {
+        val log = File.createTempFile("process", ".log", scratch())
+        val errors = File.createTempFile("process", ".err", scratch())
+        val builder = ProcessBuilder(*cmd).redirectOutput(log)
+        if (mergeErrors) builder.redirectErrorStream(true) else builder.redirectError(errors)
+        val p = builder.start()
+        try {
+            check(p.waitFor(timeoutSeconds, TimeUnit.SECONDS)) { "${cmd.first()} did not finish in $timeoutSeconds s" }
+            return p.exitValue() to log.readText()
+        } finally {
+            if (p.isAlive) {
+                p.destroyForcibly()
+                p.waitFor(10, TimeUnit.SECONDS)
+            }
+            log.delete()
+            errors.delete()
+        }
     }
 
     private fun have(tool: String) = try { run("which", tool).first == 0 } catch (e: Exception) { false }

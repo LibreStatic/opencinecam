@@ -76,7 +76,7 @@ internal fun <U> recoverIncompleteTake(
         val clipSaved = clipKey?.let(backups::read)
         val markable = clipSidecar?.takeIf { keep && (clipSaved != null || it.bytes != 0L) }
         val clipText = clipSaved ?: markable?.handle?.let(readText)
-        if (clipSaved == null && clipKey != null && clipText != null && clipSidecarToMark(clipText)) backups.write(clipKey, clipText)
+        if (clipSaved == null && clipKey != null && clipText != null && clipSidecarToMark(clipText, moovRebuilds[clip.uri])) backups.write(clipKey, clipText)
         if (markable != null && clipText != null) markRecoveredClipSidecar(bundleId, markable, clipText, clipRows, reason, moovRebuilds[clip.uri])
         val restored = markable?.handle?.takeIf { clipSaved != null }
         val sidecar = existing?.handle ?: if (keep) insertSidecar(if (video) "$stem.incomplete.json" else "$stem.audio.incomplete.json") else null
@@ -150,11 +150,11 @@ private fun interruptionNote(reason: String?, rebuilt: Mp4RebuildResult.Rebuilt?
  */
 private fun <U> markRecoveredClipSidecar(bundleId: String, clip: RecoveredRow<U>, text: String, clipRows: ClipRows<U>, reason: String? = null,
     rebuilt: Mp4RebuildResult.Rebuilt? = null) {
-    if (!clipSidecarToMark(text)) return
+    if (!clipSidecarToMark(text, rebuilt)) return
+    // One the in-process salvage marked already keeps its reasons; the rebuild only adds what it did to the container.
+    val reasons = IncompleteTake.reasonsOf(text)?.takeIf { it.isNotEmpty() } ?: listOf(reason ?: IncompleteTake.PROCESS_DEATH)
     val marked = try {
-        IncompleteTake.mark(
-            text, listOf(reason ?: IncompleteTake.PROCESS_DEATH), note = interruptionNote(reason, rebuilt), extra = moovRebuiltFields(rebuilt),
-        )
+        IncompleteTake.mark(text, reasons, note = interruptionNote(reason, rebuilt), extra = moovRebuiltFields(rebuilt))
     } catch (failure: Exception) {
         runCatching { android.util.Log.w("IncompleteTakeRecovery", "Clip sidecar of take $bundleId could not be marked incomplete; it is published as it is", failure) }
         return
@@ -162,8 +162,16 @@ private fun <U> markRecoveredClipSidecar(bundleId: String, clip: RecoveredRow<U>
     clipRows.writeSidecar(clip.handle, marked.toByteArray())
 }
 
-/** Whether recovery rewrites this clip sidecar: a document ([isSidecarDocument]) that does not already say why it is incomplete. */
-private fun clipSidecarToMark(text: String): Boolean = isSidecarDocument(text) && IncompleteTake.reasonsOf(text) == null
+/**
+ * Whether recovery rewrites this clip sidecar: a document ([isSidecarDocument]) that does not already say why it is
+ * incomplete, or one that does (the in-process salvage marked it) when the moov was [rebuilt] since and it does not say so.
+ */
+private fun clipSidecarToMark(text: String, rebuilt: Mp4RebuildResult.Rebuilt? = null): Boolean = isSidecarDocument(text) &&
+    (IncompleteTake.reasonsOf(text) == null || (rebuilt != null && !saysMoovRebuilt(text)))
+
+private fun saysMoovRebuilt(text: String): Boolean = runCatching {
+    ((Json.parseToJsonElement(text) as JsonObject)["moovRebuilt"] as? JsonPrimitive)?.content == "true"
+}.getOrDefault(false)
 
 /**
  * Durable copies of the sidecar texts [recoverIncompleteTake] is about to rewrite, by take and sidecar name (the key is

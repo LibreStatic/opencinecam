@@ -108,4 +108,21 @@ class DriveWriteFlusherTest {
         assertFalse(original.fileDescriptor == null)
         original.close()
     }
+
+    @Test fun aReleaseBetweenTheDuplicateAndTheRegistrationAddsNoTarget() {
+        val file = File.createTempFile("flush", ".bin").also { files += it }
+        // The release runs while the duplicate is made, after the flusher took its release mark.
+        val original = object : ParcelFileDescriptor(ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_WRITE)) {
+            override fun dup(): ParcelFileDescriptor {
+                DriveDescriptors.releaseVolume(volume)
+                return super.dup()
+            }
+        }
+        assertNull(flusher.add(driveDocument(), original))
+        assertEquals(0, flusher.count)
+        assertEquals(0, DriveDescriptors.registered(volume))
+        flusher.flushOnce()
+        assertTrue(synced.isEmpty())
+        original.close()
+    }
 }

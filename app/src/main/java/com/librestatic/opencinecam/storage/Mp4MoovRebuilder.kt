@@ -51,7 +51,7 @@ sealed interface Mp4RebuildResult {
     /** The file already has a complete `moov`; it was not touched. */
     data object NotNeeded : Mp4RebuildResult
 
-    /** Nothing was changed (or the file is no worse than before). */
+    /** Nothing was changed: the file could not be repaired, found out before any write. */
     data class Failed(val reason: String) : Mp4RebuildResult
 }
 
@@ -63,7 +63,15 @@ sealed interface Mp4RebuildResult {
  * alternate between tracks, and a torn tail. [rebuildMoov] walks the payload with the [TakeSampleIndex] kept during the
  * take, appends a `moov` at EOF (after the torn tail, which stays unreferenced inside the mdat) and then rewrites only
  * the mdat size. Sample data is never moved, truncated or overwritten, and the size goes last so a failure midway
- * leaves the file no worse than it was.
+ * leaves the samples as they were.
+ *
+ * A sized mdat followed by a torn box (the muxer's own `moov` cut by the pull, or a few stray bytes) gets that box's
+ * header turned into a `free` that runs to EOF first, so the `moov` appended after it is reachable; complete boxes
+ * before it are kept. A retry after an append that was cut finds the partial `moov` as the torn box and does the same.
+ *
+ * Everything that can fail before a write ([Mp4RebuildResult.Failed]) leaves the file unchanged. An [java.io.IOException]
+ * from a write or a sync propagates: the drive may have gone away, and the caller decides whether to retry. It never
+ * overwrites sample bytes, but the container metadata may then be incomplete.
  *
  * The walk: a position is video when the bytes parse as a NAL (4-byte length that fits, forbidden bit 0, a sane type),
  * otherwise it is audio, whose frame size comes from the index (raw AAC has no framing in the file). Video sample
@@ -85,30 +93,40 @@ object Mp4MoovRebuilder {
         } catch (e: IllegalArgumentException) {
             return Mp4RebuildResult.Failed(e.message ?: "bad track configuration")
         }
-        val moovStart = access.size
-        val newMdatSize = moovStart - layout.mdatStart
+        val newMdatSize = access.size - layout.mdatStart
         if (layout.rewriteSize && layout.headerLength == 8 && newMdatSize > 0xFFFFFFFFL) {
             return Mp4RebuildResult.Failed("mdat too large for a 32-bit header")
         }
-        try {
-            access.write(moovStart, moov.bytes)
+        // From here on a write or sync that fails throws (see the class comment).
+        layout.tailStart?.let { tailStart ->
+            // The torn box becomes a free running to EOF (at least a header long) before the moov goes after it: written
+            // first, it can never be read as a complete box swallowing part of the new moov.
+            val gap = access.size - tailStart
+            val large = gap > 0xFFFFFFFFL
+            val freeSize = maxOf(gap, if (large) 16L else 8L)
+            val header = if (large) ByteBuffer.allocate(16).putInt(1).put(FREE).putLong(freeSize).array()
+            else ByteBuffer.allocate(8).putInt(freeSize.toInt()).put(FREE).array()
+            access.write(tailStart, header)
             access.sync()
-            if (layout.rewriteSize) {
-                val field = ByteBuffer.allocate(8)
-                if (layout.headerLength == 16) {
-                    access.write(layout.mdatStart + 8, field.putLong(newMdatSize).array())
-                } else {
-                    access.write(layout.mdatStart, field.putInt(newMdatSize.toInt()).array(), 4)
-                }
-                access.sync()
+        }
+        val moovStart = access.size
+        access.write(moovStart, moov.bytes)
+        access.sync()
+        if (layout.rewriteSize) {
+            val field = ByteBuffer.allocate(8)
+            if (layout.headerLength == 16) {
+                access.write(layout.mdatStart + 8, field.putLong(newMdatSize).array())
+            } else {
+                access.write(layout.mdatStart, field.putInt(newMdatSize.toInt()).array(), 4)
             }
-        } catch (e: java.io.IOException) {
-            return Mp4RebuildResult.Failed("write failed: ${e.message}")
+            access.sync()
         }
         return Mp4RebuildResult.Rebuilt(walk.videoCount, walk.audioCount, moov.durationUs)
     }
 
     private fun Mp4Access.write(position: Long, data: ByteArray, length: Int) = write(position, data.copyOf(length))
+
+    private val FREE = "free".toByteArray(Charsets.ISO_8859_1)
 
     // ---- top level -----------------------------------------------------------------------------------------------
 
@@ -122,6 +140,8 @@ object Mp4MoovRebuilder {
             val payloadEnd: Long,
             /** True when the mdat size is a placeholder, 0 (to EOF) or runs past the file, so it must be rewritten. */
             val rewriteSize: Boolean,
+            /** After a sized mdat, where the first incomplete box (or fewer than 8 bytes) starts; null when the boxes reach EOF. */
+            val tailStart: Long? = null,
         ) : TopLevel
     }
 
@@ -155,13 +175,16 @@ object Mp4MoovRebuilder {
                 )
                 "mdat" -> {
                     val end = if (valid) pos + boxSize else size
-                    val more = valid && end < size
-                    if (more) {
+                    var tailStart: Long? = null
+                    if (valid && end < size) {
                         // A sized mdat with boxes after it: a moov may follow; scan on.
-                        val rest = scanForMoov(access, end)
-                        if (rest != null) return TopLevel.Done(rest)
+                        when (val rest = scanAfterMdat(access, end)) {
+                            Tail.HasMoov -> return TopLevel.Done(Mp4RebuildResult.NotNeeded)
+                            Tail.Complete -> Unit
+                            is Tail.Torn -> tailStart = rest.start
+                        }
                     }
-                    return TopLevel.Found(pos, headerLength, pos + headerLength, end, rewriteSize = !valid || size32 == 0L)
+                    return TopLevel.Found(pos, headerLength, pos + headerLength, end, rewriteSize = !valid || size32 == 0L, tailStart)
                 }
                 else -> if (!valid) break
             }
@@ -170,18 +193,37 @@ object Mp4MoovRebuilder {
         return TopLevel.Done(Mp4RebuildResult.Failed("no mdat found"))
     }
 
-    private fun scanForMoov(access: Mp4Access, from: Long): Mp4RebuildResult? {
+    private sealed interface Tail {
+        /** A complete `moov` follows the mdat. */
+        data object HasMoov : Tail
+
+        /** Only complete boxes, ending exactly at EOF. */
+        data object Complete : Tail
+
+        /** The box at [start] is incomplete (its size runs past EOF, is unusable, or fewer than 8 bytes remain). */
+        class Torn(val start: Long) : Tail
+    }
+
+    private fun scanAfterMdat(access: Mp4Access, from: Long): Tail {
         var pos = from
         val head = ByteArray(16)
-        while (pos + 8 <= access.size) {
-            if (access.read(pos, head, 0, 16) < 8) return null
+        val size = access.size
+        while (pos < size) {
+            if (size - pos < 8 || access.read(pos, head, 0, 16) < 8) return Tail.Torn(pos)
             val size32 = ByteBuffer.wrap(head).int.toLong() and 0xFFFFFFFFL
-            val boxSize = if (size32 == 0L) access.size - pos else if (size32 == 1L) ByteBuffer.wrap(head, 8, 8).long else size32
-            if (boxSize < 8 || boxSize > access.size - pos) return null
-            if (String(head, 4, 4, Charsets.ISO_8859_1) == "moov") return Mp4RebuildResult.NotNeeded
+            val moov = String(head, 4, 4, Charsets.ISO_8859_1) == "moov"
+            // A box "to EOF" would swallow what is appended: only a moov is accepted as one.
+            if (size32 == 0L) return if (moov) Tail.HasMoov else Tail.Torn(pos)
+            val boxSize = when {
+                size32 != 1L -> size32
+                size - pos < 16 -> return Tail.Torn(pos)
+                else -> ByteBuffer.wrap(head, 8, 8).long
+            }
+            if (boxSize < (if (size32 == 1L) 16 else 8) || boxSize > size - pos) return Tail.Torn(pos)
+            if (moov) return Tail.HasMoov
             pos += boxSize
         }
-        return null
+        return Tail.Complete
     }
 
     // ---- the mdat walk -------------------------------------------------------------------------------------------
@@ -285,7 +327,8 @@ object Mp4MoovRebuilder {
             while (true) {
                 val nal = nalAt(p)
                 if (nal.status == NalStatus.INVALID) {
-                    if (zerosAt(p)) return null
+                    // Zero padding after the last picture: as at the end, only the indexed size proves it complete.
+                    if (zerosAt(p)) return if (hasVcl && (p - position) == indexSize.toLong()) (p - position).toInt() else null
                     break
                 }
                 if (count > 0 && hasVcl && opensAu(nal)) break
@@ -312,6 +355,28 @@ object Mp4MoovRebuilder {
                 a + 1 < audioIndex.size // more audio expected, possibly the torn one at the tail
         }
 
+        /** Whether a NAL at [position] is complete and opens an access unit. */
+        private fun opensAuAt(position: Long): Boolean = nalAt(position).let { it.status == NalStatus.OK && opensAu(it) }
+
+        /**
+         * Whether audio frame [a] at [pos], where the bytes look like an access unit that is not complete, really is
+         * audio: the frames from there must lead to a complete NAL that opens an access unit. Reaching EOF, zeros or an
+         * implausible frame first proves nothing: a torn access unit at the end can be as long as the next audio frame.
+         */
+        private fun audioConfirmed(pos: Long, a: Int): Boolean {
+            var p = pos
+            var frame = a
+            repeat(MAX_CONFIRMING_FRAMES) {
+                if (frame >= audioIndex.size) return false
+                val size = audioIndex[frame].size
+                if (size <= 0 || p + size > end || zerosAt(p)) return false
+                p += size
+                frame++
+                if (opensAuAt(p)) return true
+            }
+            return false
+        }
+
         fun run(): Walk {
             val samples = ArrayList<WalkedSample>()
             var pos = start
@@ -327,7 +392,8 @@ object Mp4MoovRebuilder {
                     // disagrees with the index and audio fits, it is audio (a converted start code still sizes
                     // differently, so video stays the answer when audio is implausible).
                     if (size != null && (size == videoIndex[v].size || !audioPlausible(pos, a))) videoSize = size
-                    else if (size == null && !audioPlausible(pos, a)) break
+                    // An access unit cut at EOF must not pass for audio that happens to fit: audio needs a video NAL after it.
+                    else if (size == null && !audioConfirmed(pos, a)) break
                 }
                 if (videoSize >= 0) {
                     samples += WalkedSample(TrackKind.VIDEO, pos, videoSize, videoIndex[v].presentationTimeUs, videoIndex[v].isKeyFrame)
@@ -346,6 +412,9 @@ object Mp4MoovRebuilder {
 
         private companion object {
             const val WINDOW = 256 * 1024
+
+            /** Audio frames [audioConfirmed] follows looking for the next access unit: more than an interleaved chunk holds. */
+            const val MAX_CONFIRMING_FRAMES = 128
         }
     }
 
