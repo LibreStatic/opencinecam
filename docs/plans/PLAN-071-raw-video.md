@@ -364,7 +364,7 @@ Probe and qualification JSON per device (with the fingerprint, ring size and pro
 
 ## 18. Rollback and Recovery
 
-Each slice is a separate commit and can be reverted on its own. RAW_VIDEO stays CANDIDATE until a configuration qualifies, so a device without qualification never records RAW. Compression is opt-in ("Save space"). Qualification records are invalidated by a fingerprint or protocol change and can be replaced by qualifying again; a failed or unrested run stores nothing. The OCRAW v1 header and chunk header are unchanged, and older takes (no audio, no orientation, encoding 1) still read.
+Each slice is a separate commit and can be reverted on its own. RAW_VIDEO stays CANDIDATE until a configuration qualifies, so a device without qualification never records RAW. Compression is opt-in ("Save space"). Qualification records are invalidated by a fingerprint or protocol change and can be replaced by qualifying again. A completed qualification stores every judged configuration, PASS or FAIL, so it can replace an earlier pass with a failure (decision 10); only a run that ends with `storage-not-rested` stores nothing and keeps the records in force (decision 9). The OCRAW v1 header and chunk header are unchanged, and older takes (no audio, no orientation, encoding 1) still read.
 
 ## 19. Risks and Mitigations
 
