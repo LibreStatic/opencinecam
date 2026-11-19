@@ -869,7 +869,7 @@ class Camera2PreviewEngine(
         val worst = analysisLagMaxMs
         analysisLagMaxMs = Long.MIN_VALUE
         analysisLagLoggedAtMs = now
-        if (worst > ANALYSIS_LAG_WARN_MS) Log.w(TAG, "Analysis delivery lag max ${worst} ms over the last window (the camera executor is behind).")
+        if (worst > ANALYSIS_LAG_WARN_MS) Log.w(TAG, "Analysis delivery lag max ${worst} ms over the last window: past the UI staleness window the scopes hide.")
         else Log.i(TAG, "Analysis delivery lag max ${worst} ms over the last window.")
     }
 
