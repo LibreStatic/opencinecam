@@ -881,6 +881,9 @@ internal fun Camera2PreviewEngine.previewCaptureCallback(
     // against the argument dropped every HFR result and a GPU HFR preview never "started".
     val armedSession = session
     val armedAnchors = directRecorderAnchors
+    // Constrained high-speed bursts report every frame (240/s); the full per-result work below runs on about one per
+    // preview period so the camera executor, which also carries the analysis delivery, does not fall behind.
+    val highSpeedGate = if (isHighSpeedSession()) HighSpeedResultGate() else null
     if (notifyStarted && descriptor != null && !disposed.get()) {
         armedSession?.let { pendingPreviewStartedReceipt = PreviewStartedReceipt(it, callbackGeneration, descriptor) }
     }
@@ -904,10 +907,14 @@ internal fun Camera2PreviewEngine.previewCaptureCallback(
                 // still delivers are the take's last.
                 armedAnchors?.let { anchors -> result.get(android.hardware.camera2.CaptureResult.SENSOR_TIMESTAMP)?.let(anchors::frame) }
                 if (armedSession == null || armedSession !== this@previewCaptureCallback.session) return
-                noteLensForFrame(result)
-                noteZoomLag(armedSession, result)
-                noteCalibrationMeta(result)
-                traceLensSwitch(armedSession, request, result)
+                val sensorTimestamp = result.get(android.hardware.camera2.CaptureResult.SENSOR_TIMESTAMP)
+                val processFully = highSpeedGate?.shouldProcessFully(sensorTimestamp) ?: true
+                if (processFully) {
+                    noteLensForFrame(result)
+                    noteZoomLag(armedSession, result)
+                    noteCalibrationMeta(result)
+                    traceLensSwitch(armedSession, request, result)
+                }
                 pendingPreviewStartedReceipt?.takeIf { it.generation == callbackGeneration && it.session === armedSession }?.let { receipt ->
                     // Consume before notifying: reentrant callbacks or a late original
                     // request cannot announce the same armed graph a second time.
@@ -915,13 +922,17 @@ internal fun Camera2PreviewEngine.previewCaptureCallback(
                     listener?.onPreviewStarted(appDescriptor(receipt.descriptor))
                 }
                 forwardRawResult(result)
-                val sensorTimestamp = result.get(android.hardware.camera2.CaptureResult.SENSOR_TIMESTAMP)
+                // Kept per result even in high-speed: the effective rate needs every timestamp, and the one-shot
+                // trigger reports match a tagged request's own result and return at once when none is pending.
                 updateEffectiveFps(sensorTimestamp)
-                auditCaptureResult(armedSession, result, sensorTimestamp)
-                driveCadenceGuard(result, sensorTimestamp)
                 reportTapFocusResult(request, result)
                 reportAfLockResult(request, result)
                 reportRecordingWhiteBalance(request, result)
+                if (!processFully) return
+                // The audit counts frame-number gaps as dropped frames, which coalescing would fake, and its
+                // high-speed count was already an artefact (the file had every frame): skipped in high-speed.
+                if (highSpeedGate == null) auditCaptureResult(armedSession, result, sensorTimestamp)
+                driveCadenceGuard(result, sensorTimestamp)
                 reportEffectiveZoom(result)
                 reportActiveLens(result)
                 reportLensLockSwitch(result)
