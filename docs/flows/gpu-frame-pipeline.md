@@ -70,7 +70,7 @@ lens-lock crop. The night extension never does.
 The pipeline's `cameraInputSurface` is the camera's single output in `configureGpuPreviewSession`.
 On the direct (non-GPU) path, the engine adds a `YUV_420_888` `analysisReader` for the scopes
 instead. A constrained high-speed take records straight from Camera2 into `MediaRecorder`
-(`recorderOverGpuPreview`), and the pipeline receives only the preview share for the displays.
+(`recorderOverGpuPreview`), and the pipeline receives only the preview share for the displays. Its 240 fps capture results are coalesced (`HighSpeedResultGate`): only frame anchors, the effective rate and the trigger reports see every result, the rest about one per 30 ms, so the camera executor that also delivers the scope analysis does not fall behind.
 
 ## One frame's journey
 

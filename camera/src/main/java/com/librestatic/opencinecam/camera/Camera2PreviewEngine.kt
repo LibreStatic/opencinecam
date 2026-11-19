@@ -858,7 +858,19 @@ class Camera2PreviewEngine(
         val now = SystemClock.elapsedRealtime()
         if (analysisBurst && now - lastListenerAnalysisMs < monitoringOptions.periodMs) return
         lastListenerAnalysisMs = now
+        noteAnalysisDeliveryLag(now, now - analysis.capturedAtElapsedRealtimeMs)
         listener?.onAnalysis(ispHistogram.merge(analysis))
+    }
+
+    /** Logs the worst analysis delivery lag about every 5 s; a lag past the UI's staleness window hides the scopes. */
+    private fun noteAnalysisDeliveryLag(now: Long, lagMs: Long) {
+        analysisLagMaxMs = maxOf(analysisLagMaxMs, lagMs)
+        if (now - analysisLagLoggedAtMs < ANALYSIS_LAG_LOG_PERIOD_MS) return
+        val worst = analysisLagMaxMs
+        analysisLagMaxMs = Long.MIN_VALUE
+        analysisLagLoggedAtMs = now
+        if (worst > ANALYSIS_LAG_WARN_MS) Log.w(TAG, "Analysis delivery lag max ${worst} ms over the last window (the camera executor is behind).")
+        else Log.i(TAG, "Analysis delivery lag max ${worst} ms over the last window.")
     }
 
     internal fun deliverGpuAnalysis(expectedGeneration: Long, owner: () -> OpenCineLogGpuPipeline?, analysis: Camera2Analysis) {
@@ -912,6 +924,8 @@ class Camera2PreviewEngine(
     /** Fast analysis around the emulated hold's handoff; frames still reach the UI only at the normal period. */
     @Volatile internal var analysisBurst = false
     private var lastListenerAnalysisMs = 0L
+    private var analysisLagMaxMs = Long.MIN_VALUE
+    private var analysisLagLoggedAtMs = 0L
     internal var cadenceEngagedAtNs = 0L
     private var suspensionNotified: Pair<Camera2PreviewListener, AnalysisSuspension>? = null
     // cameraExecutor: DIAGNOSTIC-only capture-result audit of the current graph.
@@ -3216,6 +3230,8 @@ class Camera2PreviewEngine(
         internal const val MIN_SELECTABLE_FPS = 10
         internal const val MAX_SELECTABLE_FPS = 60
         internal const val METADATA_PERIOD_MS = 500L
+        private const val ANALYSIS_LAG_LOG_PERIOD_MS = 5_000L
+        private const val ANALYSIS_LAG_WARN_MS = 500L
         internal const val CAPTURE_AUDIT_SUMMARY_MS = 10_000L
         internal const val ZOOM_REPORT_PERIOD_MS = 33L
         private const val TAP_FOCUS_HOLD_MS = 3_000L
