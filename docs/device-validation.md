@@ -307,13 +307,13 @@ Step 0 (the SAF, `MediaMuxer`, `ftruncate` and unplug probe) is recorded in OCC-
 
 ### Pull durability (PLAN-072)
 
-None has run yet. A GPU-pipeline take (4K VIDEO, LOG or HLG) with WAV audio, to a drive on a powered hub.
+A GPU-pipeline take (4K VIDEO, LOG or HLG) with WAV audio, to a drive on a powered hub. Razr result 2026-11-18: the two pull cases passed; the slow-motion case has not run yet.
 
-| Case | Steps | Expected |
-|---|---|---|
-| Pull, Stop and save | Set Settings > Recording > If the drive disconnects to Stop and save. Record 30 s, pull the drive, reconnect it | "Interrupted takes recovered from the USB drive"; the MP4 plays on the phone and on a computer, up to about the last second before the pull; `<stem>.timing.json` (or `.incomplete.json`) has `moovRebuilt: true`; `filesDir/take-index/` holds no file for the take afterwards |
-| Pull, Continue on the phone | Set it to Continue on the phone, record 30 s, pull the drive, reconnect it | The `_cont1` take records on the phone; on replug the drive part is recovered and plays |
-| Slow motion | Pull the drive during a slow-motion take (the `MediaRecorder` path) | No index is written; the file is published as incomplete as before |
+| Case | Steps | Expected | Razr 2026-11-18 |
+|---|---|---|---|
+| Pull, Stop and save | Set Settings > Recording > If the drive disconnects to Stop and save. Record 30 s, pull the drive, reconnect it | "Interrupted takes recovered from the USB drive"; the MP4 plays on the phone and on a computer, up to about the last second before the pull; `<stem>.timing.json` (or `.incomplete.json`) has `moovRebuilt: true`; `filesDir/take-index/` holds no file for the take afterwards | Passed. 21.9 s recorded, 20.7 s (622 of 657 frames) kept; the moov was rebuilt about 0.1 s after the remount, which came about 30 s after the pull; ffmpeg decodes it without errors and the 0.118 s audio start offset is kept |
+| Pull, Continue on the phone | Set it to Continue on the phone, record 30 s, pull the drive, reconnect it | The `_cont1` take records on the phone; on replug the drive part is recovered and plays | Passed. The `_cont1` take (37.4 s) plays; the drive part (34.3 s) was rebuilt on replug and plays |
+| Slow motion | Pull the drive during a slow-motion take (the `MediaRecorder` path) | No index is written; the file is published as incomplete as before | Not run |
 
 ### Continue on the phone (PLAN-072 Delivery 4)
 
