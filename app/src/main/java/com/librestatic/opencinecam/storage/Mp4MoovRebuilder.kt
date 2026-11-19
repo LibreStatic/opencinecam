@@ -100,13 +100,19 @@ object Mp4MoovRebuilder {
         // From here on a write or sync that fails throws (see the class comment).
         layout.tailStart?.let { tailStart ->
             // The torn box becomes a free running to EOF (at least a header long) before the moov goes after it: written
-            // first, it can never be read as a complete box swallowing part of the new moov.
+            // first, it can never be read as a complete box swallowing part of the new moov. The type goes before the
+            // size: a write cut between them leaves a free or a torn box, never a torn moov resized to look complete.
             val gap = access.size - tailStart
             val large = gap > 0xFFFFFFFFL
             val freeSize = maxOf(gap, if (large) 16L else 8L)
-            val header = if (large) ByteBuffer.allocate(16).putInt(1).put(FREE).putLong(freeSize).array()
-            else ByteBuffer.allocate(8).putInt(freeSize.toInt()).put(FREE).array()
-            access.write(tailStart, header)
+            access.write(tailStart + 4, FREE)
+            access.sync()
+            if (large) {
+                access.write(tailStart, ByteBuffer.allocate(4).putInt(1).array())
+                access.write(tailStart + 8, ByteBuffer.allocate(8).putLong(freeSize).array())
+            } else {
+                access.write(tailStart, ByteBuffer.allocate(4).putInt(freeSize.toInt()).array())
+            }
             access.sync()
         }
         val moovStart = access.size

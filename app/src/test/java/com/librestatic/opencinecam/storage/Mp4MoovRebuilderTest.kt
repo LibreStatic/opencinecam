@@ -453,6 +453,27 @@ class Mp4MoovRebuilderTest {
         }
     }
 
+    /** Lands only the first four bytes of its first write, then throws: a cut inside the tail header. */
+    private class CutHeaderAccess(val memory: MemoryAccess) : Mp4Access by memory {
+        var cut = false
+        override fun write(position: Long, data: ByteArray) {
+            if (!cut) {
+                cut = true
+                memory.write(position, data.copyOf(minOf(4, data.size)))
+                throw java.io.IOException("the drive went away")
+            }
+            memory.write(position, data)
+        }
+    }
+
+    @Test fun aCutInTheTailHeaderNeverLeavesATornMoovThatLooksComplete() {
+        val s = sized(i32(5000) + "moov".toByteArray() + ByteArray(200) { 3 })
+        val first = CutHeaderAccess(MemoryAccess(s.file.copyOf()))
+        org.junit.Assert.assertThrows(java.io.IOException::class.java) { Mp4MoovRebuilder.rebuildMoov(first, indexFor(s)) }
+        val retry = MemoryAccess(first.memory.data)
+        assertTrue(Mp4MoovRebuilder.rebuildMoov(retry, indexFor(s)) is Mp4RebuildResult.Rebuilt)
+    }
+
     @Test fun aWriteErrorPropagatesAndARetryAfterACutAppendRebuildsAReachableMoov() {
         for (s in listOf(sized(i32(5000) + "moov".toByteArray() + ByteArray(200) { 3 }), synthetic(tornTail()))) {
             val first = InterruptedAccess(MemoryAccess(s.file.copyOf()))
