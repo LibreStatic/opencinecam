@@ -1,0 +1,99 @@
+<en-US>
+OpenCineCam 2.0:
+- RAW video: qualify the phone or a USB drive, record and export CinemaDNG
+- Record to a USB drive; takes cut by a pulled drive are repaired
+- Raw mic input, input equaliser and headphone monitoring
+- Volume-key gestures
+- Slow motion: take length limit; scopes stay on
+- Network drive: open your takes from a computer
+- Gallery: take details, faster loading
+- Front camera no longer upside down
+- European Portuguese
+Report problems at github.com/LibreStatic/opencinecam/issues
+</en-US>
+<es-419>
+OpenCineCam 2.0:
+- Video RAW en el teléfono o en USB, con exportación CinemaDNG
+- Grabación en USB; las tomas cortadas al desconectar se reparan
+- Micrófono sin procesar, ecualizador y monitoreo con auriculares
+- Gestos con las teclas de volumen
+- Cámara lenta: límite de duración; scopes activos
+- Unidad de red: abre tus tomas desde la computadora
+- Galería: detalles de la toma, carga más rápida
+- La cámara frontal ya no sale invertida
+Problemas: github.com/LibreStatic/opencinecam/issues
+</es-419>
+<es-ES>
+OpenCineCam 2.0:
+- Vídeo RAW en el teléfono o en USB, con exportación CinemaDNG
+- Grabación en USB; las tomas cortadas al desconectar se reparan
+- Micrófono sin procesar, ecualizador y monitorización con auriculares
+- Gestos con las teclas de volumen
+- Cámara lenta: límite de duración; scopes activos
+- Unidad de red: abre tus tomas desde el ordenador
+- Galería: detalles de la toma, carga más rápida
+- La cámara frontal ya no sale invertida
+Problemas: github.com/LibreStatic/opencinecam/issues
+</es-ES>
+<pt-BR>
+OpenCineCam 2.0:
+- Vídeo RAW no celular ou em USB, com exportação CinemaDNG
+- Gravação em USB; gravações cortadas ao desconectar são reparadas
+- Microfone bruto, equalizador e retorno nos fones
+- Gestos com as teclas de volume
+- Câmera lenta: limite de duração; scopes ativos
+- Unidade de rede: abra suas gravações no computador
+- Galeria: detalhes e carregamento mais rápido
+- Câmera frontal não sai mais invertida
+- Português europeu
+Problemas: github.com/LibreStatic/opencinecam/issues
+</pt-BR>
+<pt-PT>
+OpenCineCam 2.0:
+- Vídeo RAW no telemóvel ou em USB, com exportação CinemaDNG
+- Gravação em USB; takes cortados ao desligar são reparados
+- Microfone sem processamento, equalizador e monitorização
+- Gestos com as teclas de volume
+- Câmara lenta: limite de duração; scopes ativos
+- Unidade de rede: abra os seus takes no computador
+- Galeria: detalhes e carregamento mais rápido
+- A câmara frontal já não fica invertida
+- Português europeu
+Problemas: github.com/LibreStatic/opencinecam/issues
+</pt-PT>
+<de-DE>
+OpenCineCam 2.0:
+- RAW-Video auf Telefon oder USB, mit CinemaDNG-Export
+- Aufnahme auf USB; beim Abziehen unterbrochene Aufnahmen werden repariert
+- Unbearbeitetes Mikrofon, Eingangs-Equalizer, Kopfhörer-Monitoring
+- Gesten mit den Lautstärketasten
+- Zeitlupe: Längenbegrenzung; Scopes bleiben an
+- Netzlaufwerk: Aufnahmen vom Computer öffnen
+- Galerie: Aufnahmedetails, schnelleres Laden
+- Frontkamera nicht mehr auf dem Kopf
+Probleme: github.com/LibreStatic/opencinecam/issues
+</de-DE>
+<fr-FR>
+OpenCineCam 2.0 :
+- Vidéo RAW sur le téléphone ou en USB, avec export CinemaDNG
+- Enregistrement sur USB ; les prises coupées au débranchement sont réparées
+- Micro brut, égaliseur d'entrée et écoute au casque
+- Gestes avec les touches de volume
+- Ralenti : durée limitée ; scopes actifs
+- Lecteur réseau : ouvrez vos prises depuis un ordinateur
+- Galerie : détails des prises, chargement plus rapide
+- Caméra avant plus à l'envers
+Problèmes : github.com/LibreStatic/opencinecam/issues
+</fr-FR>
+<it-IT>
+OpenCineCam 2.0:
+- Video RAW sul telefono o su USB, con esportazione CinemaDNG
+- Registrazione su USB; le riprese interrotte staccandola vengono riparate
+- Microfono non elaborato, equalizzatore e ascolto in cuffia
+- Gesti con i tasti volume
+- Slow motion: durata limitata; scope attivi
+- Unità di rete: apri le riprese dal computer
+- Galleria: dettagli delle riprese, caricamento più rapido
+- Fotocamera frontale non più capovolta
+Problemi: github.com/LibreStatic/opencinecam/issues
+</it-IT>

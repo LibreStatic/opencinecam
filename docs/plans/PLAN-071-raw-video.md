@@ -34,7 +34,11 @@ created_by: Claude Code
 
 Make `CaptureMode.RAW_VIDEO` real. A take records the public Camera2 RAW10 stream into an OpenCine RAW v1 (`.ocraw`) file. A RAM ring absorbs short storage stalls. The mode offers only configurations this device has qualified: camera, crop, frame rate and encoding. Phase 2 adds optional lossless compression, decided by measuring two codecs on the device.
 
-## 2. Evidence (Galaxy S24 Ultra, 2026-11-02, `RawVideoProbeDeviceTest`)
+## 2. Why This Plan Exists
+
+RAW video could not be offered on assumptions. The HAL advertises less than it delivers, the S24 Ultra certification's 345 MB/s RAW throughput figure was an artefact of its own benchmark, and lossless compression had to be judged on real frames. The S24 Ultra probe below supplied the numbers the decisions in section 9 rest on; later Razr Fold runs, recorded in those decisions, refined the qualification rule.
+
+### Evidence (Galaxy S24 Ultra, 2026-11-02, `RawVideoProbeDeviceTest`)
 
 - **RAW10 is advertised only at full sensor size:** 4080x3060 on camera 0, 4000x3000 on cameras 1 and 2, 3392x2544 on camera 3.
 - **The HAL delivers more than it advertises.** `minFrameDuration` claims 30 fps, yet the HAL delivers 60 fps at full size with zero drops. Asking for 120 fps clamps to about 59. Constrained high-speed sessions refuse RAW.
@@ -66,7 +70,57 @@ Make `CaptureMode.RAW_VIDEO` real. A take records the public Camera2 RAW10 strea
   | Bayer same-colour delta block-pack, naive Kotlin | 1.72× | 340 |
   | Shannon bound of that predictor | 1.88× | — |
 
-## 3. Decisions
+## 3. Prerequisites
+
+- OCC-PLAN-040 (Camera2 RAW still and DNG), OCC-PLAN-041 (RAW10/RAW12 buffers, metadata and ring) and OCC-PLAN-042 (RAW throughput benchmark and device gate).
+- The NDK enabled under ADR-0021 before slice G (Phase 2 is the first JNI consumer, decision 11).
+- A phone that delivers RAW10 on the public Camera2 stream for the device acceptance: the Galaxy S24 Ultra and the Razr Fold were used.
+- Ask the user to connect the device before every device step; assume it is disconnected.
+
+## 4. Required Reading
+
+ADR-0013 (MediaStore, SAF and throughput qualification), ADR-0019 (public RAW still and lossless RAW video buffering), ADR-0020 (OpenCine RAW append-only container), ADR-0021 (deferred native code), `docs/formats/opencine-raw-v1.md`, PLAN-040 to PLAN-042, `docs/device-validation.md`, `AGENTS.md` (Compose Driver screens `CaptureRawVideo*`, `RawQualification*`, `GalleryRaw*`, `GalleryCinemaDngExport*`, `NetworkDrive*`, `SettingsRawVideo*`).
+
+## 5. Inputs
+
+- The S24 Ultra probe results of section 2 (`RawVideoProbeDeviceTest`) and the codec measurements on real frames (`RawCodecComparisonDeviceTest`).
+- The Razr Fold qualification runs cited in decisions 9 and 11 (SLC cliff, heat, unrested cache, LJ92 camera starvation, block-pack timings).
+- The OCRAW v1 header and chunk header (ADR-0020), unchanged; `desktop-tools/ocraw_recovery.py` and `tools/validate_dng.py`.
+- The existing pending-row and recovery-group lifecycle of `MediaStore.Files` outputs, and the old `RawThroughputDeviceTest` design whose limits section 2 explains.
+
+## 6. Deliverables
+
+- Capture (slices A to H): the OCRAW streaming writer and reader with a fast CRC32C, `RawVideoRing`, qualification rule v2 with staged qualification (`RawVideoQualifier`, `RawQualificationStaging`, `RawStorageCliff`, `RawStorageRest`), the engine's RAW10 stream and `RawVideoFrameConsumer`, the service output, recovery and `RawVideoQualificationStore`, the RAW_VIDEO gate and UI, the desktop DNG converter `desktop-tools/ocraw_to_dng.py`, and the Phase 2 native codecs (LJ92, Bayer block-pack) with their JNI wiring.
+- Playback (slices P1 to P4): `OcrawStreamReader.indexFrames`, `OcrawFrameSource`, `RawDevelop`, `RawPlaybackRenderer`, `RawPlaybackSession` behind `PlaybackController`, the RAW playback setting, and RAW audio in the file (section 9, Phase 3 audio).
+- Interchange (slices I1 to I3): CinemaDNG tags and naming in the converter, `CinemaDngWriter` and `OcrawWavWriter` in `:media`, the in-app CinemaDNG export and the read-only WebDAV network drive.
+- Compose Driver screens and strings in six locales for each UI slice.
+
+## 7. In Scope
+
+`CaptureMode.RAW_VIDEO` on the back cameras: public Camera2 RAW10 at full sensor size and centre crops, at the configurations the device qualifies (camera, crop, frame rate, encoding); uncompressed RAW10 and the opt-in "Save space" compression; the RAM ring; recovery of interrupted takes; the in-app qualification and its store; in-app playback with audio; CinemaDNG through the desktop converter, the in-app export and the network drive.
+
+## 8. Out of Scope
+
+- RAW from constrained high-speed sessions; the device refuses it.
+- RAW12 and RAW_SENSOR video.
+- Orientation: `.ocraw` carries no orientation key, so playback shows the sensor's landscape frame, like the DNG converter (Orientation 1).
+
+## 9. Architecture
+
+Code comments cite this plan's earlier numbering: §7 is *Phase 3: in-app playback* below, §7.1 (and §7.1.N) its *Audio* part and its numbered items, and §8 *Interchange: CinemaDNG*. Decision numbers are unchanged.
+
+```mermaid
+flowchart LR
+    CAM[Camera2 RAW10 reader<br/>RAW_VIDEO graph] -->|RawVideoFrameConsumer| RING[RawVideoRing<br/>direct ByteBuffer slots]
+    RING --> WR[Writer thread<br/>optional block-pack/LJ92]
+    WR --> OC[OcrawStreamWriter<br/>Documents/OpenCineCam/RAW]
+    Q[RawVideoQualifier<br/>staged rule v2] --> ST[RawVideoQualificationStore]
+    ST --> GATE[RAW_VIDEO gate and chooser]
+    OC --> PB[RawPlaybackSession<br/>R8UI upload + GL develop]
+    OC --> DNG[CinemaDngWriter<br/>export, WebDAV, desktop converter]
+```
+
+### Decisions
 
 1. **Uncompressed RAW10 is the qualified baseline.** The long runs and the camera checks judge the uncompressed configurations. Since protocol 3 an LJ92 configuration is judged on its own, so it can be ready when its uncompressed twin is only risky (the Razr's full@60). It needs all of these:
    - its twin's camera delivered (a pass, or a failure only the storage explains);
@@ -147,35 +201,7 @@ Make `CaptureMode.RAW_VIDEO` real. A take records the public Camera2 RAW10 strea
 
     **Decision (Razr Fold, 2026-11-03): block-pack replaces LJ92 as the recording codec.** On the Razr, LJ92 takes about 20 ms per frame on 4 threads, and that encode load is what slows the camera (decision 9, the camera must hold), while block-pack takes 6.6 ms on 1 thread and 3.5 ms on 2. The ratio it gives up is small: 2.67 against LJ92's 2.89 in daylight, 1.48 against 1.57 in the dark (ISO 14000). So "Save space" now records encoding 2 (`+bp` configurations, 2 threads, 8 strips; the default plan's twins are `+bp`), and the converter path exists (the desktop converter decodes it, the app's CinemaDNG export decodes it and, with the LJ92 option, re-encodes it to LJ92 like RAW10). LJ92 stays for CinemaDNG export, and `+lj92` specs and records from earlier runs stay valid: an LJ92 record is still offered unless a block-pack record of the same geometry is usable, since both read "Compressed". The benchmark reasons and the record method became codec-neutral (`compressed-camera-starved`, `compressed-encode-too-slow`, `compressed-bench-missing`, `compressed-twin-missing`, `compressed-extrapolated`); the old `lj92-…` names are still read. The stage `encode` keeps `lj92` as an alias, and the device test reads `rawEncodeThreads`, `rawEncodeStrips` and `rawEncodeBenchSeconds` (the `rawLj92…` names still work).
 
-## 4. Slices
-
-| Slice | Owner files | Depends on |
-|---|---|---|
-| A. OCRAW streaming core | `media/.../ocraw/*` (new `OcrawStreamWriter`, `OcrawStreamReader`, fast `Crc32c`), `media/.../raw/RawVideoRing.kt`, their tests, `docs/formats/opencine-raw-v1.md`, `desktop-tools/ocraw_recovery.py` | — |
-| C. Qualification rule v2 and storage sinks | `camera/.../RawThroughput.kt` and its test; `core/model/.../StorageBenchmark.kt` and the app benchmark destinations: a `FileChannel` sink with direct buffers and forced syncs | — |
-| B. Benchmark rewrite and S24 re-run | `app/src/androidTest/.../RawThroughputDeviceTest.kt` (camera, `RawVideoRing`, `OcrawStreamWriter`, rule v2, several configurations including 60 fps); the certification report | A, C |
-| H. Desktop DNG converter | `desktop-tools/ocraw_to_dng.py`, `tools/tests/` | A (fixtures) |
-| D. Engine RAW10 stream | `Camera2PreviewEngine.kt`, `GraphNegotiation.kt`: a RAW10 reader beside the GPU input in RAW_VIDEO sessions, a fixed fps range, `startRawVideo`/`stopRawVideo`, `RawVideoFrameConsumer` | A (interface shape) |
-| E. Service, output, recovery and qualification store | `CaptureService.kt`, `storage/RawVideoOutput.kt`, recovery classes, `RawVideoQualificationStore.kt`, gate computation | A, C, D |
-| F. UI | settings rows (qualified configuration chooser, Qualify action, capacity in minutes), preset version bump, mode sheet, gallery listing and badge, `DriverScreens.kt`, `AGENTS.md`, `SettingsHelp` in 6 locales | C, E |
-| G. Phase 2 codecs | `native-pipeline/` codecs and ctest, Gradle NDK and JNI wiring, a codec comparison device test, encoding 1/2 in the writer and in the converter | A, B |
-
-## 5. Acceptance
-
-- Host tests pass for every slice.
-- An `.ocraw` take from the S24 passes `ocraw_recovery.py verify`.
-- A take killed mid-write recovers every complete frame.
-- `ocraw_to_dng.py` turns frames into DNGs that pass `tools/validate_dng.py` and open in a raw developer.
-- Only qualified configurations are selectable. The re-run benchmark replaces the 345 MB/s figure in the S24 certification report.
-- Phase 2 ships one codec, chosen from the comparison numbers, behind an opt-in "Save space" switch, qualified separately.
-
-## 6. Out of scope
-
-- RAW from constrained high-speed sessions; the device refuses it.
-- RAW12 and RAW_SENSOR video.
-- Orientation: `.ocraw` carries no orientation key, so playback shows the sensor's landscape frame, like the DNG converter (Orientation 1).
-
-## 7. Phase 3: in-app playback
+### Phase 3: in-app playback
 
 RAW takes open in the review player instead of offering only Share. Two modes share one session.
 
@@ -197,16 +223,7 @@ Decisions:
 6. **Seam.** The dialog talks to a `PlaybackController` interface. `MediaPlaybackSession` (MediaPlayer/MediaCodec) and the new `RawPlaybackSession` implement it, and both emit `PlaybackObservation`. RAW takes have no audio, no filmstrip from `MediaMetadataRetriever` and no `ClipMetadataProbe`. Their chips come from the `.ocraw` metadata: resolution, fps, RAW10/LJ92, frame count.
 7. **Gallery.** `opensInApp()` admits RAW. RAW cards get Play, and the inspector text says that the player develops a preview, while the full-quality path stays the desktop DNG converter. Rename and delete stay disabled (unchanged).
 
-| Slice | Owner files | Depends on |
-|---|---|---|
-| P1. Index and frame source | `media/.../ocraw/OcrawStreamReader.kt` (`indexFrames`), new `media/.../ocraw/OcrawFrameSource.kt` (pool, per-frame decode), their tests; decode timing in `RawCodecComparisonDeviceTest` | — |
-| P2. GPU develop stage | new `app/.../playback/RawDevelop.kt` (matrices, black/white, WB; pure), new `app/.../playback/RawPlaybackRenderer.kt` (EGL thread, R8UI upload, quad and bilinear debayer shaders), tests for `RawDevelop` | contract only |
-| P3. RAW session | `PlaybackController` interface, new `RawPlaybackSession.kt`, the fallback rule, `PlaybackSettings` (RAW playback mode) and its persistence and settings row, tests | P1, P2 |
-| P4. Integration | `MediaPlaybackDialog.kt`, `MediaGrid.kt`, `MediaCatalogScreen.kt`, `MediaInspector.kt` and strings in 6 locales, `LocalMediaCatalog.kt` KDoc, `DriverScreens.kt`, `AGENTS.md` | P3 |
-
-Acceptance: a full@30 RAW10 take and an LJ92 take play on the S24 Ultra, with the drop count shown. Forcing the frame viewer steps and scrubs, and the frame number in the header matches. A torn-tail take opens with its valid frames. A take on a slow device falls back on its own.
-
-### 7.1 Audio
+#### Audio
 
 RAW takes record sound when the operator has audio on, and the player plays it.
 
@@ -215,7 +232,7 @@ RAW takes record sound when the operator has audio on, and the player plays it.
 3. **Playback.** In real time, when the take has audio and playback isn't muted, an `AudioTrack` plays the PCM and its playback position is the master clock: video picks the frame due at the audio time. Seeking restarts the audio at the new position. The frame viewer is silent.
 4. **Desktop.** `ocraw_to_dng.py` can also export the take's audio as a WAV.
 
-## 8. Interchange: CinemaDNG
+### Interchange: CinemaDNG
 
 `.ocraw` remains the capture format: one streaming file, qualified, and recoverable. For editing, a take becomes **CinemaDNG**: one folder per take, one DNG per frame (`<take>_000000.dng` …) and `<take>.wav` beside them. DaVinci Resolve reads that natively and links the WAV. There are three routes, and all produce the same files.
 
@@ -241,8 +258,135 @@ RAW takes record sound when the operator has audio on, and the player plays it.
 
 **One DNG builder in `:media`** (`CinemaDngWriter`) serves routes 2 and 3. It computes the size, then streams the bytes. Its output for a fixture take is byte-identical to the converter's, and a golden test checks this. The WAV builder shares the gap-fill rules of `ocraw_to_dng.py --wav`.
 
+## 10. Implementation Steps
+
+Each slice is a separate implementation run with its own file ownership; the "Depends on" column gives the order.
+
+### Capture slices
+
+| Slice | Owner files | Depends on |
+|---|---|---|
+| A. OCRAW streaming core | `media/.../ocraw/*` (new `OcrawStreamWriter`, `OcrawStreamReader`, fast `Crc32c`), `media/.../raw/RawVideoRing.kt`, their tests, `docs/formats/opencine-raw-v1.md`, `desktop-tools/ocraw_recovery.py` | — |
+| C. Qualification rule v2 and storage sinks | `camera/.../RawThroughput.kt` and its test; `core/model/.../StorageBenchmark.kt` and the app benchmark destinations: a `FileChannel` sink with direct buffers and forced syncs | — |
+| B. Benchmark rewrite and S24 re-run | `app/src/androidTest/.../RawThroughputDeviceTest.kt` (camera, `RawVideoRing`, `OcrawStreamWriter`, rule v2, several configurations including 60 fps); the certification report | A, C |
+| H. Desktop DNG converter | `desktop-tools/ocraw_to_dng.py`, `tools/tests/` | A (fixtures) |
+| D. Engine RAW10 stream | `Camera2PreviewEngine.kt`, `GraphNegotiation.kt`: a RAW10 reader beside the GPU input in RAW_VIDEO sessions, a fixed fps range, `startRawVideo`/`stopRawVideo`, `RawVideoFrameConsumer` | A (interface shape) |
+| E. Service, output, recovery and qualification store | `CaptureService.kt`, `storage/RawVideoOutput.kt`, recovery classes, `RawVideoQualificationStore.kt`, gate computation | A, C, D |
+| F. UI | settings rows (qualified configuration chooser, Qualify action, capacity in minutes), preset version bump, mode sheet, gallery listing and badge, `DriverScreens.kt`, `AGENTS.md`, `SettingsHelp` in 6 locales | C, E |
+| G. Phase 2 codecs | `native-pipeline/` codecs and ctest, Gradle NDK and JNI wiring, a codec comparison device test, encoding 1/2 in the writer and in the converter | A, B |
+
+### Phase 3 slices
+
+| Slice | Owner files | Depends on |
+|---|---|---|
+| P1. Index and frame source | `media/.../ocraw/OcrawStreamReader.kt` (`indexFrames`), new `media/.../ocraw/OcrawFrameSource.kt` (pool, per-frame decode), their tests; decode timing in `RawCodecComparisonDeviceTest` | — |
+| P2. GPU develop stage | new `app/.../playback/RawDevelop.kt` (matrices, black/white, WB; pure), new `app/.../playback/RawPlaybackRenderer.kt` (EGL thread, R8UI upload, quad and bilinear debayer shaders), tests for `RawDevelop` | contract only |
+| P3. RAW session | `PlaybackController` interface, new `RawPlaybackSession.kt`, the fallback rule, `PlaybackSettings` (RAW playback mode) and its persistence and settings row, tests | P1, P2 |
+| P4. Integration | `MediaPlaybackDialog.kt`, `MediaGrid.kt`, `MediaCatalogScreen.kt`, `MediaInspector.kt` and strings in 6 locales, `LocalMediaCatalog.kt` KDoc, `DriverScreens.kt`, `AGENTS.md` | P3 |
+
+### Interchange slices
+
 | Slice | Owner files | Depends on |
 |---|---|---|
 | I1. CinemaDNG builder | `ocraw_to_dng.py` (tags, naming, `--cinemadng`), `tools/tests/`, new `media/.../ocraw/CinemaDngWriter.kt` and `OcrawWavWriter.kt`, golden fixtures and tests | — |
 | I2. In-app export | new `export/` package in `:app` (foreground service, MediaStore and SAF destinations, progress), gallery and inspector actions, `cinemadng_export_strings.xml` in 6 locales, driver screen | I1 |
 | I3. Network drive | new `share/` package in `:app` (WebDAV server, virtual tree, auth, interface binding, foreground service), its screen and entry point, `network_share_strings.xml` in 6 locales, driver screen | I1 |
+
+## 11. State and Data
+
+- Takes: `Documents/OpenCineCam/RAW/<take>.ocraw` through `MediaStore.Files` (decision 7), with the existing pending-row and recovery-group lifecycle.
+- Qualification store: a JSON file in app storage keyed by `Build.FINGERPRINT`, protocol version, destination volume and configuration, invalidated when the fingerprint or protocol version changes (decision 10). Records carry `method`, `coveredBy`, the evidence JSON and the optional `achievedFps` and `burstSeconds`; older records load without them.
+- The rested storage reference `raw-storage-rest.tsv`, kept beside the records and only ever raised (decision 9).
+- Device-local settings, never in presets: *RAW playback: Automatic / Frame viewer* (Phase 3 decision 5) and the network drive's *Show original .ocraw files*; the preset version moves with slice F.
+- In memory: the RAM ring sized at arm time (decision 4), the playback frame pool (3 slots), the audio queue beside the frame ring.
+
+## 12. Failure Handling
+
+- The ring passes its 90 % high-water mark: the take stops cleanly, the file is finalised and a stable reason is shown; frames are never dropped (decision 2).
+- A process killed mid-take: recovery keeps every complete frame (`ocraw_recovery.py`, the recovery group).
+- A frame that does not compress smaller is stored as encoding 0 (decision 8); a full audio queue drops audio and records the gap, never stopping the take (Phase 3 audio decision 2).
+- An unrested write cache ends the qualification with `storage-not-rested` and stores nothing, so the records in force stay (decision 9).
+- Declining or failing the qualification keeps the previous mode (decision 10).
+- Playback: a torn or invalid chunk header ends the index, a frame whose CRC fails shows as missing, and LJ92 frames show as missing when the codec is unavailable (Phase 3 decisions 1 and 2); real time falls back to the frame viewer (decision 5).
+- The CinemaDNG export checks space up front and can be cancelled; the network drive stops after 15 idle minutes, when the phone leaves the network, and never runs while recording.
+
+## 13. Tests
+
+- `:media`: `OcrawStreamTest`, `OcrawJournalTest`, `OcrawInteropTest`, `OcrawDesktopTest`, `OcrawAudioChunkTest`, `OcrawFrameSourceTest`, `OpenCineRawTest`, `Crc32cTest`, `RawVideoRingTest`, `NativeRawCodecTest`, `RawQuantisationTest`, `CinemaDngGoldenTest` (byte-identical to the converter), `CinemaDngOrientationTest`, `CinemaDngInheritedColourTest`, `CinemaDngQuantisedTest`.
+- `:camera`: `RawThroughputTest`, `RawStorageCliffTest`, `RawStorageRestTest`.
+- `:app`: `RawVideoQualifierTest`, `RawQualificationStagingTest`, `RawVideoQualificationPlanTest`, `RawQualificationLiveRateTest`, `RawFrameDiagnosticsTest`, `RawNoiseProfilesTest`, `RawVideoRecorderTest`, `RawVideoAudioTest`, `RawAudioCaptureTest`, `RawVideoMetadataTest`, `RawVideoQualificationStoreTest`, `RawVideoRecoveryTest`, `RawVideoCatalogTest`, `RawVideoGateTest`, `RawVideoUiTest`, `RawVideoQualificationFlowTest`, `RawDevelopTest`, `RawPlaybackSessionTest`, `RawPlaybackSettingsTest`, `CinemaDngExporterTest`, `CinemaDngExportStatesTest`, `CinemaDngExportLeaseTest`, `WebDavProtocolTest`, `WebDavServerEndToEndTest`.
+- Native: the host ctest in `native-pipeline/` (`raw_codecs_test`, `crc32c_test`).
+- Desktop: `tools/tests/test_ocraw_recovery.py`, `test_ocraw_to_dng.py`, `test_validate_dng.py`.
+- Instrumented, on a device: `RawVideoProbeDeviceTest`, `RawThroughputDeviceTest` (wraps `RawVideoQualifier`), `RawCodecComparisonDeviceTest`.
+- Compose Driver: the `CaptureRawVideo*`, `RawQualification*`, `OnboardingRawQuestion`, `SettingsRawVideo*`, `GalleryRaw*`, `GalleryCinemaDngExport*` and `NetworkDrive*` screens in `AGENTS.md`.
+
+## 14. Documentation Updates
+
+This plan, `docs/formats/opencine-raw-v1.md` (frame payload, `FRAME_METADATA`, encodings 1 and 2, audio and orientation keys), ADR-0019 to ADR-0021 where decisions change, `docs/device-validation.md`, the S24 Ultra certification report (re-run benchmark), `AGENTS.md` (screens), `SettingsHelp` in six locales, `docs/plans/manifest.yaml` and `docs/plans/README.md`.
+
+## 15. Commands to Run
+
+```bash
+export JAVA_HOME=/usr/lib/jvm/java-17-openjdk ANDROID_HOME=$HOME/Android/Sdk
+flock ~/.cache/claude-tmp/opencinecam/gradle.lock ./gradlew --no-daemon -Dorg.gradle.parallel=false --max-workers=2 -Dorg.gradle.caching=false :media:testDebugUnitTest
+flock ~/.cache/claude-tmp/opencinecam/gradle.lock ./gradlew --no-daemon -Dorg.gradle.parallel=false --max-workers=2 -Dorg.gradle.caching=false :camera:testDebugUnitTest
+flock ~/.cache/claude-tmp/opencinecam/gradle.lock ./gradlew --no-daemon -Dorg.gradle.parallel=false --max-workers=2 -Dorg.gradle.caching=false :app:testDebugUnitTest :app:lintDebug
+cmake -S native-pipeline -B build/native-host && cmake --build build/native-host && ctest --test-dir build/native-host
+python3 -m pytest -q tools/tests/test_ocraw_recovery.py tools/tests/test_ocraw_to_dng.py tools/tests/test_validate_dng.py
+./tools/check_format.sh
+python3 tools/validate_plan_system.py
+tools/compose-driver.sh start CaptureRawVideoConfig
+tools/compose-driver.sh reset RawQualificationDone
+tools/compose-driver.sh reset GalleryRaw
+```
+
+Host Gradle runs one module at a time with parallelism off. Device runs use `RawThroughputDeviceTest` and `RawCodecComparisonDeviceTest` with the instrumentation arguments named in decision 9 (`rawStages`, `rawCameraCheckSeconds`, `rawEncodeThreads`, `rawEncodeStrips`, `rawEncodeBenchSeconds`, `rawIgnoreRest`, `rawRestReference`).
+
+## 16. Acceptance Criteria
+
+- [ ] Host tests pass for every slice.
+- [ ] An `.ocraw` take from the S24 passes `ocraw_recovery.py verify`.
+- [ ] A take killed mid-write recovers every complete frame.
+- [ ] `ocraw_to_dng.py` turns frames into DNGs that pass `tools/validate_dng.py` and open in a raw developer.
+- [ ] Only qualified configurations are selectable.
+- [ ] The re-run benchmark replaces the 345 MB/s figure in the S24 certification report.
+- [x] Phase 2 ships one codec, chosen from the comparison numbers, behind an opt-in "Save space" switch, qualified separately (decision 11: LJ92 on the S24 Ultra 2026-11-02, replaced by block-pack on the Razr Fold evidence 2026-11-03).
+- [ ] Phase 3: a full@30 RAW10 take and an LJ92 take play on the S24 Ultra, with the drop count shown.
+- [ ] Phase 3: forcing the frame viewer steps and scrubs, and the frame number in the header matches.
+- [ ] Phase 3: a torn-tail take opens with its valid frames.
+- [ ] Phase 3: a take on a slow device falls back on its own.
+
+## 17. Evidence to Record
+
+Probe and qualification JSON per device (with the fingerprint, ring size and protocol version), the codec comparison numbers, `ocraw_recovery.py verify` output for a device take and a killed take, `tools/validate_dng.py` output for converted frames, playback drop counts, Compose Driver trees and screenshots, and suite exit codes.
+
+- Evidence: the device figures cited in sections 2 and 9 are the recorded evidence; their raw files are kept outside the repository.
+
+## 18. Rollback and Recovery
+
+Each slice is a separate commit and can be reverted on its own. RAW_VIDEO stays CANDIDATE until a configuration qualifies, so a device without qualification never records RAW. Compression is opt-in ("Save space"). Qualification records are invalidated by a fingerprint or protocol change and can be replaced by qualifying again. A completed qualification stores every judged configuration, PASS or FAIL, so it can replace an earlier pass with a failure (decision 10); only a run that ends with `storage-not-rested` stores nothing and keeps the records in force (decision 9). The OCRAW v1 header and chunk header are unchanged, and older takes (no audio, no orientation, encoding 1) still read.
+
+## 19. Risks and Mitigations
+
+- Storage that writes fast only until its SLC cache fills (RISK-004): the sweep measures past the cliff, the sustained rule and `burstSeconds` mark risky configurations, and Automatic never picks them.
+- Heat during qualification and long takes (RISK-009): cool-downs, thermal waits, the camera checks measured cool, and `thermal-limit` verdicts.
+- Device and HAL behaviour differs from what is advertised (RISK-001): every configuration is qualified on the device; the Razr's `QTI_RAW_FRAME_RATE_OVERRIDE` quirk is handled explicitly.
+- The compression ratio falls with ISO and scene detail: it is never counted on for throughput; a conservative worst-frame ratio judges compressed configurations.
+- Memory: the ring is sized from `ActivityManager.MemoryInfo` at arm time, and a smaller armed ring is flagged at runtime (`rawVideoRingTooSmall`).
+
+## 20. Completion Update
+
+Not complete (status InProgress). The plan's work merged to main via PR #4 (b8456498, 2026-11-12), with follow-ups in PRs #7, #22 and #23, and shipped in OpenCineCam 2.0.0 (Google Play production, 2026-11-19). Phase 2 shipped "Save space" (block-pack recording since 2026-11-03). The unchecked device acceptance in section 16 remains open.
+
+## 21. Execution Record
+
+- 2026-11-02 S24 Ultra probe (`RawVideoProbeDeviceTest`): section 2.
+- 2026-11-02 Phase 2 outcome on the S24 Ultra: LJ92 ships as "Save space" (decision 11).
+- 2026-11-03 Razr Fold: block-pack replaces LJ92 as the recording codec; reduced-rate passes, heat during the descent and compressed twins' own long runs (decisions 9 and 11).
+- 2026-11-04 Razr Fold: heat in the long runs, the unrested write cache rule, the camera measured cool (inverted stage order), `FPS_TOLERANCE` lowered to 87.5 % (decision 9).
+- 2026-11-05 A compressed run cut short by heat falls back to its twin and benchmark (decision 9); the network drive hides the original `.ocraw` by default (section 9, Interchange).
+- 2026-11-08 Orientation key added to the static metadata (Phase 3 decision 3).
+- 2026-11-12 Merged to main via PR #4 (b8456498). The sweep alone rules out configurations (`sweepRuledOut`, decision 9).
+- 2026-11-15 Full LJ92 tiles for DaVinci Resolve (section 9, Interchange).
+- 2026-11-16 `MIN_RISKY_BURST_SECONDS` (decision 9).
+- 2026-11-19 Shipped in OpenCineCam 2.0.0 (Google Play production).

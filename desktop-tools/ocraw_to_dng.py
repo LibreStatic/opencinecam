@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 OpenCineCam contributors
 """Convert the RAW frames of an OpenCine RAW v1 video take to per-frame DNGs.
 
 Dependency-free: only the standard library is required. When numpy imports,

@@ -29,7 +29,43 @@ Let the volume keys run the camera the way stock camera apps do. Each key can ha
 
 Before this plan, each key had one `OperatorAction` that fired once on key-down (`OperatorKeyLatch`).
 
-## 2. Decisions
+## 2. Why This Plan Exists
+
+Each volume key had a single action fired on key-down, while stock camera apps let a press, a hold and a double press do different things and let the keys step a value. OCC-PRO-006 asks for programmable controls; this plan extends the volume keys to zoom, exposure and focus without losing native volume where the operator keeps it.
+
+## 3. Prerequisites
+
+- OCC-PLAN-065 (professional control intent and operation): `OperatorAction`, `OperatorPreferences` and the exposure and focus intents.
+- An emulator for the instrumented test and the Razr Fold for the device checks. Ask the user to connect the device before every device step; assume it is disconnected.
+
+## 4. Required Reading
+
+ADR-0030 (shared settings), PLAN-065, `MainActivity` key handling, `ZoomMath.rockerFactor`, `ExposureAvailability.kt`, `AGENTS.md` (Compose Driver screen `SettingsVolumeKeys`).
+
+## 5. Inputs
+
+`OperatorKeyLatch` (replaced) and its eligibility rule, `ViewConfiguration` long-press and double-tap timeouts, the exposure slider's ISO and shutter logic, `setZoomRatio` and the lens lock, the operator haptics (ZoomAnchor, Limit), and preset version 26.
+
+## 6. Deliverables
+
+- `VolumeKeyGestures` with `VolumeKeyScheduler`, wired in `MainActivity`.
+- Pair stepping for zoom, EV, ISO, shutter and focus, with `exposureWithIso` and `exposureWithShutter` extracted into `ExposureAvailability.kt`.
+- The new `OperatorPreferences` fields, preset version 27, and the Operator controls rows.
+- The tests of section 13 and the Compose Driver screen `SettingsVolumeKeys`.
+
+## 7. In Scope
+
+Volume up and down while the capture activity is focused and resumed: per-key press, hold and double press actions, a Both keys action, and −/+ pair mode for zoom, EV, ISO, shutter and manual focus; their settings and presets.
+
+## 8. Out of Scope
+
+Other hardware keys; volume behaviour outside the capture screen (the gallery and playback keep it unchanged, section 16); key handling while the soft keyboard is shown or the window is not focused.
+
+## 9. Architecture
+
+`MainActivity` forwards volume key events to `VolumeKeyGestures`, a state machine with no Android in it; it returns whether the key is consumed and dispatches `OperatorAction`s or pair steps. Pair steps go through the same intents as the on-screen controls.
+
+### Decisions
 
 1. **One engine, no Android in it.** `VolumeKeyGestures` is a state machine with an injected clock and scheduler (`VolumeKeyScheduler`). `MainActivity` backs the scheduler with `Handler(mainLooper)` and takes its thresholds from `ViewConfiguration` (long-press and double-tap timeouts). It replaces `OperatorKeyLatch` and keeps the latch's eligibility rule: no soft keyboard, window focused, RESUMED, and a mapping installed.
 2. **A key that only presses keeps zero latency.** In action mode, a key with no hold or double action, while Both keys is None, fires on key-down as before. If its press is System volume, the key is not consumed at all, so native volume and its repeat keep working.
@@ -61,10 +97,26 @@ Before this plan, each key had one `OperatorAction` that fired once on key-down 
    - Press, Hold and Double press per key in action mode;
    - Both keys in both modes;
    - one help line about the latency hold and double press add.
-   
+
    Hold and Double press rows are always shown; a press left on System volume then moves the volume itself, one step per press.
 
-## 3. Tests
+## 10. Implementation Steps
+
+1. Gesture engine (`VolumeKeyGestures`, `VolumeKeyScheduler`) replacing `OperatorKeyLatch`, with `MainActivity` backing the scheduler (decisions 1 to 4).
+2. Pair mode and steps (decisions 5 to 7), extracting the slider's exposure logic so the slider and the keys share it.
+3. Settings and presets (decision 8): `OperatorPreferences` fields, preset version 27.
+4. Settings UI (decision 9), strings and the `SettingsVolumeKeys` driver screen.
+5. Tests (section 13), then the emulator and Razr checks (section 16).
+
+## 11. State and Data
+
+New `OperatorPreferences` fields `volumeUpLong`, `volumeDownLong`, `volumeUpDouble`, `volumeDownDouble`, `volumeBoth`, `volumePair` and `volumePairInverted`; the gesture fields are never System volume (`init` rejects it, a stored value loads as None). Presets move to version 27 and older presets decode to the defaults. In memory: the per-key gesture state, the pending single press, the double-tap window and the hold loop.
+
+## 12. Failure Handling
+
+An ineligible key (soft keyboard shown, window not focused, not RESUMED, no mapping) is never consumed. A step that cannot act shows its reason (`NO_ZOOM`, `NO_EV`, `NO_MANUAL_EXPOSURE`, `NO_MANUAL_FOCUS`, LOCKED, NOT_READY, SELF_MINIMAL, HIGH_SPEED) at most once per press, and the hold loop never starts. A press left on System volume passes through or is emulated with `adjustSuggestedStreamVolume`.
+
+## 13. Tests
 
 - `VolumeKeyGesturesTest`: immediate press, repeats ignored, hold at the threshold, double press, single press after the window, both keys, the pair loop and its stop, System volume passed through or emulated, `clear()`, and ineligible keys never consumed.
 - `VolumeKeyPairsTest`: zoom third-stops, anchor snapping and clamping; EV clamping; ISO and shutter from auto, manual kept, angle stepping and clamping; focus seeding and clamping; every unavailable reason.
@@ -72,10 +124,49 @@ Before this plan, each key had one `OperatorAction` that fired once on key-down 
 - `OperatorActivityTest` (instrumented): a hold and a double press with real key events.
 - Compose Driver screen `SettingsVolumeKeys`.
 
-## 4. Acceptance
+## 14. Documentation Updates
 
-1. Every unit test above passes, and the instrumented test passes on an emulator.
-2. On the Razr:
-   - a held zoom pair crosses lens switches smoothly;
-   - a hold mapped to Capture starts a video take;
-   - volume behaviour in the gallery and in playback is unchanged.
+This plan, `AGENTS.md` (the `SettingsVolumeKeys` screen), `SettingsHelp` and strings in six locales, `docs/plans/manifest.yaml` and `docs/plans/README.md`.
+
+## 15. Commands to Run
+
+```bash
+export JAVA_HOME=/usr/lib/jvm/java-17-openjdk ANDROID_HOME=$HOME/Android/Sdk
+flock ~/.cache/claude-tmp/opencinecam/gradle.lock ./gradlew --no-daemon -Dorg.gradle.parallel=false --max-workers=2 -Dorg.gradle.caching=false :app:testDebugUnitTest --tests '*VolumeKey*' --tests '*OperatorPreferencesTest' --tests '*CameraPresetTest' --tests '*SettingsCatalogTest'
+flock ~/.cache/claude-tmp/opencinecam/gradle.lock ./gradlew --no-daemon -Dorg.gradle.parallel=false --max-workers=2 -Dorg.gradle.caching=false :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.librestatic.opencinecam.OperatorActivityTest
+./tools/check_format.sh
+python3 tools/validate_plan_system.py
+tools/compose-driver.sh start SettingsVolumeKeys
+```
+
+## 16. Acceptance Criteria
+
+- [ ] Every unit test above passes, and the instrumented test passes on an emulator.
+- [ ] On the Razr: a held zoom pair crosses lens switches smoothly.
+- [ ] On the Razr: a hold mapped to Capture starts a video take.
+- [ ] On the Razr: volume behaviour in the gallery and in playback is unchanged.
+
+## 17. Evidence to Record
+
+Unit and instrumented suite exit codes, the `SettingsVolumeKeys` tree and screenshot, and for the Razr checks the device fingerprint and a short note or recording per check.
+
+- Evidence: none recorded yet; the emulator and Razr checks are open.
+
+## 18. Rollback and Recovery
+
+The defaults keep the previous behaviour: Separate actions, no hold, double or Both keys action, so each key fires on key-down as before (decision 2). The change can be reverted as one unit; presets of version 27 would then decode with the older reader's rules.
+
+## 19. Risks and Mitigations
+
+- Added latency on a key that waits for a hold or double press: a key that only presses keeps zero latency, and the help line explains the cost (decisions 2 and 9).
+- Native volume lost by consuming keys (RISK-020): System volume passes through when nothing else is mapped, and is emulated one step per press otherwise.
+- A pair hold running away: it stops on key-up, on Both keys, and never starts when the first step cannot act.
+
+## 20. Completion Update
+
+Not complete (status InProgress). The gesture engine, pair stepping, settings and tests merged to main as part of PR #4 (via PR #3) and shipped in OpenCineCam 2.0.0 (Google Play production, 2026-11-19). The emulator and Razr checks of section 16 remain open.
+
+## 21. Execution Record
+
+- Implemented on PR #3 and merged to main as part of PR #4 (b8456498, 2026-11-12).
+- 2026-11-19 Shipped in OpenCineCam 2.0.0 (Google Play production).

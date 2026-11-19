@@ -936,6 +936,34 @@ plans:
     conditional_gates: []
     intended_executor: Claude Code
 
+  - id: OCC-PLAN-071
+    title: "RAW video: qualified RAW10 takes in OCRAW, with a RAM ring and optional lossless compression"
+    status: InProgress
+    revision: 1
+    milestone: H2
+    path: docs/plans/PLAN-071-raw-video.md
+    depends_on: [OCC-PLAN-040, OCC-PLAN-041, OCC-PLAN-042]
+    blocks: []
+    requirements: [OCC-RAW-001, OCC-CAM-001]
+    adrs: [ADR-0013, ADR-0019, ADR-0020, ADR-0021]
+    risks: [RISK-001, RISK-004, RISK-009]
+    conditional_gates: []
+    intended_executor: Claude Code
+
+  - id: OCC-PLAN-072
+    title: "Record takes to an external USB-C drive through SAF"
+    status: InProgress
+    revision: 1
+    milestone: H2
+    path: docs/plans/PLAN-072-external-ssd-recording.md
+    depends_on: [OCC-PLAN-071]
+    blocks: []
+    requirements: [OCC-CAM-001, OCC-RAW-001]
+    adrs: [ADR-0011, ADR-0013, ADR-0037]
+    risks: [RISK-004]
+    conditional_gates: []
+    intended_executor: Claude Code
+
   - id: OCC-PLAN-073
     title: "Volume-key gestures and −/+ pairs"
     status: InProgress
@@ -947,5 +975,19 @@ plans:
     requirements: [OCC-PRO-006, OCC-UI-002]
     adrs: [ADR-0030]
     risks: [RISK-020]
+    conditional_gates: []
+    intended_executor: Claude Code
+
+  - id: OCC-PLAN-074
+    title: "Raw microphone input and input equaliser"
+    status: InProgress
+    revision: 1
+    milestone: H3
+    path: docs/plans/PLAN-074-raw-microphone-input-and-equaliser.md
+    depends_on: [OCC-PLAN-021, OCC-PLAN-054]
+    blocks: []
+    requirements: [OCC-AUDIO-001, OCC-AUDIO-002, OCC-PRO-006]
+    adrs: [ADR-0024]
+    risks: [RISK-006, RISK-020]
     conditional_gates: []
     intended_executor: Claude Code

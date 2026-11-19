@@ -43,7 +43,43 @@ This plan gives the app a clean default input on every phone and puts the equali
 4. bundled equaliser profiles for the Razr Fold and the S24 Ultra;
 5. a warning when the input saturates before it reaches the app.
 
-## 2. Decisions
+## 2. Why This Plan Exists
+
+The concert take in section 1 was lost with default settings, and the app's meter could not warn because the clipping happened before the samples reached it. No source the platform offers is clean on the Razr Fold, and the one that is (the native fast input) lacks the vendor's equalisation, so the app needs its own input path, its own equaliser and its own overload detector.
+
+## 3. Prerequisites
+
+- OCC-PLAN-021 (audio source and effect negotiation) and OCC-PLAN-054 (device profile schema, trust and invalidation).
+- The Razr Fold for the device acceptance and the S24 Ultra for Delivery 3's measurements. Ask the user to connect the device before every device step; assume it is disconnected.
+
+## 4. Required Reading
+
+ADR-0012 (audio source, effects and time base), ADR-0024 (device profile quirk trust and invalidation), ADR-0029 (professional audio formats and controls), PLAN-021, PLAN-054, `AGENTS.md` (Compose Driver screens `InputEqualizer*`, `SettingsAudioEqualizer`, `SettingsAudioSync`, `CaptureAudioOverload*`, `CaptureListen*`).
+
+## 5. Inputs
+
+- The Razr Fold measurements of section 1 (sources, vendor paths, gains, fast input behaviour) and the pink-noise measurement behind the bundled curve (decision 8).
+- The five read loops (`EmbeddedAac`, the WAV and FLAC sidecars, `RawAudioCapture`, `PreviewAudioMonitor`), `AudioLevelMeter`, `CaptureEpochClock`, `DirectRecorderTiming`, the camera-0 device profile and `LensCalibrationStore` (the store pattern).
+
+## 6. Deliverables
+
+- Delivery 1: the `PcmInput` seam with `AudioRecordPcmInput` and `AAudioPcmInput`, the native `occ_aaudio` stream, `InputEqualizer` in the five loops, the new `AudioSourceSelection` values, the defaults and one-time migration, the Razr quirks and bundled profile, the high-speed PCM route with `Mp4AudioAppender`, the take record fields and the manual sync offset (decisions 1 to 12).
+- Delivery 2: the Input equaliser page, user profiles (`EqProfile` store) and headphone listening (decision 13).
+- Delivery 3: the S24 Ultra profile and the saturation warning (decision 14).
+
+## 7. In Scope
+
+Built-in microphone capture for video, LOG, HLG, RAW video and audio sidecars; the input equaliser and its profiles; the defaults and migration; constrained high-speed takes at real speed with AAC; the manual sync offset; headphone listening; the input-overload warning.
+
+## 8. Out of Scope
+
+Processing USB and other external inputs through the native input (they keep `AudioRecord`, decision 2); audio in off-speed slow motion; platform effects (NS, AEC, AGC) on the low-latency input; shifting separate WAV and FLAC files by the sync offset (decision 12); changing the device profile schema (decision 9).
+
+## 9. Architecture
+
+Order in every read loop: mute guard, input observation, equaliser, software AGC, recording gain, listening, meter (decision 6).
+
+### Decisions
 
 1. **Default input.**
    - With no device profile the default source is `CAMCORDER`, the source the vendor tunes for video, with a flat equaliser.
@@ -85,13 +121,31 @@ This plan gives the app a clean default input on every phone and puts the equali
     - *Leaving Settings.* Going back to the capture screen from Settings (the Capture tab or back) while listening is armed asks "Keep listening?": Keep leaves it on, Stop switches it off, and dismissing stays in Settings.
 14. **Saturation warning.** `AudioLevelMeter` gains an input-overload detector for clipping below full scale: runs of flat samples at the take's own ceiling and a collapsed crest factor. The capture screen shows it as a notice with the suggestion to switch input.
 
-## 3. Deliveries
+## 10. Implementation Steps
+
+### Deliveries
 
 1. **Input and engine.** Decisions 1 to 12 without the editor: the seam, the native input, the engine in the five loops, the settings and the Razr quirks with its bundled profile.
 2. **Editor and user profiles.** Decision 13.
 3. **S24 Ultra profile and saturation warning.** Decision 14, after measuring the S24 Ultra's paths.
 
-## 4. Tests
+## 11. State and Data
+
+- `CameraSettings`: the audio source, channels, the active equaliser profile id and a copy of its curve (`audio-eq-curve`); presets move to the next version and older ones decode to the default (decision 8).
+- The device-local `audioSyncOffsetMs` (−500 to 500 ms), not a portable preset key (decision 12).
+- The one-time flag `audio-input-migrated-v1` (decision 1).
+- `EqProfile` user profiles in an atomic JSON store; bundled profiles as read-only assets keyed by device (`app/src/main/profiles/eq-profiles/`).
+- Take records: the input (API, preset, performance mode, routed device), the equaliser profile and bands, `audioSyncOffsetUs`, and the capture depth (decisions 5, 11 and 12).
+
+## 12. Failure Handling
+
+- A native stream that opens in another performance mode, rate or channel count is refused, and the take falls back to the default `AudioRecord` source with a notice (decision 4).
+- A stored source the phone does not offer falls back in a fixed order (decision 1).
+- A high-speed take whose AAC encode or append fails, or that is incomplete, keeps its MP4 as recorded and publishes the WAV beside it; crash recovery publishes both (decision 10).
+- A damaged profile store falls back to flat (section 13).
+- Clipping below full scale shows the overload notice with the suggestion to switch input (decision 14).
+
+## 13. Tests
 
 - `InputEqualizerTest`: each filter type against its analytic response, flat is bit-exact, saturation, stereo state independence, coefficient swap without a click, every PCM encoding.
 - `EqProfileCodecTest`, `EqProfileStoreTest`: round trip, bundled profiles read-only, a damaged file falls back to flat.
@@ -102,15 +156,64 @@ This plan gives the app a clean default input on every phone and puts the equali
 - Instrumented, on a device: `AAudioPcmInputDeviceTest` (opens, reads, timestamps advance, refusal path).
 - Compose Driver screens: the editor (full, soft, bypassed, a bundled profile, a user profile), the audio settings rows and the saturation notice.
 
-## 5. Acceptance
+In the tree the `PcmInput` contract is covered by `PcmInputTest` and `PcmInputsTest` in `:media`; there is no `AAudioPcmInputDeviceTest` file. Further host tests for this plan include `AudioLevelMeterTest`, `BundledEqProfilesTest`, `BundledDeviceQuirksTest`, `InputEqualizerModelTest`, `AudioInputSettingsTest`, `AudioInputMetadataTest`, `AudioInputLiveUpdatesTest`, `AudioInputNoticeUiTest`, `AudioInputRoutingTest`, `Mp4AudioAppenderTest`, `AudioListeningDevicesTest`, `AudioListeningSettingsTest`, `AudioListenModelTest`, `ListeningPcmQueueTest` and `PcmListeningSinkTest`.
 
-1. Every host test above passes.
-2. On the Razr Fold, with defaults:
-   - a video take, a RAW video take and a WAV take use the low-latency input (logcat shows `Native input open: performance mode 12, burst 240 frames` and no `Low-latency input not used` fallback; the audio HAL picks `handset-dual-mic`), in true stereo: the two channels of the file differ;
-   - loud music beside the phone does not reach full scale and shows no limiter;
-   - the spectrum of an equalised take matches a `CAMCORDER` take within 3 dB from 100 Hz to 12 kHz, measured with pink noise;
-   - a clap board take is in sync within one frame, at 30 and 60 fps, at the start and after ten minutes;
-   - a constrained high-speed take at real speed with AAC records through the same input and equaliser (decision 10; an off-speed slow-motion take records no audio);
-   - an install with the old defaults opens with the low-latency input, stereo and the bundled equaliser, and one that had chosen another source keeps it.
-3. On a phone with no profile, defaults record through `CAMCORDER` with a flat equaliser.
-4. The editor changes the live spectrum as the nodes move, and a saved profile survives a restart.
+## 14. Documentation Updates
+
+This plan, `AGENTS.md` (screens), `SettingsHelp` and strings in six locales, the Razr device profile and its bundled equaliser asset, `docs/plans/manifest.yaml` and `docs/plans/README.md`.
+
+## 15. Commands to Run
+
+```bash
+export JAVA_HOME=/usr/lib/jvm/java-17-openjdk ANDROID_HOME=$HOME/Android/Sdk
+flock ~/.cache/claude-tmp/opencinecam/gradle.lock ./gradlew --no-daemon -Dorg.gradle.parallel=false --max-workers=2 -Dorg.gradle.caching=false :core:model:test
+flock ~/.cache/claude-tmp/opencinecam/gradle.lock ./gradlew --no-daemon -Dorg.gradle.parallel=false --max-workers=2 -Dorg.gradle.caching=false :media:testDebugUnitTest
+flock ~/.cache/claude-tmp/opencinecam/gradle.lock ./gradlew --no-daemon -Dorg.gradle.parallel=false --max-workers=2 -Dorg.gradle.caching=false :camera:testDebugUnitTest
+flock ~/.cache/claude-tmp/opencinecam/gradle.lock ./gradlew --no-daemon -Dorg.gradle.parallel=false --max-workers=2 -Dorg.gradle.caching=false :app:testDebugUnitTest :app:lintDebug
+./tools/check_format.sh
+python3 tools/validate_plan_system.py
+tools/compose-driver.sh start InputEqualizer
+tools/compose-driver.sh reset SettingsAudioEqualizer
+tools/compose-driver.sh reset CaptureAudioOverload
+```
+
+Host Gradle runs one module at a time with parallelism off. The Razr checks read logcat for `Native input open` and `Low-latency input not used`.
+
+## 16. Acceptance Criteria
+
+- [ ] Every host test above passes.
+- [ ] On the Razr Fold, with defaults: a video take, a RAW video take and a WAV take use the low-latency input (logcat shows `Native input open: performance mode 12, burst 240 frames` and no `Low-latency input not used` fallback; the audio HAL picks `handset-dual-mic`), in true stereo: the two channels of the file differ.
+- [ ] On the Razr Fold, with defaults: loud music beside the phone does not reach full scale and shows no limiter.
+- [ ] On the Razr Fold, with defaults: the spectrum of an equalised take matches a `CAMCORDER` take within 3 dB from 100 Hz to 12 kHz, measured with pink noise.
+- [ ] On the Razr Fold, with defaults: a clap board take is in sync within one frame, at 30 and 60 fps, at the start and after ten minutes.
+- [ ] On the Razr Fold, with defaults: a constrained high-speed take at real speed with AAC records through the same input and equaliser (decision 10; an off-speed slow-motion take records no audio).
+- [ ] On the Razr Fold, with defaults: an install with the old defaults opens with the low-latency input, stereo and the bundled equaliser, and one that had chosen another source keeps it.
+- [ ] On a phone with no profile, defaults record through `CAMCORDER` with a flat equaliser.
+- [ ] The editor changes the live spectrum as the nodes move, and a saved profile survives a restart.
+
+## 17. Evidence to Record
+
+Host suite exit codes, Compose Driver trees and screenshots, and for the Razr checks the device fingerprint, logcat of the input open, the takes' channel difference, pink-noise spectra against `CAMCORDER`, and clap-board offsets at the start and after ten minutes.
+
+- Evidence: none recorded yet; the Razr checks are open.
+
+## 18. Rollback and Recovery
+
+Each delivery can be reverted on its own. With the native library absent the low-latency input is not offered and Camcorder is the default; a flat or disabled equaliser is bit-exact; the sync offset defaults to 0. The migration runs once and only moves installs that held the old defaults; reverting leaves the migrated settings as an ordinary stored choice.
+
+## 19. Risks and Mitigations
+
+- OEM audio paths differ per phone and route (RISK-006): defaults come from device-profile quirks, and a phone with no profile uses Camcorder with a flat equaliser.
+- The fast input can lose its fast track if it asks for a larger buffer: the stream keeps the platform's own capacity (decision 4).
+- No capture timestamps on the Razr's fast input: the epoch comes from read returns (`PcmReadEpochEstimate`), with a manual sync offset for inputs the app cannot measure.
+- Migration changing a user's deliberate choice (RISK-020): only the exact old defaults move, once, and the flag records it.
+
+## 20. Completion Update
+
+Not complete (status InProgress). The plan merged to main via PR #11 (32361fe6, 2026-11-16) and shipped in OpenCineCam 2.0.0 (Google Play production, 2026-11-19). The Razr checks of section 16 remain open. The tree bundles only the Razr Fold's equaliser profile (`app/src/main/profiles/eq-profiles/motorola-blanc.json`); no S24 Ultra profile is present.
+
+## 21. Execution Record
+
+- 2026-11-15 The Razr's bundled curve measured a second time with pink noise against the Camcorder source (decision 8).
+- 2026-11-16 Merged to main via PR #11 (32361fe6).
+- 2026-11-19 Shipped in OpenCineCam 2.0.0 (Google Play production).
