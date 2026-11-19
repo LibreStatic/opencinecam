@@ -93,6 +93,8 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
     private val mounted: (String) -> Boolean = mounted ?: { volume -> volumeMounted(this.context, volume) }
     private val mediaStore = MediaStoreRecordingRows(this.context)
     private val sidecarBackups = FileRecoveredSidecarBackups(File(this.context.noBackupFilesDir, "recovered-sidecars"))
+    /** PLAN-072: the side index of a drive take, kept for recovery's moov rebuild until the entry is resolved. */
+    private val takeIndexes = TakeIndexFiles(this.context)
     /** Repairs a drive RAW take's `.ocraw` in place and says whether to keep it ([finishDriveRawTake]); tests replace it. */
     internal var repairRaw: (Uri, RawRepairScan) -> RawTakeFileDecision = { uri, scan ->
         // The repair scans and checks the whole take: registered, so a drive that leaves ends it with an I/O error and
@@ -265,7 +267,7 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
         val released = HashSet<String>()
         val repairs = mutableListOf<RawRepair>()
         try {
-            val decided = synchronized(recordingRecoveryLock) { open().use { db -> decide(db, claims.takeIf { driveTakes }) } }
+            val decided = synchronized(recordingRecoveryLock) { open().use { db -> decide(db, claims.takeIf { driveTakes }).also { sweepTakeIndexes(db) } } }
             var rawPublished = 0; var rawDeleted = 0; var unresolved = 0; var waiting = 0
             var discarded = 0; var incomplete = 0; var deferred = 0
             // The drive is asked with the lock released, each journal step taking it: a provider that stalls must not hold
@@ -280,6 +282,10 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
                         DriveRecovery.INCOMPLETE -> incomplete++
                         DriveRecovery.DISCARDED -> discarded++
                         DriveRecovery.COMMITTED, DriveRecovery.RAW_REPAIR -> Unit
+                    }
+                    // Resolved: nothing will rebuild this take's moov again. A deferred or failed entry keeps its index.
+                    if (outcome == DriveRecovery.INCOMPLETE || outcome == DriveRecovery.DISCARDED || outcome == DriveRecovery.COMMITTED) {
+                        runCatching { takeIndexes.delete(record.id) }
                     }
                 } catch (failure: Exception) {
                     unresolved++
@@ -417,9 +423,45 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
                 DriveRecovery.COMMITTED
             }
             else -> store.rawOutput()?.let { raw -> repairs += RawRepair(record.id, store, raw); DriveRecovery.RAW_REPAIR }
-                ?: if (publishIncomplete(journal, record.id, store) > 0) DriveRecovery.INCOMPLETE
+                ?: if (publishIncomplete(journal, record.id, store, rebuildDriveMoov(record.id, store)) > 0) DriveRecovery.INCOMPLETE
                 else { discardRows(journal, record.id, store); DriveRecovery.DISCARDED }
         }
+    }
+
+    /**
+     * PLAN-072: a pulled drive leaves an MP4 whose `moov` was never written. With the take's side index
+     * ([TakeSampleIndexWriter]) the file is repaired in place ([Mp4MoovRebuilder]) before it is published as incomplete,
+     * keyed by the row's uri for [recoverIncompleteTake]. The MP4 is opened registered with [DriveDescriptors] (ADR-0037),
+     * so a drive that leaves again ends the repair with an I/O error. No index, or a repair that failed, changes nothing:
+     * the take publishes as before. An I/O error while the drive no longer answers propagates, so the entry is retried.
+     */
+    private fun rebuildDriveMoov(id: String, store: SafRecordingRows): Map<String, Mp4RebuildResult.Rebuilt> {
+        val index = readTakeSampleIndex(takeIndexes.fileOf(id)) ?: return emptyMap()
+        val mp4 = store.recovered(id).firstOrNull { it.root == "DCIM" && it.bytes != 0L } ?: return emptyMap()
+        val result = try {
+            val mark = DriveDescriptors.releaseMark(mp4.handle)
+            requireNotNull(resolver.openFileDescriptor(mp4.handle, "rw")) { "Recording video could not be opened" }.useOnDrive(mp4.handle, mark) { descriptor ->
+                DuplexFileChannel.open(descriptor.fileDescriptor).use { channel -> Mp4MoovRebuilder.rebuildMoov(FileChannelMp4Access(channel), index) }
+            }
+        } catch (failure: java.io.IOException) {
+            // A drive that stopped answering is retried on its next mount; one that answers keeps the take as it is.
+            if (!store.reachable()) throw failure
+            android.util.Log.w("RecordingRecovery", "Take $id: the moov rebuild failed", failure)
+            return emptyMap()
+        } catch (failure: Exception) {
+            android.util.Log.w("RecordingRecovery", "Take $id: the moov rebuild failed", failure)
+            return emptyMap()
+        }
+        android.util.Log.i("RecordingRecovery", "Take $id: moov rebuild $result")
+        return if (result is Mp4RebuildResult.Rebuilt) mapOf(mp4.uri to result) else emptyMap()
+    }
+
+    /** Deletes the index files of takes the journal no longer knows, once they are old enough that none can be recovering. */
+    private fun sweepTakeIndexes(db: SQLiteDatabase) {
+        runCatching {
+            val known = db.rawQuery("SELECT id FROM captures", null).use { c -> buildSet { while (c.moveToNext()) add(c.getString(0)) } }
+            takeIndexes.sweepOrphans(known, TakeIndexFiles.ORPHAN_AGE_MS)
+        }.onFailure { android.util.Log.w("RecordingRecovery", "Take index sweep failed", it) }
     }
 
     /**
@@ -455,13 +497,14 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
      * then marks the journal entry committed so no later recovery deletes what was kept. Returns the
      * number of rows published; when 0 the entry is untouched and the caller discards it.
      */
-    private fun publishIncomplete(journal: JournalAccess, id: String, store: RecordingRowStore): Int {
+    private fun publishIncomplete(journal: JournalAccess, id: String, store: RecordingRowStore,
+        moovRebuilds: Map<String, Mp4RebuildResult.Rebuilt> = emptyMap()): Int {
         requireId(id)
         check(journal.step { state(it, id) } == 0L) { "Only an uncommitted take can be recovered" }
         val reason = journal.step { db -> db.rawQuery("SELECT reason FROM captures WHERE id = ?", arrayOf(id)).use { c -> if (c.moveToFirst()) c.getString(0) else null } }
         val published = recoverIncompleteTake(id, store.recovered(id), store.clipRows,
             insertSidecar = { name -> store.insert(id, "Download", name, "application/json") },
-            readText = ::readRecoveredSidecar, backups = sidecarBackups, reason = reason)
+            readText = ::readRecoveredSidecar, backups = sidecarBackups, reason = reason, moovRebuilds = moovRebuilds)
         if (published == 0) return 0
         store.commit(id)
         journal.step { db ->
@@ -492,6 +535,7 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
         }
         // Never make failure to prune COMMITTED revoke a valid capture.
         runCatching { db.delete("captures", "id = ? AND committed = 1", arrayOf(id)) }
+        runCatching { takeIndexes.delete(id) }
     } }
 
     /**
@@ -512,12 +556,14 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
         check(state != 1L) { "Committed take must never be compensated" }
         if (state == null) {
             check(store.allRows(id).isEmpty()) { "Take receipt disappeared while outputs remain" }
+            runCatching { takeIndexes.delete(id) }
             return
         }
         store.discard(id)
         journal.step { db -> check(db.delete("captures", "id = ? AND committed = 0", arrayOf(id)) == 1) }
         // The take is gone, so nothing will read the sidecar copies kept for its recovery.
         sidecarBackups.deleteTake(id)
+        runCatching { takeIndexes.delete(id) }
     }
 
     /** The MediaStore rows of take [id] (device tests and diagnostics). */

@@ -2383,6 +2383,8 @@ class Camera2PreviewEngine(
         outputFrameRate: Int? = null,
         // SDR codec choice for the GPU and the direct high-speed routes; LOG and HLG are unaffected.
         videoCodec: VideoCodecPreference = VideoCodecPreference.H264,
+        // Only the GPU routes feed it; the MediaRecorder and direct high-speed routes never call it.
+        sampleListener: EncodedSampleListener? = null,
     ): Boolean {
         if (disposed.get() || gpuPhotoPreviewEnabled || bracketRequest.get() != null || accumulationRequest.get() != null || burstRequest.get() != null) return false
         // RAW_VIDEO never falls back to an encoded take (ADR-0019); its takes go through startRawVideo.
@@ -2394,10 +2396,10 @@ class Camera2PreviewEngine(
         require(projectRateOverride == null || (timelapse == null && captureRate == null && recordingGeometry != null))
         if (timelapse != null) {
             require(captureRate == null && recordingGeometry != null)
-            return startGpuVideo(output, audio, recordingGeometry, videoBitrate, timelapse, recordingLut = recordingLut, videoCodec = videoCodec)
+            return startGpuVideo(output, audio, recordingGeometry, videoBitrate, timelapse, recordingLut = recordingLut, videoCodec = videoCodec, sampleListener = sampleListener)
         }
         if (recordingGeometry != null && captureRate == null) {
-            return startGpuVideo(output, audio, recordingGeometry, videoBitrate, projectRateOverride = projectRateOverride, separateAudioClock = separateAudioClock, recordingLut = recordingLut, videoCodec = videoCodec)
+            return startGpuVideo(output, audio, recordingGeometry, videoBitrate, projectRateOverride = projectRateOverride, separateAudioClock = separateAudioClock, recordingLut = recordingLut, videoCodec = videoCodec, sampleListener = sampleListener)
         }
         // MediaRecorder exposes no owned PCM processing stage: never ignore manual gain.
         if (audio?.recordingGain?.enabled == true) {
@@ -2530,6 +2532,7 @@ class Camera2PreviewEngine(
         hlgOutput: Boolean = false,
         /** With [hlgOutput]: record HDR10 (PQ) instead of HLG; only honoured for a profile that offers it. */
         hdr10Output: Boolean = false,
+        sampleListener: EncodedSampleListener? = null,
     ): Boolean {
         val pipeline = logPipeline ?: return false
         val descriptor = activeDescriptor ?: return false
@@ -2548,6 +2551,7 @@ class Camera2PreviewEngine(
             recordingLut = recordingLut,
             hlgOutput = hlgOutput,
             hdr10Output = hdr10Output && hlgOutput && activeLogProfile?.hdr10 == true,
+            sampleListener = sampleListener,
             onRecordingLutApplied = { evidence ->
                 if (generation == cameraGeneration && logPipeline === pipeline && recording) listener?.onRecordingLutApplied(evidence)
             },

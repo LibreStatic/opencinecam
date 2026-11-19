@@ -121,6 +121,14 @@ Status (2026-11-09): implemented on `feat/external-ssd-recording`, with host tes
   - qualifying a drive for RAW and recording a full-sensor 30 fps RAW take;
   - the gallery with the drive on and off.
 
+## 6b. Pull durability
+
+A drive pulled mid-take used to leave an MP4 with its `mdat` and no `moov`, which no player opens. Two pieces keep the take:
+
+- **Periodic fsync.** `DriveWriteFlusher` syncs a duplicate of each drive output's descriptor about once a second (registered with `DriveDescriptors`, ADR-0037), so what the drive acknowledged is on the medium. A pull loses about the last second of data.
+- **Side index and moov rebuild.** A GPU-pipeline video take on the drive writes `filesDir/take-index/<takeId>.ocix` (`TakeSampleIndexWriter`), fed by the pipeline's `EncodedSampleListener` with the track formats (codec configuration) and every sample the muxer is given, and flushed about once a second. At recovery, before the take is published as incomplete, `Mp4MoovRebuilder` appends a `moov` built from the index and fixes the `mdat` size. The file then plays, up to about the last second, and its sidecar carries `moovRebuilt` and the sample counts. The index is deleted when the journal entry is committed, discarded or published, kept while it is deferred or fails, and orphans older than 24 h are swept on each recovery pass.
+- **Not covered.** Takes on the `MediaRecorder` path (direct high-speed, slow motion) get no index and are published as before. A rebuild that fails leaves the file as it was.
+
 ## 7. Out of scope
 
 - NTFS and other filesystems that some OEMs mount: they may work, but there is no promise.

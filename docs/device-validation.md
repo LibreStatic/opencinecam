@@ -305,6 +305,16 @@ Step 0 (the SAF, `MediaMuxer`, `ftruncate` and unplug probe) is recorded in OCC-
 | High-speed take | Slow motion on the drive, then pull mid-take | The take stops through the volume event (the direct `MediaRecorder` path has no error listener) |
 | No "open with" chooser | With a file manager that handles USB drives installed (e.g. Cx File Explorer): configure the drive, replug it, choose OpenCineCam and Always in the system chooser, replug again; then replug once more during a take recorded to the phone | The second replug shows no chooser and brings OpenCineCam to the front without restarting it; a take recording to the phone is not interrupted. With the destination back to Phone, a replug offers OpenCineCam no more |
 
+### Pull durability (PLAN-072)
+
+None has run yet. A GPU-pipeline take (4K VIDEO, LOG or HLG) with WAV audio, to a drive on a powered hub.
+
+| Case | Steps | Expected |
+|---|---|---|
+| Pull, Stop and save | Set Settings > Recording > If the drive disconnects to Stop and save. Record 30 s, pull the drive, reconnect it | "Interrupted takes recovered from the USB drive"; the MP4 plays on the phone and on a computer, up to about the last second before the pull; `<stem>.timing.json` (or `.incomplete.json`) has `moovRebuilt: true`; `filesDir/take-index/` holds no file for the take afterwards |
+| Pull, Continue on the phone | Set it to Continue on the phone, record 30 s, pull the drive, reconnect it | The `_cont1` take records on the phone; on replug the drive part is recovered and plays |
+| Slow motion | Pull the drive during a slow-motion take (the `MediaRecorder` path) | No index is written; the file is published as incomplete as before |
+
 ### Continue on the phone (PLAN-072 Delivery 4)
 
 None has run yet. Set Settings > Recording > If the drive disconnects to Continue on the phone, with a drive on a powered hub.

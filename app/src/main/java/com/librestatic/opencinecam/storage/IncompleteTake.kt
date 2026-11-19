@@ -8,6 +8,7 @@ import com.librestatic.opencinecam.media.storage.decideClipRecovery
 import java.io.FileNotFoundException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -45,13 +46,14 @@ internal object IncompleteTake {
         if (overruns > 0) reasons.orEmpty() + AUDIO_INPUT_OVERRUN else reasons
 
     /** Adds the incomplete marker to [json] (or to a minimal recording document when there is none). */
-    fun mark(json: String?, reasons: List<String>, note: String? = null): String {
+    fun mark(json: String?, reasons: List<String>, note: String? = null, extra: Map<String, JsonElement> = emptyMap()): String {
         val original = json?.let { Json.parseToJsonElement(it) as? JsonObject }
         return PRETTY.encodeToString(JsonObject.serializer(), buildJsonObject {
             if (original == null) put("schema", "opencinecam.recording.v1") else original.forEach { (key, value) -> put(key, value) }
             put(STATUS_KEY, STATUS_INCOMPLETE)
             put(REASONS_KEY, JsonArray(reasons.distinct().map(::JsonPrimitive)))
             note?.let { put(NOTE_KEY, it) }
+            extra.forEach { (key, value) -> put(key, value) }
         })
     }
 
