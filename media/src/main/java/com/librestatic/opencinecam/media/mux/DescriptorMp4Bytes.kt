@@ -43,6 +43,6 @@ class DescriptorMp4Bytes(private val descriptor: FileDescriptor) : Mp4Bytes {
     private inline fun <T> errno(block: () -> T): T = try {
         block()
     } catch (e: ErrnoException) {
-        throw e.rethrowAsIOException()
+        throw IOException(e.message, e)
     }
 }
