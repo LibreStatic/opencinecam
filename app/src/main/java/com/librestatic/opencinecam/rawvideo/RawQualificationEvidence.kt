@@ -35,7 +35,9 @@ data class RawQualificationEvidence(
  * When a camera check or an encode benchmark of an earlier run may stand in for a new one (PLAN-071, 2026-11-20). Both
  * judge only the camera and the CPU, never the storage, so the destination does not matter; everything else they depend
  * on is in their key, and the build and protocol in [RawQualificationEvidence]. Only conclusive results the heat did not
- * touch are kept ([reusableResult]), and only for [MAX_AGE_MS].
+ * touch are kept ([reusableResult]), and only for [MAX_AGE_MS]. A reused benchmark's compression ratio was measured on
+ * another scene, so it proves no storage: it still decides whether the encoder keeps up and the compressed long runs,
+ * but a twin it extrapolates is judged as if uncompressed ([RawQualificationStaging.storageJudgingBench]).
  */
 object RawQualificationEvidenceRules {
     /** A RAM-only camera check (the session's `stage`). */

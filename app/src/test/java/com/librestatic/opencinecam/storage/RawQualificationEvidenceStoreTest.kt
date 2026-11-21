@@ -132,6 +132,29 @@ class RawQualificationEvidenceStoreTest {
         assertEquals(listOf(entry()), store().load())
     }
 
+    @Test fun aMalformedRootSchemaOrEntryListReadsEmptyAndIsRewrittenByTheNextPut() {
+        val malformed = listOf(
+            """{"schema":{},"entries":[]}""",
+            """{"schema":[1],"entries":[]}""",
+            """{"schema":"one","entries":[]}""",
+            """{"schema":null,"entries":[]}""",
+            """{"schema":1,"entries":{}}""",
+            """{"schema":1,"entries":"none"}""",
+            """{"schema":1,"entries":[1,"x",null,[]]}""",
+            """{"schema":1}""",
+            """[{"schema":1,"entries":[]}]""",
+            """"text"""",
+            "null",
+        )
+        for (raw in malformed) {
+            assertTrue(raw, RawQualificationEvidenceStore.decode(raw).isEmpty())
+            file.writeText(raw)
+            assertTrue(raw, store().load().isEmpty())
+            assertTrue(raw, store().put(entry(), NOW))
+            assertEquals(raw, listOf(entry()), store().load())
+        }
+    }
+
     private companion object {
         const val FP = "google/razr/blanc:15/V1/1:user/release-keys"
         const val APP = 125L

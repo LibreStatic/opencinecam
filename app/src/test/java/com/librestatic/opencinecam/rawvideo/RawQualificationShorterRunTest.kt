@@ -8,7 +8,9 @@ import com.librestatic.opencinecam.camera.RawSustainedWrite
 import com.librestatic.opencinecam.camera.RawThroughputBenchmark
 import com.librestatic.opencinecam.camera.RawVideoConfig
 import com.librestatic.opencinecam.camera.RawVideoQualification
+import com.librestatic.opencinecam.camera.RawVideoQualificationCodec
 import com.librestatic.opencinecam.camera.RawVideoQualificationRecord
+import com.librestatic.opencinecam.camera.RawVideoQualificationSet
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -66,6 +68,70 @@ class RawQualificationShorterRunTest {
         assertTrue(RawQualificationStaging.predictedLongRunSkip(true, bp, cliff(400_000_000L), ratio = 1.4).isEmpty())
         assertEquals(listOf(RawQualificationRisk.REASON_SUSTAINED_RATE_EXCEEDED),
             RawQualificationStaging.predictedLongRunSkip(true, bp, cliff(400_000_000L), ratio = 1.1))
+    }
+
+    @Test fun aPredictedSkipNeedsAPassingCameraCheck() {
+        val full30 = config("full@30")
+        val exceeded = listOf(RawQualificationRisk.REASON_SUSTAINED_RATE_EXCEEDED)
+        // A passing check, a reduced-rate pass included, gives the rate the prediction reads.
+        assertEquals(exceeded, RawQualificationStaging.predictedLongRunSkip(true, RawStageResult.PASS, full30, cliff(400_000_000L)))
+        assertEquals(exceeded, RawQualificationStaging.predictedLongRunSkip(true, RawStageResult.pass(listOf(reduced)), full30, cliff(400_000_000L),
+            achievedFps = 29.9))
+        // A failed, skipped or missing check: the descent behaves as without the option.
+        assertTrue(RawQualificationStaging.predictedLongRunSkip(true, RawStageResult.fail(listOf("fps-not-reached")), full30, cliff(400_000_000L)).isEmpty())
+        assertTrue(RawQualificationStaging.predictedLongRunSkip(true, RawStageResult.skipped("thermal-skip"), full30, cliff(400_000_000L)).isEmpty())
+        assertTrue(RawQualificationStaging.predictedLongRunSkip(true, null, full30, cliff(400_000_000L)).isEmpty())
+        // The option off still changes nothing, and the same holds for a compressed twin at its ratio.
+        assertTrue(RawQualificationStaging.predictedLongRunSkip(false, RawStageResult.PASS, full30, cliff(400_000_000L)).isEmpty())
+        val bp = full30.copy(encoding = RawVideoConfig.ENCODING_BLOCK_PACK)
+        assertEquals(exceeded, RawQualificationStaging.predictedLongRunSkip(true, RawStageResult.PASS, bp, cliff(400_000_000L), ratio = 1.1))
+        assertTrue(RawQualificationStaging.predictedLongRunSkip(true, RawStageResult.fail(listOf("camera-frame-loss")), bp, cliff(400_000_000L),
+            ratio = 1.1).isEmpty())
+    }
+
+    @Test fun aReusedBenchmarkJudgesAnExtrapolatedTwinsStorageAsIfUncompressed() {
+        val measured = bench(2_000e6, 1.6)
+        // Measured in this run: its conservative ratio judges the storage, as before.
+        assertEquals(1.6, RawQualificationStaging.extrapolatedStorageRatio(measured, benchReused = false), 0.0)
+        assertTrue(measured === RawQualificationStaging.storageJudgingBench(measured, benchReused = false))
+        // Reused: ratio 1.0, the bound no scene can break; everything else of the benchmark stays.
+        assertEquals(1.0, RawQualificationStaging.extrapolatedStorageRatio(measured, benchReused = true), 0.0)
+        val reused = requireNotNull(RawQualificationStaging.storageJudgingBench(measured, benchReused = true))
+        assertEquals(measured.copy(conservativeRatio = 1.0), reused)
+        assertEquals(1.0, RawQualificationStaging.extrapolatedStorageRatio(null, benchReused = false), 0.0)
+        assertNull(RawQualificationStaging.storageJudgingBench(null, benchReused = true))
+        // full@30 streams 468 MB/s, 292 MB/s at 1.6: a passing full@24 run (374 MB/s) covers it compressed at 1.6, not at 1.0.
+        val twin = config("full@30")
+        val longRuns = mapOf(config("full@24") to RawStageResult.PASS)
+        val atMeasured = RawQualificationStaging.compressedVerdict(twin, RawStageResult.PASS, measured, longRuns)
+        assertEquals(RawBenchmarkStatus.PASS, atMeasured.status)
+        assertEquals(config("full@24"), atMeasured.coveredBy)
+        val atReused = RawQualificationStaging.compressedVerdict(twin, RawStageResult.PASS, reused, longRuns)
+        assertEquals(RawBenchmarkStatus.UNKNOWN, atReused.status)
+        assertEquals(listOf(RawQualificationStaging.REASON_STORAGE_NOT_COVERED), atReused.reasonCodes)
+        // A heavier passing run still covers it as if uncompressed; the encoder verdict is the benchmark's either way.
+        val heavier = mapOf(config("full@60") to RawStageResult.PASS)
+        assertEquals(RawBenchmarkStatus.PASS, RawQualificationStaging.compressedVerdict(twin, RawStageResult.PASS, reused, heavier).status)
+        val slow = requireNotNull(RawQualificationStaging.storageJudgingBench(bench(100e6, 1.6), benchReused = true))
+        assertEquals(listOf(RawQualificationStaging.REASON_COMPRESSED_ENCODE_TOO_SLOW),
+            RawQualificationStaging.compressedVerdict(twin, RawStageResult.PASS, slow, heavier).reasonCodes)
+        // The sustained rule and the sweep judge the twin at 1.0 too: never more favourably than with the cached ratio.
+        assertEquals(listOf(RawQualificationRisk.REASON_SUSTAINED_RATE_EXCEEDED),
+            RawQualificationStaging.sustainedRateReasons(twin.copy(encoding = RawVideoConfig.ENCODING_BLOCK_PACK),
+                RawQualificationStaging.extrapolatedStorageRatio(measured, benchReused = true), cliff(400_000_000L)))
+        assertTrue(RawQualificationStaging.sustainedRateReasons(twin.copy(encoding = RawVideoConfig.ENCODING_BLOCK_PACK),
+            RawQualificationStaging.extrapolatedStorageRatio(measured, benchReused = false), cliff(400_000_000L)).isEmpty())
+    }
+
+    @Test fun aFrozenWindowLastsUntilTheFirstOverflow() {
+        // No overflow: the whole wait.
+        assertEquals(4_000L, RawQualificationStaging.measuredWindowMs(1_000L, -1L, 5_000L))
+        // Frozen at the first overflow: up to it, not to when the run thread's poll noticed.
+        assertEquals(1_500L, RawQualificationStaging.measuredWindowMs(1_000L, 2_500L, 5_000L))
+        // Never past the end, never before the start.
+        assertEquals(4_000L, RawQualificationStaging.measuredWindowMs(1_000L, 6_000L, 5_000L))
+        assertEquals(4_000L, RawQualificationStaging.measuredWindowMs(1_000L, 500L, 5_000L))
+        assertEquals(0L, RawQualificationStaging.measuredWindowMs(1_000L, 1_000L, 5_000L))
     }
 
     @Test fun thePredictedDescentStartsAtTheHeaviestConfigurationTheSustainedRateAllows() {
@@ -347,6 +413,50 @@ class RawQualificationShorterRunTest {
         val history = listOf(cameraOnlyRecord("full@24", risky, at = 1_000), storedRecord("full@24", RawBenchmarkStatus.PASS, emptyList(), at = 1_500))
         assertTrue(RawQualificationRecords.cameraOnlyMerge(history, listOf(cameraOnlyRecord("full@24", risky))).isEmpty())
         assertNotNull(RawQualificationRecords.cameraOnlyMerge(emptyList(), incoming).firstOrNull())
+    }
+
+    @Test fun aNewerCameraOnlyRecordReplacesAnEarlierCameraOnlyFailure() {
+        // An earlier camera-only failure carries no storage-not-tested code; its method says where it came from.
+        val earlierFail = cameraOnlyRecord("full@60", RawQualificationStaging.cameraOnlyVerdict(RawStageResult.fail(listOf("fps-not-reached"))), at = 1_000)
+        assertEquals(RawQualificationMethods.CAMERA_ONLY, earlierFail.method)
+        assertFalse(RawQualificationRisk.REASON_STORAGE_NOT_TESTED in earlierFail.qualification.reasonCodes)
+        val risky = cameraOnlyRecord("full@60", RawQualificationStaging.cameraOnlyVerdict(RawStageResult.PASS))
+        assertEquals(listOf(risky), RawQualificationRecords.cameraOnlyMerge(listOf(earlierFail), listOf(risky)))
+        // The method survives the store's codec, so a stored camera-only failure is still recognised.
+        val decoded = RawVideoQualificationCodec.decode(RawVideoQualificationCodec.encode(RawVideoQualificationSet(listOf(earlierFail)))).records
+        assertEquals(listOf(RawQualificationMethods.CAMERA_ONLY), decoded.map { it.method })
+        assertEquals(listOf(risky), RawQualificationRecords.cameraOnlyMerge(decoded, listOf(risky)))
+        // A heat failure from a camera-only run replaces an earlier camera-only record too: no storage was ever tested.
+        val hot = cameraOnlyRecord("full@60", RawQualificationStaging.cameraOnlyVerdict(RawStageResult.fail(listOf(RawQualificationStaging.REASON_THERMAL_LIMIT))))
+        assertEquals(listOf(hot), RawQualificationRecords.cameraOnlyMerge(listOf(earlierFail), listOf(hot)))
+    }
+
+    @Test fun onlyAConclusiveCameraOrEncoderFailureRevokesAStorageTestedRecord() {
+        val tested = listOf(storedRecord("full@60", RawBenchmarkStatus.PASS, emptyList(), at = 1_000))
+        fun incoming(vararg codes: String) = cameraOnlyRecord("full@60", RawQualificationStaging.cameraOnlyVerdict(RawStageResult.fail(codes.toList())))
+        val thermal = RawQualificationStaging.REASON_THERMAL_LIMIT
+        // The heat alone, or a shortfall at SEVERE heat, proves nothing about the camera: the tested record stands.
+        assertTrue(RawQualificationRecords.cameraOnlyMerge(tested, listOf(incoming(thermal))).isEmpty())
+        assertTrue(RawQualificationRecords.cameraOnlyMerge(tested, listOf(incoming("fps-not-reached", thermal))).isEmpty())
+        // A harness fault is not a camera limit.
+        assertTrue(RawQualificationRecords.cameraOnlyMerge(tested, listOf(incoming("camera-frame-loss"))).isEmpty())
+        assertTrue(RawQualificationRecords.cameraOnlyMerge(tested, listOf(incoming("copy-error"))).isEmpty())
+        // A camera that cannot deliver the rate, its declared limit or no frames revoke the pass.
+        for (code in listOf("fps-not-reached", RawQualificationFrameRate.REASON_CAMERA_FPS_LIMIT, RawQualificationFrameRate.REASON_CAMERA_NO_FRAMES)) {
+            val record = incoming(code)
+            assertEquals(code, listOf(record), RawQualificationRecords.cameraOnlyMerge(tested, listOf(record)))
+        }
+        // So does an encoder that cannot keep up or a camera starved under the encode load, legacy names included.
+        val q = incoming("fps-not-reached").qualification
+        for (code in listOf(RawQualificationStaging.REASON_COMPRESSED_ENCODE_TOO_SLOW, RawQualificationStaging.REASON_COMPRESSED_CAMERA_STARVED,
+            "lj92-encode-too-slow")) {
+            assertTrue(code, RawQualificationRecords.conclusiveCameraFailure(q.copy(reasonCode = code, reasonCodes = listOf(code))))
+        }
+        // A risky storage-not-tested verdict, a pass or a storage failure never do.
+        assertFalse(RawQualificationRecords.conclusiveCameraFailure(cameraOnlyRecord("full@60", RawQualificationStaging.cameraOnlyVerdict(RawStageResult.PASS)).qualification))
+        assertFalse(RawQualificationRecords.conclusiveCameraFailure(q.copy(status = RawBenchmarkStatus.PASS, reasonCodes = emptyList())))
+        assertFalse(RawQualificationRecords.conclusiveCameraFailure(
+            q.copy(reasonCode = RawThroughputBenchmark.REASON_RING_OVERFLOW, reasonCodes = listOf(RawThroughputBenchmark.REASON_RING_OVERFLOW))))
     }
 
     // endregion

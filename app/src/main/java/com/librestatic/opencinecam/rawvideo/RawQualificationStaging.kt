@@ -399,6 +399,22 @@ object RawQualificationStaging {
         if (!enabled || sustained?.cliffDetected != true) emptyList() else sustainedRateReasons(config, ratio, sustained, achievedFps)
 
     /**
+     * [predictedLongRunSkip] for a configuration whose camera check is [cameraCheck] (a compressed twin: its uncompressed
+     * twin's): only a check that passed (a reduced rate included) gives the rate the prediction reads, so with a failed,
+     * skipped or missing check nothing is predicted and the long-run descent behaves as without the option. The sweep's
+     * own exclusions ([sweepRuledOut]) do not depend on it.
+     */
+    fun predictedLongRunSkip(
+        enabled: Boolean,
+        cameraCheck: RawStageResult?,
+        config: RawVideoConfig,
+        sustained: RawSustainedWrite?,
+        achievedFps: Double? = null,
+        ratio: Double = 1.0,
+    ): List<String> =
+        if (cameraCheck?.passed != true) emptyList() else predictedLongRunSkip(enabled, config, sustained, achievedFps, ratio)
+
+    /**
      * The verdict a camera-only run ([RawQualificationOptions.cameraOnly]) gives an uncompressed configuration from its
      * [cameraCheck] alone: a pass (a reduced rate included, keeping its informational codes) is a FAIL with
      * [RawQualificationRisk.REASON_STORAGE_NOT_TESTED], so it is risky; a failure keeps the check's reasons; a skipped or
@@ -608,6 +624,15 @@ object RawQualificationStaging {
 
     /** A long run's measured window ended as soon as its ring overflowed (`stoppedEarly`): it could no longer pass. */
     const val STOPPED_EARLY_RING_OVERFLOW = "ring-overflow"
+
+    /**
+     * How long a session's measured window lasted (`measuredSeconds`), in ms: from [startMs] to the first overflow
+     * [frozenAtMs] when the reader froze a long run's window there (-1: it did not), never past [endMs]; else to [endMs],
+     * when the window ended. The run thread only notices the overflow at its next poll, so the time it stopped measuring
+     * would overstate the window.
+     */
+    fun measuredWindowMs(startMs: Long, frozenAtMs: Long, endMs: Long): Long =
+        ((if (frozenAtMs >= startMs) minOf(frozenAtMs, endMs) else endMs) - startMs).coerceAtLeast(0L)
 
     /** A long run's read-back was not done (`scan.skipped`): the run had already failed ([skipReadBack]). */
     const val SCAN_SKIPPED_RUN_FAILED = "run-already-failed"
@@ -824,6 +849,28 @@ object RawQualificationStaging {
     fun benchCameraHeld(deliveredFps: Double, expectedFps: Double, framesSeen: Long, completedInWindow: Long): Boolean =
         framesSeen > 0 && !RawQualificationFrameRate.fpsNotReached(deliveredFps, expectedFps) && framesSeen == completedInWindow
 
+    /**
+     * The `ratioBound` a compressed twin's verdict row and proof carry when its storage was judged as if uncompressed
+     * ([extrapolatedStorageRatio]): its benchmark was reused, so its ratio proves nothing about this scene.
+     */
+    const val RATIO_BOUND_UNCOMPRESSED = "uncompressed"
+
+    /**
+     * The compression ratio a compressed twin with no long run of its own (extrapolated: left out of the long-run order,
+     * kept from it by the heat, or a run the heat alone failed; and every camera-only twin) is judged at for the storage:
+     * the conservative ratio of the [bench] judging it when that benchmark was measured in this run, but 1.0 (as if
+     * uncompressed, a bound no scene can break) when it was [benchReused] from an earlier run. Compression depends on the
+     * scene, and a reused benchmark's ratio is the one of the scene it was measured on, which a busier scene now may not
+     * reach. The reused benchmark still says the encoder keeps up and which twins get a long run, in which order; a twin
+     * with its own long run is judged at that run's measured ratio. 1.0 without a benchmark.
+     */
+    fun extrapolatedStorageRatio(bench: RawEncodeBenchFigures?, benchReused: Boolean): Double =
+        if (bench == null || benchReused) 1.0 else bench.conservativeRatio
+
+    /** [bench] as [compressedVerdict] reads it for the storage: its ratio set to [extrapolatedStorageRatio]. */
+    fun storageJudgingBench(bench: RawEncodeBenchFigures?, benchReused: Boolean): RawEncodeBenchFigures? =
+        bench?.let { if (benchReused) it.copy(conservativeRatio = extrapolatedStorageRatio(it, true)) else it }
+
     /** The benchmark entry verdicts use: the production thread count when it was measured, else the first. */
     fun verdictBench(entries: List<RawEncodeBenchFigures?>, productionThreads: Int): RawEncodeBenchFigures? =
         entries.firstOrNull { it?.threads == productionThreads } ?: entries.firstOrNull()
@@ -833,9 +880,10 @@ object RawQualificationStaging {
  * When a heavy session's wait for the thermal status to drop below MODERATE ends before its timeout: the phone has
  * stopped cooling. After a heavy run it rarely gets below MODERATE within the wait, so the wait used to last its whole
  * timeout and the session ran anyway. Every poll samples a continuous temperature signal, the thermal headroom
- * (`PowerManager.getThermalHeadroom`, which falls as the phone cools) or else the battery temperature in °C; once the
- * wait has lasted [MIN_WAIT_MS] and the signal fell by less than its minimum drop over the last [WINDOW_MS], waiting on
- * would gain little. The constants are provisional until measured on the Razr.
+ * (`PowerManager.getThermalHeadroom`, which falls as the phone cools) while it covers a current window, or else the
+ * battery temperature in °C; once the wait has lasted [MIN_WAIT_MS] and the signal fell by less than its minimum drop
+ * over the last [WINDOW_MS], waiting on would gain little. The trend never ends a wait at SEVERE or hotter ([endsWait]).
+ * The constants are provisional until measured on the Razr.
  */
 object RawThermalTrend {
     /** The least a wait lasts before the trend can end it. */
@@ -871,11 +919,35 @@ object RawThermalTrend {
         return from.value - latest.value < minDrop
     }
 
+    /** The oldest the latest sample of a signal may be, at the wait's [elapsedMs], for its window to count as current. */
+    const val MAX_SAMPLE_AGE_MS = 5_000L
+
     /**
-     * [stoppedCooling] on the thermal [headroom] when it gave any usable value, else on the [batteryC] temperature;
-     * false with no usable signal, so the wait runs to its threshold or timeout as before.
+     * [samples] (non-finite values ignored) cover a current window at [elapsedMs]: the latest sample is at most
+     * [MAX_SAMPLE_AGE_MS] old, and one at least [WINDOW_MS] before it exists.
+     */
+    fun currentWindow(samples: List<Sample>, elapsedMs: Long): Boolean {
+        val usable = samples.filter { it.value.isFinite() }
+        val latest = usable.lastOrNull() ?: return false
+        if (elapsedMs - latest.elapsedMs > MAX_SAMPLE_AGE_MS) return false
+        return usable.any { it.elapsedMs <= latest.elapsedMs - WINDOW_MS }
+    }
+
+    /**
+     * [stoppedCooling] on the thermal [headroom] when it covers a current window ([currentWindow]), else on the
+     * [batteryC] temperature, so a headroom that gave a few readings and then stopped answering does not hide the
+     * battery's trend; false with no usable signal, so the wait runs to its threshold or timeout as before. A headroom
+     * with a current window that shows the phone still cooling keeps the wait going, whatever the battery says.
      */
     fun stoppedCooling(headroom: List<Sample>, batteryC: List<Sample>, elapsedMs: Long): Boolean =
-        if (headroom.any { it.value.isFinite() }) stoppedCooling(headroom, elapsedMs, MIN_HEADROOM_DROP)
+        if (currentWindow(headroom, elapsedMs)) stoppedCooling(headroom, elapsedMs, MIN_HEADROOM_DROP)
         else stoppedCooling(batteryC, elapsedMs, MIN_BATTERY_DROP_C)
+
+    /**
+     * The trend ends a thermal wait at the [thermalStatus] polled last: only below
+     * [RawQualificationStaging.THERMAL_STATUS_SEVERE] and once [stoppedCooling]. At SEVERE or hotter the session could
+     * not start (it would be a `thermal-skip`), so the wait goes on until the status permits a start or the timeout.
+     */
+    fun endsWait(thermalStatus: Int, headroom: List<Sample>, batteryC: List<Sample>, elapsedMs: Long): Boolean =
+        thermalStatus < RawQualificationStaging.THERMAL_STATUS_SEVERE && stoppedCooling(headroom, batteryC, elapsedMs)
 }

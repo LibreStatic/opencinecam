@@ -1179,9 +1179,11 @@ object RawQualificationRecords {
     /**
      * Which of a camera-only run's [incoming] records to store over the [existing] ones: a camera-only run never replaces
      * a record whose storage was tested. An incoming record is kept when its configuration (same build, protocol,
-     * destination and configuration) has no record yet, when the newest existing record is itself untested
-     * ([RawQualificationRisk.REASON_STORAGE_NOT_TESTED]), or when the camera evidence now fails (a FAIL that is not a
-     * storage failure), which revokes an earlier pass whatever tested it.
+     * destination and configuration) has no record yet, when the newest existing record came from a camera-only run
+     * itself (its method is [RawQualificationMethods.CAMERA_ONLY], whatever it concluded: a newer camera-only record
+     * replaces an earlier camera-only failure as much as an earlier camera-only pass), or when the camera evidence now
+     * fails conclusively ([conclusiveCameraFailure]), which revokes an earlier pass whatever tested it. A camera-only
+     * failure the heat may explain never replaces a storage-tested record.
      */
     fun cameraOnlyMerge(existing: List<RawVideoQualificationRecord>, incoming: List<RawVideoQualificationRecord>): List<RawVideoQualificationRecord> =
         incoming.filter { record ->
@@ -1191,10 +1193,36 @@ object RawQualificationRecords {
                         it.destinationId == record.destinationId && it.config == record.config
                 }
                 .maxByOrNull(RawVideoQualificationRecord::measuredAtEpochMs)
-            newest == null ||
-                RawQualificationRisk.REASON_STORAGE_NOT_TESTED in newest.qualification.reasonCodes ||
-                (record.qualification.status == RawBenchmarkStatus.FAIL && !RawQualificationRisk.isStorageFailure(record.qualification))
+            newest == null || newest.method == RawQualificationMethods.CAMERA_ONLY || conclusiveCameraFailure(record.qualification)
         }
+
+    /**
+     * The reasons that prove the camera or the encoder cannot deliver a configuration, whatever the storage: the camera
+     * missed the rate ([RawQualificationStaging.REASON_FPS_NOT_REACHED]), declared or showed its limit
+     * ([RawQualificationFrameRate.REASON_CAMERA_FPS_LIMIT], [RawQualificationFrameRate.REASON_CAMERA_NO_FRAMES]), did not
+     * hold the rate under the encode load ([RawQualificationStaging.REASON_COMPRESSED_CAMERA_STARVED]), or the encoder is
+     * too slow ([RawQualificationStaging.REASON_COMPRESSED_ENCODE_TOO_SLOW]). Legacy `lj92-…` names count by their
+     * current one ([RawQualificationStaging.canonicalReason]).
+     */
+    val CONCLUSIVE_CAMERA_REASONS: Set<String> = setOf(
+        RawQualificationStaging.REASON_FPS_NOT_REACHED,
+        RawQualificationFrameRate.REASON_CAMERA_FPS_LIMIT,
+        RawQualificationFrameRate.REASON_CAMERA_NO_FRAMES,
+        RawQualificationStaging.REASON_COMPRESSED_CAMERA_STARVED,
+        RawQualificationStaging.REASON_COMPRESSED_ENCODE_TOO_SLOW,
+    )
+
+    /**
+     * A camera-only verdict [q] that may revoke a storage-tested record ([cameraOnlyMerge]): a FAIL that is not a storage
+     * failure, with at least one [CONCLUSIVE_CAMERA_REASONS] code and no [RawQualificationStaging.REASON_THERMAL_LIMIT]
+     * (a shortfall at SEVERE heat may be the heat's, as [RawQualificationStaging.compressedHeatOnly] and the benchmark
+     * descent treat it). A pass, a risky `storage-not-tested` verdict, a heat failure and any other fault (a copy error,
+     * a hung consumer) are not conclusive; an UNKNOWN verdict is never stored at all.
+     */
+    fun conclusiveCameraFailure(q: RawVideoQualification): Boolean =
+        q.status == RawBenchmarkStatus.FAIL && !RawQualificationRisk.isStorageFailure(q) &&
+            RawQualificationStaging.REASON_THERMAL_LIMIT !in q.reasonCodes &&
+            q.reasonCodes.any { RawQualificationStaging.canonicalReason(it) in CONCLUSIVE_CAMERA_REASONS }
 
     /** The overall status of run statuses (`PASS`/`FAIL`/`UNKNOWN`), as the report computes it. */
     fun overallStatus(runStatuses: List<String>): RawQualificationStatus = when {

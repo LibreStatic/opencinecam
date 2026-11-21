@@ -36,8 +36,8 @@ import kotlinx.serialization.json.put
  * ([fingerprint], [appVersion]) and [protocolVersion]'s entries count, each for
  * [RawQualificationEvidenceRules.MAX_AGE_MS]; [put] refuses results that are not reusable
  * ([RawQualificationEvidenceRules.reusableResult]), and drops other builds' and expired entries. Writes go to a temporary
- * file that is synced and renamed over the store; a missing, unreadable or unknown-schema file reads as empty. Thread-safe
- * within the process, across instances too.
+ * file that is synced and renamed over the store; a missing, unreadable, malformed or unknown-schema file reads as empty,
+ * so the next [put] replaces it. Thread-safe within the process, across instances too.
  */
 class RawQualificationEvidenceStore(
     private val file: File,
@@ -126,11 +126,15 @@ class RawQualificationEvidenceStore(
             }))
         }.toString()
 
-        /** The entries of [raw]; empty for an unreadable file or another [SCHEMA]. An entry that does not parse is dropped. */
+        /**
+         * The entries of [raw]; empty for an unreadable file, another [SCHEMA] or a malformed root, schema or entry list
+         * (a schema that is an object, entries that are not an array), so the next [put] rewrites the file instead of
+         * failing on it. An entry that does not parse is dropped.
+         */
         fun decode(raw: String): List<RawQualificationEvidence> {
-            val root = runCatching { json.parseToJsonElement(raw).jsonObject }.getOrNull() ?: return emptyList()
-            if (root["schema"]?.jsonPrimitive?.intOrNull != SCHEMA) return emptyList()
-            val entries = runCatching { root["entries"]?.jsonArray }.getOrNull() ?: return emptyList()
+            val root = runCatching { json.parseToJsonElement(raw) as? JsonObject }.getOrNull() ?: return emptyList()
+            if ((root["schema"] as? JsonPrimitive)?.intOrNull != SCHEMA) return emptyList()
+            val entries = root["entries"] as? JsonArray ?: return emptyList()
             return entries.mapNotNull { element -> runCatching { entryOf(element.jsonObject) }.getOrNull() }
         }
 

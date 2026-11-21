@@ -1183,5 +1183,41 @@ class RawQualificationStagingTest {
         assertFalse(RawThermalTrend.stoppedCooling(emptyList(), emptyList(), 180_000))
     }
 
+    @Test fun aHeadroomWithoutACurrentWindowLeavesTheTrendToTheBattery() {
+        val flatBattery = samples(*(0L..40_000L step 2_000L).map { it to 41.0 }.toTypedArray())
+        val coolingBattery = samples(*(0L..40_000L step 2_000L).map { it to 41.0 - it / 10_000.0 }.toTypedArray())
+        // The headroom answered twice, then only NaN or nothing: its last reading is stale, so the battery decides.
+        val stale = samples(0L to 0.8, 2_000L to 0.8, 4_000L to Double.NaN, 30_000L to Double.NaN)
+        assertFalse(RawThermalTrend.currentWindow(stale, 40_000))
+        assertTrue(RawThermalTrend.stoppedCooling(stale, flatBattery, 40_000))
+        assertFalse(RawThermalTrend.stoppedCooling(stale, coolingBattery, 40_000))
+        // Recent readings that do not reach back a whole window are no current window either.
+        val short = samples(30_000L to 0.8, 34_000L to 0.8, 38_000L to 0.8)
+        assertFalse(RawThermalTrend.currentWindow(short, 40_000))
+        assertTrue(RawThermalTrend.stoppedCooling(short, flatBattery, 40_000))
+        // A current headroom window decides: cooling keeps the wait going even with a flat battery.
+        val coolingHeadroom = samples(*(0L..40_000L step 2_000L).map { it to 0.9 - it / 400_000.0 }.toTypedArray())
+        assertTrue(RawThermalTrend.currentWindow(coolingHeadroom, 40_000))
+        assertFalse(RawThermalTrend.stoppedCooling(coolingHeadroom, flatBattery, 40_000))
+        // A latest reading up to MAX_SAMPLE_AGE_MS old still counts; older does not.
+        val flatHeadroom = samples(0L to 0.8, 20_000L to 0.8)
+        assertTrue(RawThermalTrend.currentWindow(flatHeadroom, 20_000 + RawThermalTrend.MAX_SAMPLE_AGE_MS))
+        assertFalse(RawThermalTrend.currentWindow(flatHeadroom, 20_001 + RawThermalTrend.MAX_SAMPLE_AGE_MS))
+        assertFalse(RawThermalTrend.stoppedCooling(flatHeadroom, coolingBattery, 20_001 + RawThermalTrend.MAX_SAMPLE_AGE_MS))
+    }
+
+    @Test fun theTrendNeverEndsAWaitAtSevereHeat() {
+        val flat = samples(*(0L..30_000L step 2_000L).map { it to 0.80 }.toTypedArray())
+        val severe = RawQualificationStaging.THERMAL_STATUS_SEVERE
+        assertTrue(RawThermalTrend.endsWait(RawQualificationStaging.THERMAL_STATUS_MODERATE, flat, emptyList(), 30_000))
+        assertTrue(RawThermalTrend.endsWait(severe - 1, flat, emptyList(), 30_000))
+        // At SEVERE or hotter the session could not start: the wait goes on to a permitted status or the timeout.
+        assertFalse(RawThermalTrend.endsWait(severe, flat, emptyList(), 30_000))
+        assertFalse(RawThermalTrend.endsWait(severe + 1, flat, emptyList(), 30_000))
+        // Below SEVERE a still-cooling phone keeps waiting as before.
+        val falling = samples(*(0L..30_000L step 2_000L).map { it to 0.90 - it / 1_000_000.0 * 2 }.toTypedArray())
+        assertFalse(RawThermalTrend.endsWait(RawQualificationStaging.THERMAL_STATUS_MODERATE, falling, emptyList(), 30_000))
+    }
+
     // endregion
 }
