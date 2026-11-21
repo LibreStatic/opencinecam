@@ -341,34 +341,7 @@ class LocalMediaRepository(context: Context) {
         MetadataDocument(artifact, null, failure is java.io.FileNotFoundException)
     }
 
-    private fun uncommittedNamespaces(): Set<String> = buildSet {
-        check(context.noBackupFilesDir.isDirectory && context.noBackupFilesDir.canRead()) { "Gallery recovery directory unavailable" }
-        for ((name, prefix) in listOf("still-recovery.sqlite" to "still:", "recording-recovery.sqlite" to "take:")) {
-            val file = File(context.noBackupFilesDir, name)
-            if (!file.exists()) continue
-            check(file.isFile) { "Gallery recovery journal is not a file: $name" }
-            try {
-                SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READONLY,
-                    { throw IllegalStateException("Gallery recovery journal is corrupt: $name") }).use { db ->
-                    // Version 2 (PLAN-072) adds the drive columns; the id and committed columns read here are unchanged.
-                    check(db.version in 1..2) { "Unsupported gallery recovery journal version: $name" }
-                    db.rawQuery("SELECT id, committed FROM captures ORDER BY id LIMIT 129", null).use { cursor ->
-                        var count = 0
-                        val ids = mutableSetOf<String>()
-                        while (cursor.moveToNext()) {
-                            check(++count <= 128) { "Gallery recovery journal exceeds capacity: $name" }
-                            check(cursor.getType(0) == Cursor.FIELD_TYPE_STRING && canonicalMediaId(cursor.getString(0)))
-                            check(ids.add(cursor.getString(0))) { "Duplicate gallery recovery identity: $name" }
-                            check(cursor.getType(1) == Cursor.FIELD_TYPE_INTEGER && cursor.getLong(1) in 0L..1L)
-                            if (cursor.getLong(1) == 0L) add(prefix + cursor.getString(0))
-                        }
-                    }
-                }
-            } catch (failure: Exception) {
-                throw IllegalStateException("Gallery recovery state unavailable: $name", failure)
-            }
-        }
-    }
+    private fun uncommittedNamespaces(): Set<String> = uncommittedCaptureNamespaces(context.noBackupFilesDir)
 
     private fun root(kind: LocalMediaKind): String = if (kind == LocalMediaKind.AUDIO) "Music" else "DCIM"
     private fun collection(kind: LocalMediaKind): Uri = when (kind) {
@@ -387,3 +360,49 @@ class LocalMediaRepository(context: Context) {
             "relative_path", "owner_package_name", "is_pending")
     }
 }
+
+/**
+ * The namespaces of the uncommitted captures in the still and recording recovery journals under [directory]
+ * (`still:<id>`, `take:<id>`), which the gallery hides and refuses to delete. Read-only: a missing journal reads as
+ * empty. Fail-closed: a journal newer than the schema its writer creates ([StillCaptureRecovery.JOURNAL_VERSION],
+ * [RecordingCaptureRecovery.JOURNAL_VERSION]), over its capacity (phone and drive entries are bounded apart), corrupt,
+ * or holding a malformed or duplicate row throws.
+ */
+internal fun uncommittedCaptureNamespaces(directory: File): Set<String> = buildSet {
+    check(directory.isDirectory && directory.canRead()) { "Gallery recovery directory unavailable" }
+    for (journal in listOf(
+        CaptureJournal(StillCaptureRecovery.DATABASE, "still:", StillCaptureRecovery.JOURNAL_VERSION,
+            StillCaptureRecovery.MAX_GROUPS + StillCaptureRecovery.MAX_DRIVE_GROUPS),
+        CaptureJournal(RecordingCaptureRecovery.DATABASE, "take:", RecordingCaptureRecovery.JOURNAL_VERSION,
+            RecordingCaptureRecovery.MAX_PHONE_TAKES + RecordingCaptureRecovery.MAX_DRIVE_TAKES),
+    )) {
+        val name = journal.name
+        val file = File(directory, name)
+        if (!file.exists()) continue
+        check(file.isFile) { "Gallery recovery journal is not a file: $name" }
+        try {
+            SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READONLY,
+                { throw IllegalStateException("Gallery recovery journal is corrupt: $name") }).use { db ->
+                // Later versions add columns (PLAN-072's drive columns, the recording `reason`); the id and committed
+                // columns read here are unchanged since version 1.
+                check(db.version in 1..journal.version) { "Unsupported gallery recovery journal version: $name" }
+                db.rawQuery("SELECT id, committed FROM captures ORDER BY id LIMIT ${journal.capacity + 1}", null).use { cursor ->
+                    var count = 0
+                    val ids = mutableSetOf<String>()
+                    while (cursor.moveToNext()) {
+                        check(++count <= journal.capacity) { "Gallery recovery journal exceeds capacity: $name" }
+                        check(cursor.getType(0) == Cursor.FIELD_TYPE_STRING && canonicalMediaId(cursor.getString(0)))
+                        check(ids.add(cursor.getString(0))) { "Duplicate gallery recovery identity: $name" }
+                        check(cursor.getType(1) == Cursor.FIELD_TYPE_INTEGER && cursor.getLong(1) in 0L..1L)
+                        if (cursor.getLong(1) == 0L) add(journal.prefix + cursor.getString(0))
+                    }
+                }
+            }
+        } catch (failure: Exception) {
+            throw IllegalStateException("Gallery recovery state unavailable: $name", failure)
+        }
+    }
+}
+
+/** A recovery journal the gallery reads: its file [name], namespace [prefix], newest schema [version] and row [capacity]. */
+private class CaptureJournal(val name: String, val prefix: String, val version: Int, val capacity: Int)

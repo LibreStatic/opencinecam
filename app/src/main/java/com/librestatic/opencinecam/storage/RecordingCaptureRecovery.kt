@@ -114,17 +114,17 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
             { throw IllegalStateException("Recording recovery journal is corrupt") })
         try {
             db.execSQL("PRAGMA synchronous=FULL")
-            check(db.version in 0..3) { "Unsupported recording recovery journal version" }
+            check(db.version in 0..JOURNAL_VERSION) { "Unsupported recording recovery journal version" }
             if (db.version == 0) db.transaction {
                 execSQL("CREATE TABLE captures(id TEXT PRIMARY KEY NOT NULL, committed INTEGER NOT NULL CHECK(committed IN (0,1)), " +
                     "tree TEXT, volume TEXT, folder TEXT, reason TEXT)")
-                version = 3
-            } else if (db.version < 3) db.transaction {
+                version = JOURNAL_VERSION
+            } else if (db.version < JOURNAL_VERSION) db.transaction {
                 // Version 1 rows are MediaStore takes: the new columns stay NULL. A column already present is kept.
                 // Version 3 adds `reason`: why a take was left for recovery (NULL: the process died).
                 val columns = rawQuery("PRAGMA table_info(captures)", null).use { c -> buildSet { while (c.moveToNext()) add(c.getString(1)) } }
                 listOf("tree", "volume", "folder", "reason").filter { it !in columns }.forEach { execSQL("ALTER TABLE captures ADD COLUMN $it TEXT") }
-                version = 3
+                version = JOURNAL_VERSION
             }
             check(count(db, phone = true) <= MAX_PHONE_TAKES && count(db, phone = false) <= MAX_DRIVE_TAKES) { "Recording recovery capacity exceeded" }
             return db
@@ -580,7 +580,7 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
     internal fun allRows(id: String): Set<Uri> = mediaStore.allRows(id)
 
     companion object {
-        private const val DATABASE = "recording-recovery.sqlite"
+        internal const val DATABASE = "recording-recovery.sqlite"
         /**
          * Called when the last take recording to a drive ends and a RAW repair gave way to it: the owner queues a
          * [recover] pass. Runs under the journal's lock, so it must only hand the pass to another thread. The capture
@@ -593,6 +593,8 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
          * journal's locks, so it must only hand the pass to another thread. The capture service sets it while it lives.
          */
         @Volatile internal var onDriveTakeReleased: (() -> Unit)? = null
+        /** The schema [open] creates or migrates to; the gallery's read-only reader accepts up to it ([uncommittedCaptureNamespaces]). */
+        internal const val JOURNAL_VERSION = 3
         /** Phone takes (NULL `tree`) journalled at once; a phone take beyond it is refused. */
         internal const val MAX_PHONE_TAKES = 128
         /** Drive takes journalled at once; a drive take beyond it forgets the oldest deferred one ([journal]). */
