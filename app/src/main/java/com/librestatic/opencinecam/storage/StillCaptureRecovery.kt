@@ -239,19 +239,19 @@ internal class StillCaptureRecovery(context: Context,
             { throw IllegalStateException("Interrupted still journal is corrupt") })
         try {
             db.execSQL("PRAGMA synchronous=FULL")
-            check(db.version in 0..2) { "Unsupported interrupted still journal version" }
+            check(db.version in 0..JOURNAL_VERSION) { "Unsupported interrupted still journal version" }
             if (db.version == 0) {
                 db.transaction {
                     execSQL("CREATE TABLE captures(id TEXT PRIMARY KEY NOT NULL, committed INTEGER NOT NULL CHECK(committed IN (0,1)), " +
                         "tree TEXT, volume TEXT, folder TEXT)")
-                    version = 2
+                    version = JOURNAL_VERSION
                 }
             } else if (db.version == 1) {
                 db.transaction {
                     // Version 1 rows are MediaStore groups: the new columns stay NULL. A column already present is kept.
                     val columns = rawQuery("PRAGMA table_info(captures)", null).use { c -> buildSet { while (c.moveToNext()) add(c.getString(1)) } }
                     listOf("tree", "volume", "folder").filter { it !in columns }.forEach { execSQL("ALTER TABLE captures ADD COLUMN $it TEXT") }
-                    version = 2
+                    version = JOURNAL_VERSION
                 }
             }
             check(count(db, phone = true) <= MAX_GROUPS && count(db, phone = false) <= MAX_DRIVE_GROUPS) {
@@ -416,7 +416,9 @@ internal class StillCaptureRecovery(context: Context,
         private val processLock = Any()
         /** Drive groups a [recover] is resolving, or [publish] writing, outside [processLock]; guarded by it. */
         private val claimedDriveGroups = HashSet<String>()
-        private const val DATABASE = "still-recovery.sqlite"
+        internal const val DATABASE = "still-recovery.sqlite"
+        /** The schema [open] creates or migrates to; the gallery's read-only reader accepts up to it ([uncommittedCaptureNamespaces]). */
+        internal const val JOURNAL_VERSION = 2
         /** Phone groups (NULL `tree`) journalled at once; a phone still beyond it is refused. */
         internal const val MAX_GROUPS = 128
         /** Drive groups journalled at once; a drive group beyond it forgets the oldest deferred one ([publish]). */
