@@ -452,6 +452,12 @@ class RawQualificationShorterRunTest {
             "lj92-encode-too-slow")) {
             assertTrue(code, RawQualificationRecords.conclusiveCameraFailure(q.copy(reasonCode = code, reasonCodes = listOf(code))))
         }
+        // A shortfall beside a lost buffer or a copy error may be the fault's: the tested record stands.
+        for (fault in listOf("camera-frame-loss", "copy-error")) {
+            val mixed = incoming("fps-not-reached").let { it.copy(qualification = it.qualification.copy(reasonCodes = listOf("fps-not-reached", fault))) }
+            assertFalse(fault, RawQualificationRecords.conclusiveCameraFailure(mixed.qualification))
+            assertTrue(fault, RawQualificationRecords.cameraOnlyMerge(tested, listOf(mixed)).isEmpty())
+        }
         // A risky storage-not-tested verdict, a pass or a storage failure never do.
         assertFalse(RawQualificationRecords.conclusiveCameraFailure(cameraOnlyRecord("full@60", RawQualificationStaging.cameraOnlyVerdict(RawStageResult.PASS)).qualification))
         assertFalse(RawQualificationRecords.conclusiveCameraFailure(q.copy(status = RawBenchmarkStatus.PASS, reasonCodes = emptyList())))

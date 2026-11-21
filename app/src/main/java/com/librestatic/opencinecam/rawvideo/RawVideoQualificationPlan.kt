@@ -1212,16 +1212,21 @@ object RawQualificationRecords {
         RawQualificationStaging.REASON_COMPRESSED_ENCODE_TOO_SLOW,
     )
 
+    /** The camera check's harness faults: frames lost between the camera and the ring, and failed row copies. */
+    val INCONCLUSIVE_CAMERA_FAULTS: Set<String> = setOf("camera-frame-loss", "copy-error")
+
     /**
      * A camera-only verdict [q] that may revoke a storage-tested record ([cameraOnlyMerge]): a FAIL that is not a storage
      * failure, with at least one [CONCLUSIVE_CAMERA_REASONS] code and no [RawQualificationStaging.REASON_THERMAL_LIMIT]
      * (a shortfall at SEVERE heat may be the heat's, as [RawQualificationStaging.compressedHeatOnly] and the benchmark
-     * descent treat it). A pass, a risky `storage-not-tested` verdict, a heat failure and any other fault (a copy error,
-     * a hung consumer) are not conclusive; an UNKNOWN verdict is never stored at all.
+     * descent treat it) nor a harness fault ([INCONCLUSIVE_CAMERA_FAULTS]: a lost buffer or a copy error also lowers
+     * the measured rate, so a shortfall beside one may be the fault's). A pass, a risky `storage-not-tested` verdict, a
+     * heat failure and any other fault (a hung consumer) are not conclusive; an UNKNOWN verdict is never stored at all.
      */
     fun conclusiveCameraFailure(q: RawVideoQualification): Boolean =
         q.status == RawBenchmarkStatus.FAIL && !RawQualificationRisk.isStorageFailure(q) &&
             RawQualificationStaging.REASON_THERMAL_LIMIT !in q.reasonCodes &&
+            q.reasonCodes.none { it in INCONCLUSIVE_CAMERA_FAULTS } &&
             q.reasonCodes.any { RawQualificationStaging.canonicalReason(it) in CONCLUSIVE_CAMERA_REASONS }
 
     /** The overall status of run statuses (`PASS`/`FAIL`/`UNKNOWN`), as the report computes it. */
