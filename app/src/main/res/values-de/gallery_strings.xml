@@ -20,6 +20,8 @@
     <string name="gallery_empty">Keine Aufnahmen entsprechen dieser Suche und diesen Filtern.</string>
     <string name="gallery_load_failed">Der Katalog konnte nicht gelesen werden. Vorhandene Ergebnisse bleiben erhalten; versuche es erneut, um fortzufahren.</string>
     <string name="gallery_retry">Erneut lesen</string>
+    <string name="gallery_error_title">Deine Medien konnten nicht geladen werden</string>
+    <string name="gallery_error_body">Beim Lesen des Katalogs ist ein Fehler aufgetreten. Versuche es erneut.</string>
     <string name="gallery_more">Nächste Ergebnisse laden</string>
     <string name="gallery_no_more">Ende der Ergebnisse</string>
     <string name="gallery_declared">Alle Dateien vorhanden</string>
