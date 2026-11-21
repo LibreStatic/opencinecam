@@ -1633,6 +1633,19 @@ fun GalleryError() = GalleryWith(object : MediaCatalogSource {
     override suspend fun thumbnail(artifact: LocalMediaArtifact): Bitmap? = null
 })
 
+/** The sample takes listed, with a next page whose read fails: `click tag=gallery-more` shows the inline notice under them. */
+@Composable
+fun GalleryErrorPartial() {
+    val catalog = remember { FakeCatalog(SampleTakes) }
+    GalleryWith(remember(catalog) {
+        object : MediaCatalogSource by catalog {
+            override suspend fun page(settings: GallerySettings, query: String, cursor: LocalMediaCursor?, limit: Int): LocalMediaPage =
+                if (cursor != null) throw IOException("MediaStore unavailable")
+                else catalog.page(settings, query, null, limit).copy(next = LocalMediaCursor("driver", emptyMap(), emptySet()))
+        }
+    })
+}
+
 /** About, with the bundled third-party license catalog. */
 @Composable
 fun About() = DriverTheme { AboutScreen(onBack = {}, onOpenUri = {}, onReplayTour = {}) }

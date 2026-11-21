@@ -20,6 +20,8 @@
     <string name="gallery_empty">Nessuna acquisizione corrisponde a questa ricerca e a questi filtri.</string>
     <string name="gallery_load_failed">Impossibile leggere il catalogo. I risultati esistenti sono mantenuti; riprova per continuare.</string>
     <string name="gallery_retry">Riprova la lettura</string>
+    <string name="gallery_error_title">Impossibile caricare i tuoi contenuti multimediali</string>
+    <string name="gallery_error_body">Si è verificato un errore durante la lettura del catalogo. Riprova.</string>
     <string name="gallery_more">Carica altri risultati</string>
     <string name="gallery_no_more">Fine dei risultati</string>
     <string name="gallery_declared">Tutti i file presenti</string>

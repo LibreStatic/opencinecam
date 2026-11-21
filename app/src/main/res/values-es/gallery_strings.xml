@@ -20,6 +20,8 @@
     <string name="gallery_empty">No hay capturas que coincidan con esta búsqueda y estos filtros.</string>
     <string name="gallery_load_failed">No se pudo leer el catálogo. Los resultados existentes se conservan; reintenta para continuar.</string>
     <string name="gallery_retry">Reintentar lectura</string>
+    <string name="gallery_error_title">No se pudo cargar tu contenido multimedia</string>
+    <string name="gallery_error_body">Algo salió mal al leer el catálogo. Vuelve a intentarlo.</string>
     <string name="gallery_more">Cargar siguientes resultados</string>
     <string name="gallery_no_more">Fin de los resultados</string>
     <string name="gallery_declared">Están todos los archivos</string>

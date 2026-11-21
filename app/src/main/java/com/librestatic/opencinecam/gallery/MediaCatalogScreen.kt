@@ -35,6 +35,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -47,6 +48,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -64,6 +66,7 @@ import com.librestatic.opencinecam.settings.SettingsPill
 import com.librestatic.opencinecam.playback.probeClipMetadata
 import com.librestatic.opencinecam.storage.*
 import com.librestatic.opencinecam.subject.SubjectReviewOperatorBar
+import com.librestatic.opencinecam.ui.CineGlyph
 import com.librestatic.opencinecam.ui.CineIcon
 import com.librestatic.opencinecam.ui.CineIconButton
 import com.librestatic.opencinecam.ui.listEntrance
@@ -470,10 +473,16 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
     }
     val status: @Composable () -> Unit = {
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            val retry: () -> Unit = { load = load.copy(loading = true); batch++ }
             when {
-                visible.failed -> {
-                    Text(stringResource(R.string.gallery_load_failed), Modifier.fillMaxWidth().testTag("gallery-error"), color = GalleryWarning)
-                    GalleryButton("retry", R.string.gallery_retry) { load = load.copy(loading = true); batch++ }
+                // Nothing listed: the failure takes the list's place, centred under the controls ([GalleryGrid]).
+                visible.failed && visible.takes.isEmpty() -> GalleryErrorState(retry)
+                // A later page or a refresh failed: what is listed stays, so a compact notice closes the list.
+                visible.failed -> Column(Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(R.string.gallery_load_failed), Modifier.fillMaxWidth().testTag("gallery-error"),
+                        color = GalleryWarning, textAlign = TextAlign.Center)
+                    GalleryRetryButton(retry)
                 }
                 // Only a finished read says there is nothing: while reading, the spinner holds the list's place.
                 !visible.loading && visible.takes.isEmpty() ->
@@ -506,6 +515,8 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
 
     // Nothing to show yet: one spinner where the list will be, never the empty message.
     val busy = visible.loading && visible.takes.isEmpty()
+    // The failure with nothing listed fills the space under the controls, so its state sits in the middle of it.
+    val fillStatus = visible.failed && visible.takes.isEmpty()
     val coordinator = LocalFoldDisplayCoordinator.current
     val foldFallback = remember { MutableStateFlow(FoldDisplayState()) }
     val fold by (coordinator?.states ?: foldFallback).collectAsState()
@@ -548,17 +559,17 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
                 val gridWidth = grid.width.toDp().value
                 GalleryGrid(Modifier.absoluteOffset(grid.left.toDp(), grid.top.toDp()).size(grid.width.toDp(), grid.height.toDp()),
                     galleryColumns(gridWidth, windowWidthClass(gridWidth), windowHeightClass(grid.height.toDp().value)),
-                    gridState, groups, controls, status, card, busy)
+                    gridState, groups, controls, status, card, busy, fillStatus)
                 inspector(Modifier.absoluteOffset(pane.left.toDp(), pane.top.toDp()).size(pane.width.toDp(), pane.height.toDp()).padding(12.dp))
             }
             side -> Row(Modifier.fillMaxSize()) {
                 val inspectorWidth = mediaInspectorWidthDp(areaWidth)
                 GalleryGrid(Modifier.weight(1f).fillMaxHeight(), galleryColumns(areaWidth - inspectorWidth, widthClass, heightClass),
-                    gridState, groups, controls, status, card, busy)
+                    gridState, groups, controls, status, card, busy, fillStatus)
                 inspector(Modifier.width(inspectorWidth.dp).padding(top = 12.dp, end = 12.dp, bottom = 12.dp))
             }
             else -> GalleryGrid(Modifier.fillMaxSize(), galleryColumns(areaWidth, widthClass, heightClass), gridState, groups,
-                controls, status, card, busy)
+                controls, status, card, busy, fillStatus)
         }
         if (!side && detailsOpen) selectedTake?.let { take ->
             MediaInspectorSheet(take, mediaDetailsAsBottomSheet(widthClass, landscape), onDismiss = { detailsOpen = false }) { shown, modifier, close ->
@@ -568,18 +579,34 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
     }
 }
 
-/** Controls, then the takes under a header per shooting day, then the paging status; [busy] centres a spinner under the controls. */
+/**
+ * Controls, then the takes under a header per shooting day, then the paging status; [busy] centres a spinner under the
+ * controls. With [fillStatus] the status is at least as tall as the viewport left under the controls, its content centred
+ * in it; where the controls leave less, it simply follows them and scrolls with the grid.
+ */
 @Composable
 private fun GalleryGrid(modifier: Modifier, columns: Int, state: LazyGridState, groups: List<Pair<LocalDate, List<LocalMediaTake>>>,
     controls: @Composable () -> Unit, status: @Composable () -> Unit, card: @Composable (LocalMediaTake, Modifier) -> Unit,
-    busy: Boolean) {
+    busy: Boolean, fillStatus: Boolean = false) {
     val entrance = rememberGridEntrance(state, columns) { groups.isNotEmpty() }
     val reducedMotion = LocalReducedMotion.current
+    val density = LocalDensity.current
+    val padding = 12.dp
+    val spacing = 10.dp
+    // Measured from the controls themselves, not their place in the grid, so scrolling never changes it, and from the
+    // viewport, which the status item's own height never changes: no layout feedback.
+    var controlsHeight by remember { mutableIntStateOf(0) }
+    val viewportHeight by remember(state) { derivedStateOf { state.layoutInfo.viewportSize.height } }
+    val statusMinHeight = if (!fillStatus) 0.dp else with(density) {
+        (viewportHeight - controlsHeight - (padding * 2 + spacing).roundToPx()).coerceAtLeast(0).toDp()
+    }
     Box(modifier) {
     LazyVerticalGrid(GridCells.Fixed(columns), Modifier.fillMaxSize().testTag("gallery-list"), state,
-        contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        item(key = "controls", span = { GridItemSpan(maxLineSpan) }, contentType = "controls") { controls() }
+        contentPadding = PaddingValues(padding), verticalArrangement = Arrangement.spacedBy(spacing),
+        horizontalArrangement = Arrangement.spacedBy(spacing)) {
+        item(key = "controls", span = { GridItemSpan(maxLineSpan) }, contentType = "controls") {
+            Box(Modifier.onSizeChanged { controlsHeight = it.height }) { controls() }
+        }
         // The controls are item 0; every header and take after it counts toward the entrance order.
         var index = 1
         for ((day, takes) in groups) {
@@ -590,7 +617,9 @@ private fun GalleryGrid(modifier: Modifier, columns: Int, state: LazyGridState, 
             }
             index = first + takes.size
         }
-        item(key = "status", span = { GridItemSpan(maxLineSpan) }, contentType = "status") { status() }
+        item(key = "status", span = { GridItemSpan(maxLineSpan) }, contentType = "status") {
+            Box(Modifier.fillMaxWidth().heightIn(min = statusMinHeight), contentAlignment = Alignment.Center) { status() }
+        }
     }
     AnimatedVisibility(busy, Modifier.align(Alignment.Center).offset {
         // The middle of the space under the controls, kept on screen when they fill most of it.
@@ -619,6 +648,36 @@ internal fun validGalleryQuery(query: String): Boolean = query.length <= 128 && 
 /** Saveable-state memory bound, like the rename fields. Anything cut here is already invalid (>128),
  * so the bound never turns a paste into a different accepted query. */
 internal fun galleryQueryInput(candidate: String): String = candidate.take(512)
+
+/** The catalog could not be read and nothing is listed: a large warning, what happened, and a retry. */
+@Composable
+private fun GalleryErrorState(retry: () -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 24.dp).testTag("gallery-error"),
+        horizontalAlignment = Alignment.CenterHorizontally) {
+        // Lines of even length: a wrapped sentence never leaves its last word alone on a line.
+        val balanced = androidx.compose.material3.LocalTextStyle.current.copy(lineBreak = androidx.compose.ui.text.style.LineBreak.Heading)
+        // Decorative: the title says what happened.
+        CineGlyph(CineIcon.WARNING, GalleryWarning, Modifier.size(52.dp))
+        Spacer(Modifier.height(16.dp))
+        Text(stringResource(R.string.gallery_error_title), Modifier.widthIn(max = 480.dp).semantics { heading() }
+            .testTag("gallery-error-title"), color = MaterialTheme.colorScheme.onSurface, fontSize = 18.sp,
+            fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, style = balanced)
+        Spacer(Modifier.height(8.dp))
+        Text(stringResource(R.string.gallery_error_body), Modifier.widthIn(max = 480.dp).testTag("gallery-error-body"),
+            color = SettingsMuted, fontSize = 14.sp, textAlign = TextAlign.Center, style = balanced)
+        Spacer(Modifier.height(20.dp))
+        GalleryRetryButton(retry)
+    }
+}
+
+/** Retry as wide as its label, unlike the full-width paging buttons. */
+@Composable
+private fun GalleryRetryButton(retry: () -> Unit) {
+    OutlinedButton(retry, Modifier.heightIn(min = 48.dp).testTag("gallery-retry"),
+        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 8.dp)) {
+        Text(stringResource(R.string.gallery_retry), Modifier.testTag("gallery-retry-label"), textAlign = TextAlign.Center)
+    }
+}
 
 @Composable
 private fun GalleryButton(tag: String, label: Int, enabled: Boolean = true, action: () -> Unit) {
