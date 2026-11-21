@@ -145,6 +145,10 @@ enum class RawQualificationStage {
  * Each codec's benchmark runs once per [encodeThreads] entry (null: the codec's production count,
  * [RawFrameEncoders.defaultThreads]), each with [encodeStrips] strips; verdicts use the production
  * thread count when it was measured, else the first.
+ *
+ * [options] are the user's choices for a shorter run ([RawQualificationOptions]); [reuseEvidence] lets the
+ * qualifier reuse the camera checks and encode benchmarks of an earlier run ([RawQualificationEvidence]). Only
+ * the app's plan ([DEFAULT]) reuses: the device test's explicit plans and partial stages always measure.
  */
 data class RawQualificationPlan(
     val specs: List<String>,
@@ -152,6 +156,8 @@ data class RawQualificationPlan(
     val stages: Set<RawQualificationStage> = RawQualificationStage.ALL,
     val encodeThreads: List<Int>? = null,
     val encodeStrips: Int = RawFrameEncoders.DEFAULT_STRIPS,
+    val options: RawQualificationOptions = RawQualificationOptions(),
+    val reuseEvidence: Boolean = false,
 ) {
     init {
         require(specs.isNotEmpty()) { "a qualification plan needs at least one spec" }
@@ -165,12 +171,31 @@ data class RawQualificationPlan(
     /** The thread counts [encoding]'s benchmark runs with. */
     fun threadsFor(encoding: String): List<Int> = encodeThreads ?: listOf(RawFrameEncoders.defaultThreads(encoding))
 
-    /** The stages that run: a long run needs the sweep's figures, so LONG brings SWEEP along. */
-    val effectiveStages: Set<RawQualificationStage>
+    /** The stages asked for: a long run needs the sweep's figures, so LONG brings SWEEP along. */
+    private val requestedStages: Set<RawQualificationStage>
         get() = if (RawQualificationStage.LONG in stages) stages + RawQualificationStage.SWEEP else stages
 
-    /** Every stage runs, so the verdicts are complete and records are stored. */
-    val complete: Boolean get() = effectiveStages == RawQualificationStage.ALL
+    /** The stages that run: [requestedStages], less the storage ones (the sweep, the long runs) in a [cameraOnly] run. */
+    val effectiveStages: Set<RawQualificationStage>
+        get() = if (cameraOnly) requestedStages - RawQualificationStage.SWEEP - RawQualificationStage.LONG else requestedStages
+
+    /**
+     * Every stage was asked for, so the verdicts are complete and records are stored. A [cameraOnly] run of such a plan
+     * is complete too: it leaves the storage out on purpose, and its verdicts say so (`storage-not-tested`).
+     */
+    val complete: Boolean get() = requestedStages == RawQualificationStage.ALL
+
+    /** [RawQualificationOptions.cameraOnly]: the camera checks and encode benchmarks alone. */
+    val cameraOnly: Boolean get() = options.cameraOnly
+
+    /** [RawQualificationOptions.skipPredictedLongRuns], unless [cameraOnly] runs no long run at all. */
+    val skipPredictedLongRuns: Boolean get() = options.skipPredictedLongRuns && !options.cameraOnly
+
+    /** The qualifier reads and writes reusable evidence: [reuseEvidence] on a [complete] plan; partial stages always measure. */
+    val reusesEvidence: Boolean get() = reuseEvidence && complete
+
+    /** This plan with [options]. */
+    fun withOptions(options: RawQualificationOptions): RawQualificationPlan = copy(options = options)
 
     fun runs(stage: RawQualificationStage): Boolean = stage in effectiveStages
 
@@ -207,13 +232,47 @@ data class RawQualificationPlan(
         benchEncodings(runs, codecAvailable).sumOf { threadsFor(it).size }
 
     companion object {
-        /** The app's plan: [RawQualificationSpecs.DEFAULT_RAW10] and their block-pack twins, every stage. */
-        val DEFAULT = RawQualificationPlan(RawQualificationSpecs.DEFAULT_RAW10, compressedTwins = true)
+        /** The app's plan: [RawQualificationSpecs.DEFAULT_RAW10] and their block-pack twins, every stage, reusing evidence. */
+        val DEFAULT = RawQualificationPlan(RawQualificationSpecs.DEFAULT_RAW10, compressedTwins = true, reuseEvidence = true)
 
-        /** Exactly [specs], `+bp` and `+lj92` ones included, with no added twins (the device test's `rawConfigs`). */
+        /** Exactly [specs], `+bp` and `+lj92` ones included, with no added twins (the device test's `rawConfigs`); never reuses. */
         fun explicit(specs: List<String>) = RawQualificationPlan(specs, compressedTwins = false)
     }
 }
+
+/**
+ * The user's choices for a shorter qualification (PLAN-071, 2026-11-20), both off by default, so a plain run is as
+ * before. [skipPredictedLongRuns]: once the sweep measured the write cache's cliff, a configuration whose storage rate
+ * exceeds the sustained rate gets no long run ([RawQualificationStaging.predictedLongRunSkip]); it is risky with its
+ * `burstSeconds`, or too slow. [cameraOnly]: only the camera checks and the encode benchmarks run, with no storage
+ * rest, sweep or long run; every configuration the camera delivers is stored risky with
+ * [RawQualificationRisk.REASON_STORAGE_NOT_TESTED]. [cameraOnly] wins over [skipPredictedLongRuns].
+ */
+data class RawQualificationOptions(
+    val skipPredictedLongRuns: Boolean = false,
+    val cameraOnly: Boolean = false,
+)
+
+/**
+ * What a qualification expects to reuse from earlier runs ([RawQualificationEvidence]): the uncompressed
+ * configurations whose camera check is reused ([cameraChecks]) and the encode benchmark sessions ([benches]) of each
+ * codec's first benchmark configuration. Later benchmark configurations of a descent are not predicted.
+ */
+data class RawQualificationReuse(
+    val cameraChecks: Set<RawVideoConfig> = emptySet(),
+    val benches: Set<RawQualificationReusedBench> = emptySet(),
+) {
+    val benchSessions: Int get() = benches.size
+
+    operator fun plus(other: RawQualificationReuse) = RawQualificationReuse(cameraChecks + other.cameraChecks, benches + other.benches)
+
+    companion object {
+        val NONE = RawQualificationReuse()
+    }
+}
+
+/** One encode benchmark session expected to be reused: [config] (uncompressed) benchmarked with [encoding] on [threads], stored under [key]. */
+data class RawQualificationReusedBench(val config: RawVideoConfig, val encoding: String, val threads: Int, val key: String)
 
 /**
  * Durations of a qualification. A long run measures [liveSeconds] after [WARMUP_SECONDS] of warm-up,
@@ -396,7 +455,9 @@ object RawQualificationEstimates {
      * the sweep, then the long runs. The duration is an upper bound: every long run of the descent, as
      * if none passed. [longRuns] (default [runs]) are the long runs counted: [forFreeSpace] leaves out
      * those the free space would skip. With [storage] each long run also counts its drain and read-back
-     * ([RawQualificationTiming.runMs]); null keeps the nominal timings.
+     * ([RawQualificationTiming.runMs]); null keeps the nominal timings. [reusedChecks] of the camera checks reuse an
+     * earlier run's ([RawQualificationReuse]): they are no step, take no time, and the rest follows only the sessions
+     * that run; [benchSessions] counts only the benchmark sessions that run.
      */
     fun of(
         runs: List<RawQualificationRun>,
@@ -405,11 +466,12 @@ object RawQualificationEstimates {
         stages: Set<RawQualificationStage> = RawQualificationStage.ALL,
         longRuns: List<RawQualificationRun> = runs,
         storage: RawQualificationStorageModel? = null,
+        reusedChecks: Int = 0,
     ): RawQualificationEstimate {
         val long = RawQualificationStage.LONG in stages
         val camera = RawQualificationStage.CAMERA in stages
         val sweep = long || RawQualificationStage.SWEEP in stages
-        val checks = if (camera) runs.size else 0
+        val checks = if (camera) (runs.size - reusedChecks).coerceAtLeast(0) else 0
         val after = if (long) longRuns.map { timing.runMs(it.config, storage) } else emptyList()
         val steps = checks + benchSessions + after.size
         val rest = if (sweep && checks + benchSessions > 0) RawQualificationTiming.STORAGE_REST_MS else 0L
@@ -433,7 +495,10 @@ object RawQualificationEstimates {
         )
     }
 
-    /** The estimate of [plan] on a camera whose largest RAW10 output is [sensorWidth] x [sensorHeight]. */
+    /**
+     * The estimate of [plan] on a camera whose largest RAW10 output is [sensorWidth] x [sensorHeight], less the steps
+     * [reuse] expects to reuse.
+     */
     fun of(
         plan: RawQualificationPlan,
         cameraId: String,
@@ -442,17 +507,24 @@ object RawQualificationEstimates {
         codecAvailable: Boolean,
         timing: RawQualificationTiming = RawQualificationTiming(),
         storage: RawQualificationStorageModel? = null,
+        reuse: RawQualificationReuse = RawQualificationReuse.NONE,
     ): RawQualificationEstimate {
         val runs = plan.specs.mapNotNull { RawQualificationSpecs.parse(it, cameraId, sensorWidth, sensorHeight) }
         val uncompressed = plan.uncompressedRuns(runs)
-        return of(uncompressed, plan.benchSessions(runs, codecAvailable), timing, plan.effectiveStages, uncompressed, storage)
+        return of(uncompressed, benchSessions(plan, runs, codecAvailable, reuse), timing, plan.effectiveStages, uncompressed, storage,
+            reusedChecks(uncompressed, reuse))
     }
 
     /**
      * The estimate of [plan] given [freeBytes] free now: long runs that would be skipped for space
      * ([RawQualificationTiming.neededBytes] above [freeBytes]) are left out of the duration, as the
      * qualifier skips them; every configuration still gets its camera check. Compressed twins need no
-     * space of their own. [storage] is what is known of the storage before the run ([of]).
+     * space of their own. [storage] is what is known of the storage before the run ([of]). [reuse] is what the run
+     * expects to reuse ([RawQualificationEvidenceRules.predictReuse]): those steps are left out of the duration and the
+     * step count. A [RawQualificationPlan.cameraOnly] plan writes nothing, so it needs no space: every configuration fits,
+     * with a [RawQualificationPlannedConfig.neededBytes] of 0. [RawQualificationOptions.skipPredictedLongRuns] changes
+     * nothing here: which long runs it leaves out depends on the cliff the sweep measures, so the estimate stays an
+     * upper bound and shrinks during the run.
      */
     fun forFreeSpace(
         plan: RawQualificationPlan,
@@ -463,25 +535,49 @@ object RawQualificationEstimates {
         freeBytes: Long,
         timing: RawQualificationTiming = RawQualificationTiming(),
         storage: RawQualificationStorageModel? = null,
+        reuse: RawQualificationReuse = RawQualificationReuse.NONE,
     ): RawQualificationSpaceEstimate {
         val parsed = plan.specs.mapNotNull { RawQualificationSpecs.parse(it, cameraId, sensorWidth, sensorHeight) }
         val runs = RawQualificationStaging.longRunOrder(plan.uncompressedRuns(parsed))
+        val bench = benchSessions(plan, parsed, codecAvailable, reuse)
+        val reused = reusedChecks(runs, reuse)
+        val configs = runs.map { run ->
+            val needed = if (plan.cameraOnly) 0L else timing.neededBytes(run.config)
+            RawQualificationPlannedConfig(run.spec, run.config, needed, fits = needed <= freeBytes, cameraCheckReused = run.config in reuse.cameraChecks)
+        }
+        if (plan.cameraOnly) {
+            return RawQualificationSpaceEstimate(
+                estimate = of(runs, bench, timing, plan.effectiveStages, emptyList(), storage, reused),
+                freeBytes = freeBytes,
+                skippedRuns = 0,
+                minimumFreeBytes = 0L,
+                configs = configs,
+                fullPlanFreeBytes = 0L,
+                reuse = reuse,
+            )
+        }
         val kept = runs.filter { timing.neededBytes(it.config) <= freeBytes }
-        val bench = plan.benchSessions(parsed, codecAvailable)
         val sweepNeeded = of(runs, 0, timing).sweepFreeBytesNeeded
         val smallestRun = runs.minOfOrNull { timing.neededBytes(it.config) } ?: 0L
         return RawQualificationSpaceEstimate(
-            estimate = if (kept.isEmpty()) of(kept, 0, timing, plan.effectiveStages) else of(runs, bench, timing, plan.effectiveStages, kept, storage),
+            estimate = if (kept.isEmpty()) of(kept, 0, timing, plan.effectiveStages) else of(runs, bench, timing, plan.effectiveStages, kept, storage, reused),
             freeBytes = freeBytes,
             skippedRuns = runs.size - kept.size,
             minimumFreeBytes = maxOf(sweepNeeded, smallestRun),
-            configs = runs.map { run ->
-                val needed = timing.neededBytes(run.config)
-                RawQualificationPlannedConfig(run.spec, run.config, needed, fits = needed <= freeBytes)
-            },
+            configs = configs,
             fullPlanFreeBytes = of(runs, bench, timing, plan.effectiveStages).freeBytesNeeded,
+            reuse = reuse,
         )
     }
+
+    /** [plan]'s benchmark sessions on [runs], less those [reuse] expects to reuse. */
+    private fun benchSessions(plan: RawQualificationPlan, runs: List<RawQualificationRun>, codecAvailable: Boolean, reuse: RawQualificationReuse): Int =
+        (plan.benchSessions(runs, codecAvailable) - reuse.benches.count { bench -> runs.any { it.config.cameraId == bench.config.cameraId } })
+            .coerceAtLeast(0)
+
+    /** How many of [uncompressed]'s camera checks [reuse] expects to reuse. */
+    private fun reusedChecks(uncompressed: List<RawQualificationRun>, reuse: RawQualificationReuse): Int =
+        uncompressed.count { it.config in reuse.cameraChecks }
 }
 
 /**
@@ -498,15 +594,25 @@ data class RawQualificationSpaceEstimate(
     val configs: List<RawQualificationPlannedConfig> = emptyList(),
     /** The free space the whole plan needs: what [freeBytes] is measured against. */
     val fullPlanFreeBytes: Long = 0L,
+    /** The camera checks and benchmark sessions the run expects to reuse from earlier runs ([RawQualificationEvidenceRules.predictReuse]). */
+    val reuse: RawQualificationReuse = RawQualificationReuse.NONE,
 ) {
     val enoughSpace: Boolean get() = freeBytes >= minimumFreeBytes
 }
 
 /**
  * One configuration of a plan before it runs: [neededBytes] is [RawQualificationTiming.neededBytes],
- * the figure the qualifier skips a long run on, and [fits] whether the free space holds it now.
+ * the figure the qualifier skips a long run on (0 in a [RawQualificationPlan.cameraOnly] plan, which writes nothing),
+ * and [fits] whether the free space holds it now. [cameraCheckReused] is true when its camera check is expected to be
+ * reused from an earlier run ([RawQualificationReuse.cameraChecks]).
  */
-data class RawQualificationPlannedConfig(val spec: String, val config: RawVideoConfig, val neededBytes: Long, val fits: Boolean)
+data class RawQualificationPlannedConfig(
+    val spec: String,
+    val config: RawVideoConfig,
+    val neededBytes: Long,
+    val fits: Boolean,
+    val cameraCheckReused: Boolean = false,
+)
 
 /** The steps a qualification reports. */
 enum class RawQualificationPhase { SWEEP, RING, THERMAL_WAIT, RUN, CAMERA_CHECK, ENCODE_BENCH, COOLING, STORAGE_REST, SAVING, DONE }
@@ -821,7 +927,18 @@ object RawQualificationRisk {
      */
     const val REASON_SUSTAINED_RATE_EXCEEDED = "sustained-rate-exceeded"
 
-    /** The reasons that only say the storage could not keep up: rule v2's, and [REASON_SUSTAINED_RATE_EXCEEDED]. */
+    /**
+     * A configuration the camera delivers (and, compressed, the encoder keeps up with), judged by a camera-only run
+     * ([RawQualificationOptions.cameraOnly]) that never tested the storage: no sweep, no long run. It is stored as a
+     * storage failure with no sweep figures and no burst, so it reads as risky: choosable by hand, never picked
+     * automatically.
+     */
+    const val REASON_STORAGE_NOT_TESTED = "storage-not-tested"
+
+    /**
+     * The reasons that only say the storage could not keep up (or was not tested): rule v2's,
+     * [REASON_SUSTAINED_RATE_EXCEEDED] and [REASON_STORAGE_NOT_TESTED].
+     */
     val STORAGE_REASONS: Set<String> = setOf(
         RawThroughputBenchmark.REASON_SWEEP_MEDIAN_MARGIN_FAIL,
         RawThroughputBenchmark.REASON_BUFFER_BACKLOG_EXCEEDED,
@@ -829,6 +946,7 @@ object RawQualificationRisk {
         RawThroughputBenchmark.REASON_RING_OVERFLOW,
         RawThroughputBenchmark.REASON_RING_PEAK_EXCEEDED,
         REASON_SUSTAINED_RATE_EXCEEDED,
+        REASON_STORAGE_NOT_TESTED,
     )
 
     /**
@@ -1000,6 +1118,116 @@ object RawQualificationRecords {
         if (!RawQualificationRisk.isStorageFailure(record.qualification)) record.copy(burstSeconds = null)
         else record.copy(burstSeconds = RawStorageCliff.burstSeconds(sustained,
             RawQualificationFrameRate.effectiveStreamBytesPerSecond(record.config, record.achievedFps), record.ringBytes, compressionRatio))
+
+    /**
+     * The record a camera-only run ([RawQualificationOptions.cameraOnly]) stores for [config]: [verdict] is
+     * [RawQualificationStaging.cameraOnlyVerdict] (or its compressed twin), a FAIL with
+     * [RawQualificationRisk.REASON_STORAGE_NOT_TESTED] when the camera passed. No sweep ran, so every sweep figure is null
+     * (0 windows), there is no backlog, live run or burst, and the required median is the one rule v2 would have asked
+     * of the storage, at [compressionRatio] for a compressed configuration. Null for an UNKNOWN verdict, which the
+     * qualifier never stores.
+     */
+    fun cameraOnly(
+        fingerprint: String,
+        destinationId: String,
+        config: RawVideoConfig,
+        ringBytes: Long,
+        verdict: RawStagedVerdict,
+        measuredAtEpochMs: Long,
+        compressionRatio: Double = 1.0,
+        evidence: String? = null,
+        achievedFps: Double? = null,
+    ): RawVideoQualificationRecord? {
+        if (verdict.status == RawBenchmarkStatus.UNKNOWN || ringBytes <= 0) return null
+        val stream = config.streamBytesPerSecond
+        val ratio = compressionRatio.coerceAtLeast(1.0)
+        val requiredMedian = if (ratio == 1.0) stream * RawThroughputBenchmark.MARGIN_BASIS_POINTS / 10_000L
+        else kotlin.math.ceil(stream * (RawThroughputBenchmark.MARGIN_BASIS_POINTS / 10_000.0) / ratio).toLong()
+        val codes = verdict.reasonCodes.ifEmpty { listOf(RawQualificationRisk.REASON_STORAGE_NOT_TESTED) }
+        return RawVideoQualificationRecord(
+            fingerprint = fingerprint,
+            protocolVersion = RawThroughputBenchmark.PROTOCOL_VERSION,
+            destinationId = destinationId,
+            config = config,
+            ringBytes = ringBytes,
+            qualification = RawVideoQualification(
+                status = verdict.status,
+                reasonCode = codes.first(),
+                reasonCodes = codes,
+                streamBytesPerSecond = stream,
+                requiredMedianBytesPerSecond = requiredMedian,
+                sweepWindows = 0,
+                sweepMedianBytesPerSecond = null,
+                sweepP01BytesPerSecond = null,
+                sweepMinBytesPerSecond = null,
+                medianMarginRatio = null,
+                p01MarginRatio = null,
+                ringBytes = ringBytes,
+                backlogLimitBytes = ringBytes * RawThroughputBenchmark.RING_LIMIT_PERCENT / 100L,
+                backlog = null,
+                live = null,
+                livePeakFraction = null,
+            ),
+            measuredAtEpochMs = measuredAtEpochMs,
+            method = verdict.method,
+            evidence = evidence,
+            burstSeconds = null,
+            achievedFps = achievedFps,
+        )
+    }
+
+    /**
+     * Which of a camera-only run's [incoming] records to store over the [existing] ones: a camera-only run never replaces
+     * a record whose storage was tested. An incoming record is kept when its configuration (same build, protocol,
+     * destination and configuration) has no record yet, when the newest existing record came from a camera-only run
+     * itself (its method is [RawQualificationMethods.CAMERA_ONLY], whatever it concluded: a newer camera-only record
+     * replaces an earlier camera-only failure as much as an earlier camera-only pass), or when the camera evidence now
+     * fails conclusively ([conclusiveCameraFailure]), which revokes an earlier pass whatever tested it. A camera-only
+     * failure the heat may explain never replaces a storage-tested record.
+     */
+    fun cameraOnlyMerge(existing: List<RawVideoQualificationRecord>, incoming: List<RawVideoQualificationRecord>): List<RawVideoQualificationRecord> =
+        incoming.filter { record ->
+            val newest = existing
+                .filter {
+                    it.fingerprint == record.fingerprint && it.protocolVersion == record.protocolVersion &&
+                        it.destinationId == record.destinationId && it.config == record.config
+                }
+                .maxByOrNull(RawVideoQualificationRecord::measuredAtEpochMs)
+            newest == null || newest.method == RawQualificationMethods.CAMERA_ONLY || conclusiveCameraFailure(record.qualification)
+        }
+
+    /**
+     * The reasons that prove the camera or the encoder cannot deliver a configuration, whatever the storage: the camera
+     * missed the rate ([RawQualificationStaging.REASON_FPS_NOT_REACHED]), declared or showed its limit
+     * ([RawQualificationFrameRate.REASON_CAMERA_FPS_LIMIT], [RawQualificationFrameRate.REASON_CAMERA_NO_FRAMES]), did not
+     * hold the rate under the encode load ([RawQualificationStaging.REASON_COMPRESSED_CAMERA_STARVED]), or the encoder is
+     * too slow ([RawQualificationStaging.REASON_COMPRESSED_ENCODE_TOO_SLOW]). Legacy `lj92-…` names count by their
+     * current one ([RawQualificationStaging.canonicalReason]).
+     */
+    val CONCLUSIVE_CAMERA_REASONS: Set<String> = setOf(
+        RawQualificationStaging.REASON_FPS_NOT_REACHED,
+        RawQualificationFrameRate.REASON_CAMERA_FPS_LIMIT,
+        RawQualificationFrameRate.REASON_CAMERA_NO_FRAMES,
+        RawQualificationStaging.REASON_COMPRESSED_CAMERA_STARVED,
+        RawQualificationStaging.REASON_COMPRESSED_ENCODE_TOO_SLOW,
+    )
+
+    /** The camera check's harness faults: frames lost between the camera and the ring, and failed row copies. */
+    val INCONCLUSIVE_CAMERA_FAULTS: Set<String> = setOf("camera-frame-loss", "copy-error")
+
+    /**
+     * A camera-only verdict [q] that may revoke a storage-tested record ([cameraOnlyMerge]): a FAIL that is not a storage
+     * failure, with at least one [CONCLUSIVE_CAMERA_REASONS] code and no [RawQualificationStaging.REASON_THERMAL_LIMIT]
+     * (a shortfall at SEVERE heat may be the heat's, as [RawQualificationStaging.compressedHeatOnly] and the benchmark
+     * descent treat it) nor a harness fault ([INCONCLUSIVE_CAMERA_FAULTS]: a lost buffer or a copy error also lowers
+     * the measured rate, so a shortfall beside one may be the fault's). A pass, a risky `storage-not-tested` verdict, a
+     * heat failure and any other fault (a hung consumer) are not conclusive; an UNKNOWN verdict is never stored at all.
+     */
+    fun conclusiveCameraFailure(q: RawVideoQualification): Boolean =
+        q.status == RawBenchmarkStatus.FAIL && !RawQualificationRisk.isStorageFailure(q) &&
+            RawQualificationStaging.REASON_THERMAL_LIMIT !in q.reasonCodes &&
+            q.reasonCodes.none { it in INCONCLUSIVE_CAMERA_FAULTS } &&
+            q.reasonCodes.any { RawQualificationStaging.canonicalReason(it) in CONCLUSIVE_CAMERA_REASONS }
 
     /** The overall status of run statuses (`PASS`/`FAIL`/`UNKNOWN`), as the report computes it. */
     fun overallStatus(runStatuses: List<String>): RawQualificationStatus = when {

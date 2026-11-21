@@ -192,10 +192,26 @@ internal fun rawOptionChoiceLabel(option: RawVideoConfigOption, nearLossless: Bo
         option.achievedFps?.let { stringResource(R.string.raw_video_reduced_label, label, it) } ?: label
     }
 
-/** The spoken warning of a risky [option] ("4000×3000 · 60 fps, risky rate"); null when it is not risky. */
+/**
+ * The spoken warning of a risky [option] ("4000×3000 · 60 fps, risky rate", or "…, storage not tested" for one a
+ * camera-only qualification left); null when it is not risky.
+ */
 @Composable
-internal fun rawOptionWarning(option: RawVideoConfigOption, nearLossless: Boolean = false): String? =
-    if (option.isRisky) stringResource(R.string.raw_video_risky_label, rawOptionLabel(option, nearLossless)) else null
+internal fun rawOptionWarning(option: RawVideoConfigOption, nearLossless: Boolean = false): String? = when {
+    !option.isRisky -> null
+    option.storageUntested -> stringResource(R.string.raw_video_untested_label, rawOptionLabel(option, nearLossless))
+    else -> stringResource(R.string.raw_video_risky_label, rawOptionLabel(option, nearLossless))
+}
+
+/** The chooser's note under risky options ([RawRiskKinds]): too slow storage, untested storage, or both; null with none. */
+@Composable
+internal fun rawVideoRiskHint(options: List<RawVideoConfigOption>): String? =
+    when (rawRiskKinds(options.filter { it.isRisky }.map { it.storageUntested })) {
+        null -> null
+        RawRiskKinds.TESTED -> stringResource(R.string.raw_video_config_risk_hint)
+        RawRiskKinds.UNTESTED -> stringResource(R.string.raw_video_config_risk_hint_untested)
+        RawRiskKinds.MIXED -> stringResource(R.string.raw_video_config_risk_hint_mixed)
+    }
 
 /**
  * A risky configuration's burst estimate as the warnings say it: whole minutes from a minute on
@@ -216,13 +232,17 @@ internal fun rawBurstDuration(seconds: Long): String {
 /**
  * Placed like the lens lock's crop notice, in the instrument stack under the zoom: RAW video runs a
  * risky configuration. With its [burstSeconds] known it says when frames may start to drop instead
- * of the generic hazards: the notice has two lines, and both texts do not fit in them.
+ * of the generic hazards: the notice has two lines, and both texts do not fit in them. A configuration whose storage
+ * was never tested ([storageUntested], a camera-only qualification) says that instead.
  */
 @Composable
-internal fun RawVideoRiskyNotice(modifier: Modifier = Modifier, burstSeconds: Long? = null) =
+internal fun RawVideoRiskyNotice(modifier: Modifier = Modifier, burstSeconds: Long? = null, storageUntested: Boolean = false) =
     InstrumentNotice(
-        if (burstSeconds == null) stringResource(R.string.raw_video_risky_notice)
-        else stringResource(R.string.raw_video_risky_notice_burst, rawBurstDuration(burstSeconds)),
+        when (rawRiskWording(storageUntested, burstSeconds)) {
+            RawRiskWording.UNTESTED -> stringResource(R.string.raw_video_untested_notice)
+            RawRiskWording.BURST -> stringResource(R.string.raw_video_risky_notice_burst, rawBurstDuration(burstSeconds ?: 0L))
+            RawRiskWording.GENERIC -> stringResource(R.string.raw_video_risky_notice)
+        },
         CineIcon.WARNING, LocalCineColors.current.pending, "raw-video-risky-notice", modifier,
     )
 
@@ -264,9 +284,7 @@ internal fun RawVideoConfigDial(
                 }
             }
         }
-        if (options.any { it.isRisky }) {
-            PanelNote(stringResource(R.string.raw_video_config_risk_hint), Modifier.testTag("raw-video-config-risk-hint"))
-        }
+        rawVideoRiskHint(options)?.let { PanelNote(it, Modifier.testTag("raw-video-config-risk-hint")) }
         if (crops.isNotEmpty()) PanelNote(stringResource(R.string.raw_video_crop_note), Modifier.testTag("raw-video-crop-note"))
         RawVideoLeftOutSection(state.rawVideoLeftOut, nearLossless, "raw-video-left-out")
         if (!enabled) PanelNote(stringResource(R.string.raw_video_config_frozen), Modifier.testTag("raw-video-config-frozen"))
@@ -308,9 +326,8 @@ internal fun RawVideoSettings(
                 choiceWarning = { key -> options.firstOrNull { it.key == key }?.let { rawOptionWarning(it, nearLossless) } },
             )
             SettingsRawVideoProfile(state.rawVideoProfile)
-            if (options.any { it.isRisky }) {
-                Text(stringResource(R.string.raw_video_config_risk_hint), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp,
-                    modifier = Modifier.testTag("settings-raw-video-risk-hint"))
+            rawVideoRiskHint(options)?.let {
+                Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, modifier = Modifier.testTag("settings-raw-video-risk-hint"))
             }
             RawVideoLeftOutSection(state.rawVideoLeftOut, nearLossless, "settings-raw-video-left-out", Modifier.padding(top = 4.dp))
             if (rawCompressionChoiceOffered(state)) RawCompressionSetting(state, settings, onNearLosslessChange)

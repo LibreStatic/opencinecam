@@ -205,6 +205,36 @@ internal fun rawVideoNewestRecord(
     return newest(config) ?: if (config.isCompressed) newest(config.copy(encoding = RawVideoConfig.ENCODING_RAW10)) else null
 }
 
+/** A record judged by a camera-only run, which never tested the storage ([RawQualificationRisk.REASON_STORAGE_NOT_TESTED]). */
+internal fun rawVideoRecordStorageUntested(record: RawVideoQualificationRecord): Boolean =
+    RawQualificationRisk.REASON_STORAGE_NOT_TESTED in record.qualification.reasonCodes
+
+/**
+ * The [risky] configurations whose newest record among [current] for [destinationId] ([rawVideoNewestRecord]) a
+ * camera-only run left: their storage was never tested, so their warnings say so instead of a burst or a slow storage.
+ */
+internal fun rawVideoUntestedConfigs(
+    risky: Collection<RawVideoConfig>,
+    current: List<RawVideoQualificationRecord>,
+    destinationId: String,
+): Set<RawVideoConfig> =
+    risky.filterTo(mutableSetOf()) { config -> rawVideoNewestRecord(current, destinationId, config)?.let(::rawVideoRecordStorageUntested) == true }
+
+/**
+ * The verdict [record] keeps in force, as a qualification row reads it ([rawQualificationRunStatus] on its effective
+ * burst), with its measured burst and achieved rate: what the done screen shows for a configuration whose
+ * storage-tested record a camera-only run left in place ([com.librestatic.opencinecam.capture.rawQualificationItemsInForce]).
+ */
+internal fun rawQualificationInForceOf(record: RawVideoQualificationRecord): com.librestatic.opencinecam.capture.RawQualificationInForce {
+    val q = record.qualification
+    return com.librestatic.opencinecam.capture.RawQualificationInForce(
+        status = rawQualificationRunStatus(q.status.name, q.reasonCode, q.reasonCodes, RawQualificationRisk.effectiveBurstSeconds(record)),
+        burstSeconds = record.burstSeconds,
+        achievedFps = record.achievedFps,
+        storageUntested = rawVideoRecordStorageUntested(record),
+    )
+}
+
 /**
  * PLAN-071 decision 9, the runtime risk: the ring armed for a take is smaller than its qualification
  * needed. It is risky when the qualification's highest ring use, the larger of the live run's peak

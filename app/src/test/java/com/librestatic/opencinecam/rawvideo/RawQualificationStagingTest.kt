@@ -4,6 +4,7 @@
 package com.librestatic.opencinecam.rawvideo
 
 import com.librestatic.opencinecam.camera.RawBenchmarkStatus
+import com.librestatic.opencinecam.camera.RawLiveRun
 import com.librestatic.opencinecam.camera.RawStorageSweep
 import com.librestatic.opencinecam.camera.RawSustainedWrite
 import com.librestatic.opencinecam.camera.RawThroughputBenchmark
@@ -1084,4 +1085,139 @@ class RawQualificationStagingTest {
         val viaFinal = RawQualificationStaging.compressedFinalVerdict(null, config("full@30"), RawStageResult.PASS, fast, emptyMap(), listOf(marginFail))
         assertEquals(own, viaFinal)
     }
+
+    // endregion
+
+    // region a shorter run (2026-11-20)
+
+    @Test fun aTwinLongRunIsNotStartedAtModerateHeat() {
+        // NONE and LIGHT run; MODERATE, SEVERE and hotter take the extrapolation.
+        assertFalse(RawQualificationStaging.compressedHeatSkip(0))
+        assertFalse(RawQualificationStaging.compressedHeatSkip(1))
+        for (status in 2..6) assertTrue("$status", RawQualificationStaging.compressedHeatSkip(status))
+        assertEquals(RawQualificationStaging.REDUCED_RATE_MAX_THERMAL_STATUS, RawQualificationStaging.THERMAL_STATUS_MODERATE)
+        // A twin with no run of its own takes the extrapolation, as one the heat alone failed does.
+        val twin = config("full@30")
+        val fast = bench(1e10, 1.6, encoding = RawVideoConfig.ENCODING_BLOCK_PACK)
+        val longRuns = descend(emptyMap())
+        val thermal = RawStageResult.fail(listOf(RawQualificationStaging.REASON_THERMAL_LIMIT))
+        val skipped = RawQualificationStaging.compressedFinalVerdict(null, twin, RawStageResult.PASS, fast, longRuns)
+        assertEquals(RawQualificationMethods.COMPRESSED_EXTRAPOLATED, skipped.method)
+        assertEquals(RawQualificationStaging.compressedFinalVerdict(thermal, twin, RawStageResult.PASS, fast, longRuns), skipped)
+    }
+
+    @Test fun aRunThatAlreadyFailedIsNotReadBack() {
+        assertFalse(RawQualificationStaging.skipReadBack(ringOverflow = false, lostFrames = 0, writerError = false))
+        assertTrue(RawQualificationStaging.skipReadBack(ringOverflow = true, lostFrames = 3, writerError = false))
+        assertTrue(RawQualificationStaging.skipReadBack(ringOverflow = false, lostFrames = 1, writerError = false))
+        assertTrue(RawQualificationStaging.skipReadBack(ringOverflow = false, lostFrames = 0, writerError = true))
+    }
+
+    @Test fun aWindowCutShortAtTheOverflowIsNotTooShort() {
+        val full60 = config("full@60")
+        val ringBytes = 4L shl 30
+        val sweep = sweepAt(requiredMedian(full60) * 2)
+        // The ring overflowed 12 s in: the window ended there, under rule v2's 20 s minimum.
+        val live = RawLiveRun(full60, durationMs = 12_000, completedCaptures = 720, framesWritten = 700, ringOverflow = true,
+            peakRingBytes = ringBytes, ringBytes = ringBytes, maxWriteMs = 300.0)
+        val v2 = RawThroughputBenchmark.qualifyWithBuffer(full60, ringBytes, sweep, live)
+        assertTrue(RawThroughputBenchmark.REASON_LIVE_RUN_TOO_SHORT in v2.reasonCodes)
+        assertFalse(RawQualificationRisk.isStorageOnly(v2.reasonCodes))
+        val early = RawQualificationStaging.earlyStopQualification(v2, stoppedEarly = true)
+        assertEquals(RawBenchmarkStatus.FAIL, early.status)
+        assertEquals(listOf(RawThroughputBenchmark.REASON_RAW_FRAME_LOSS, RawThroughputBenchmark.REASON_RING_OVERFLOW,
+            RawThroughputBenchmark.REASON_RING_PEAK_EXCEEDED), early.reasonCodes)
+        assertEquals(early.reasonCodes.first(), early.reasonCode)
+        // Storage-only, as the full window would have been: risky, not failed for its length.
+        assertTrue(RawQualificationRisk.isStorageOnly(early.reasonCodes))
+        // A window that ran in full keeps every reason, and a stop with nothing to drop changes nothing.
+        assertEquals(v2, RawQualificationStaging.earlyStopQualification(v2, stoppedEarly = false))
+        val fullLength = RawThroughputBenchmark.qualifyWithBuffer(full60, ringBytes, sweep, live.copy(durationMs = 40_000))
+        assertEquals(fullLength, RawQualificationStaging.earlyStopQualification(fullLength, stoppedEarly = true))
+        assertEquals(fullLength.reasonCodes, early.reasonCodes)
+        // Were the short window its only reason, it stays: a cut window never passes.
+        val clean = live.copy(framesWritten = 720, ringOverflow = false, peakRingBytes = 0)
+        val shortOnly = RawThroughputBenchmark.qualifyWithBuffer(full60, ringBytes, sweep, clean)
+        assertEquals(listOf(RawThroughputBenchmark.REASON_LIVE_RUN_TOO_SHORT), shortOnly.reasonCodes)
+        assertEquals(shortOnly, RawQualificationStaging.earlyStopQualification(shortOnly, stoppedEarly = true))
+    }
+
+    private fun samples(vararg points: Pair<Long, Double>) = points.map { (at, value) -> RawThermalTrend.Sample(at, value) }
+
+    @Test fun aThermalWaitEndsOnceThePhoneStopsCooling() {
+        val flat = samples(*(0L..30_000L step 2_000L).map { it to 0.80 }.toTypedArray())
+        // Never before the minimum wait, nor before the samples cover the window.
+        assertFalse(RawThermalTrend.stoppedCooling(flat, 18_000, RawThermalTrend.MIN_HEADROOM_DROP))
+        assertFalse(RawThermalTrend.stoppedCooling(flat.filter { it.elapsedMs >= 12_000 }, 30_000, RawThermalTrend.MIN_HEADROOM_DROP))
+        // Flat headroom over the last 20 s: no longer cooling.
+        assertTrue(RawThermalTrend.stoppedCooling(flat.filter { it.elapsedMs <= 20_000 }, 20_000, RawThermalTrend.MIN_HEADROOM_DROP))
+        assertTrue(RawThermalTrend.stoppedCooling(flat, 30_000, RawThermalTrend.MIN_HEADROOM_DROP))
+        // Falling by at least the minimum drop over the window: still cooling, so it waits on.
+        val falling = samples(*(0L..30_000L step 2_000L).map { it to 0.90 - it / 1_000_000.0 * 2 }.toTypedArray())
+        assertFalse(RawThermalTrend.stoppedCooling(falling, 30_000, RawThermalTrend.MIN_HEADROOM_DROP))
+        // Rising (warming up) counts as not cooling.
+        val rising = samples(0L to 0.70, 10_000L to 0.75, 20_000L to 0.80)
+        assertTrue(RawThermalTrend.stoppedCooling(rising, 20_000, RawThermalTrend.MIN_HEADROOM_DROP))
+        // Measured from the latest sample at least 20 s before the last one.
+        val slowed = samples(0L to 0.90, 4_000L to 0.85, 24_000L to 0.84)
+        assertTrue(RawThermalTrend.stoppedCooling(slowed, 24_000, RawThermalTrend.MIN_HEADROOM_DROP))
+        // Unusable values are ignored.
+        val gaps = samples(0L to Double.NaN, 2_000L to 0.80, 10_000L to Double.NaN, 22_000L to 0.80)
+        assertTrue(RawThermalTrend.stoppedCooling(gaps, 22_000, RawThermalTrend.MIN_HEADROOM_DROP))
+        assertFalse(RawThermalTrend.stoppedCooling(samples(0L to Double.NaN, 30_000L to Double.NaN), 30_000, RawThermalTrend.MIN_HEADROOM_DROP))
+    }
+
+    @Test fun theThermalTrendPrefersTheHeadroomOverTheBattery() {
+        val coolingBattery = samples(0L to 41.0, 10_000L to 40.6, 20_000L to 40.2)
+        val flatBattery = samples(0L to 41.0, 10_000L to 41.0, 20_000L to 40.9)
+        val flatHeadroom = samples(0L to 0.8, 10_000L to 0.8, 20_000L to 0.8)
+        val coolingHeadroom = samples(0L to 0.8, 10_000L to 0.77, 20_000L to 0.75)
+        // The headroom decides whenever it gave a value.
+        assertTrue(RawThermalTrend.stoppedCooling(flatHeadroom, coolingBattery, 20_000))
+        assertFalse(RawThermalTrend.stoppedCooling(coolingHeadroom, flatBattery, 20_000))
+        // Without it (API 29, unsupported, always NaN) the battery temperature does: 0.3 °C over the window.
+        assertFalse(RawThermalTrend.stoppedCooling(emptyList(), coolingBattery, 20_000))
+        assertTrue(RawThermalTrend.stoppedCooling(emptyList(), flatBattery, 20_000))
+        assertTrue(RawThermalTrend.stoppedCooling(samples(0L to Double.NaN), flatBattery, 20_000))
+        // With no usable signal the wait runs as before.
+        assertFalse(RawThermalTrend.stoppedCooling(emptyList(), emptyList(), 180_000))
+    }
+
+    @Test fun aHeadroomWithoutACurrentWindowLeavesTheTrendToTheBattery() {
+        val flatBattery = samples(*(0L..40_000L step 2_000L).map { it to 41.0 }.toTypedArray())
+        val coolingBattery = samples(*(0L..40_000L step 2_000L).map { it to 41.0 - it / 10_000.0 }.toTypedArray())
+        // The headroom answered twice, then only NaN or nothing: its last reading is stale, so the battery decides.
+        val stale = samples(0L to 0.8, 2_000L to 0.8, 4_000L to Double.NaN, 30_000L to Double.NaN)
+        assertFalse(RawThermalTrend.currentWindow(stale, 40_000))
+        assertTrue(RawThermalTrend.stoppedCooling(stale, flatBattery, 40_000))
+        assertFalse(RawThermalTrend.stoppedCooling(stale, coolingBattery, 40_000))
+        // Recent readings that do not reach back a whole window are no current window either.
+        val short = samples(30_000L to 0.8, 34_000L to 0.8, 38_000L to 0.8)
+        assertFalse(RawThermalTrend.currentWindow(short, 40_000))
+        assertTrue(RawThermalTrend.stoppedCooling(short, flatBattery, 40_000))
+        // A current headroom window decides: cooling keeps the wait going even with a flat battery.
+        val coolingHeadroom = samples(*(0L..40_000L step 2_000L).map { it to 0.9 - it / 400_000.0 }.toTypedArray())
+        assertTrue(RawThermalTrend.currentWindow(coolingHeadroom, 40_000))
+        assertFalse(RawThermalTrend.stoppedCooling(coolingHeadroom, flatBattery, 40_000))
+        // A latest reading up to MAX_SAMPLE_AGE_MS old still counts; older does not.
+        val flatHeadroom = samples(0L to 0.8, 20_000L to 0.8)
+        assertTrue(RawThermalTrend.currentWindow(flatHeadroom, 20_000 + RawThermalTrend.MAX_SAMPLE_AGE_MS))
+        assertFalse(RawThermalTrend.currentWindow(flatHeadroom, 20_001 + RawThermalTrend.MAX_SAMPLE_AGE_MS))
+        assertFalse(RawThermalTrend.stoppedCooling(flatHeadroom, coolingBattery, 20_001 + RawThermalTrend.MAX_SAMPLE_AGE_MS))
+    }
+
+    @Test fun theTrendNeverEndsAWaitAtSevereHeat() {
+        val flat = samples(*(0L..30_000L step 2_000L).map { it to 0.80 }.toTypedArray())
+        val severe = RawQualificationStaging.THERMAL_STATUS_SEVERE
+        assertTrue(RawThermalTrend.endsWait(RawQualificationStaging.THERMAL_STATUS_MODERATE, flat, emptyList(), 30_000))
+        assertTrue(RawThermalTrend.endsWait(severe - 1, flat, emptyList(), 30_000))
+        // At SEVERE or hotter the session could not start: the wait goes on to a permitted status or the timeout.
+        assertFalse(RawThermalTrend.endsWait(severe, flat, emptyList(), 30_000))
+        assertFalse(RawThermalTrend.endsWait(severe + 1, flat, emptyList(), 30_000))
+        // Below SEVERE a still-cooling phone keeps waiting as before.
+        val falling = samples(*(0L..30_000L step 2_000L).map { it to 0.90 - it / 1_000_000.0 * 2 }.toTypedArray())
+        assertFalse(RawThermalTrend.endsWait(RawQualificationStaging.THERMAL_STATUS_MODERATE, falling, emptyList(), 30_000))
+    }
+
+    // endregion
 }

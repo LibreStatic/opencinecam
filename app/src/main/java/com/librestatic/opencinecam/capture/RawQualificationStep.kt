@@ -35,7 +35,14 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Dp
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material3.Switch
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.semantics.Role
+import com.librestatic.opencinecam.rawvideo.RawQualificationOptions
 import com.librestatic.opencinecam.rawvideo.RawQualificationSpaceEstimate
+import com.librestatic.opencinecam.ui.HapticEvent
+import com.librestatic.opencinecam.ui.LocalAppHaptics
 import com.librestatic.opencinecam.ui.theme.LocalReducedMotion
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.relocation.BringIntoViewRequester
@@ -489,6 +496,8 @@ internal fun RawQualificationStep(
     onCancel: (String) -> Unit,
     onLeave: (passed: Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    options: RawQualificationOptions = RawQualificationOptions(),
+    onOptionsChange: (RawQualificationOptions) -> Unit = {},
 ) {
     val running = state?.running == true
     val outcome = state?.outcome
@@ -518,7 +527,8 @@ internal fun RawQualificationStep(
             outcome == RawQualificationOutcomeKind.PASSED || outcome == RawQualificationOutcomeKind.NO_CONFIG ||
                 outcome == RawQualificationOutcomeKind.FAILED_TO_RUN ->
                 FinishedStage(state!!, onDone = { onLeave(outcome == RawQualificationOutcomeKind.PASSED) })
-            else -> ReadyStage(info, conditions, cancelled = state, onStart = onStart, onLater = { onLeave(false) })
+            else -> ReadyStage(info, conditions, cancelled = state, options = options, onOptionsChange = onOptionsChange,
+                onStart = onStart, onLater = { onLeave(false) })
         }
     }
 }
@@ -649,17 +659,72 @@ private fun NoSpaceCard(space: RawQualificationSpaceEstimate?) {
     )
 }
 
+/**
+ * One option of the run: its title and what it does over the switch's row; the whole row toggles. Disabled, the row
+ * is muted and does not toggle.
+ */
+@Composable
+private fun OptionRow(title: String, body: String, checked: Boolean, enabled: Boolean, tag: String, onChange: (Boolean) -> Unit) {
+    val haptics = LocalAppHaptics.current
+    val alpha = if (enabled) 1f else 0.38f
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .toggleable(value = checked, enabled = enabled, role = Role.Switch) { haptics.perform(HapticEvent.Toggle); onChange(it) }
+            .padding(vertical = 6.dp)
+            .testTag(tag),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, color = OnbText.copy(alpha = alpha), fontWeight = FontWeight.SemiBold, fontSize = 15.sp, lineHeight = 20.sp)
+            Text(body, color = OnbMuted.copy(alpha = alpha), fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 2.dp))
+        }
+        Switch(checked = checked, onCheckedChange = null, enabled = enabled)
+    }
+}
+
+/**
+ * The run's options (PLAN-071, 2026-11-20), for this run only: skip the long runs the storage test decides, or test
+ * the camera alone. Camera-only disables the other, which then reads off ([rawQualificationReadyLayout]).
+ */
+@Composable
+private fun OptionsCard(options: RawQualificationOptions, layout: RawQualificationReadyLayout, onOptionsChange: (RawQualificationOptions) -> Unit) {
+    StageCard(Modifier.testTag("raw-qualification-options"), padding = 14.dp) {
+        OptionRow(
+            title = stringResource(R.string.raw_qualification_option_predict),
+            body = stringResource(R.string.raw_qualification_option_predict_body),
+            checked = layout.predictChecked,
+            enabled = layout.predictEnabled,
+            tag = "raw-qualification-option-predict",
+        ) { onOptionsChange(options.copy(skipPredictedLongRuns = it)) }
+        CardDivider()
+        OptionRow(
+            title = stringResource(R.string.raw_qualification_option_camera_only),
+            body = stringResource(R.string.raw_qualification_option_camera_only_body),
+            checked = options.cameraOnly,
+            enabled = true,
+            tag = "raw-qualification-option-camera-only",
+        ) { onOptionsChange(options.copy(cameraOnly = it)) }
+    }
+}
+
 @Composable
 private fun ReadyStage(
     info: RawVideoQualificationInfo?,
     conditions: RawQualificationConditions,
     cancelled: RawVideoQualificationUi?,
+    options: RawQualificationOptions,
+    onOptionsChange: (RawQualificationOptions) -> Unit,
     onStart: () -> Unit,
     onLater: () -> Unit,
 ) {
     val blockers = conditions.blockers
-    val space = info?.space
-    val noSpace = space?.enoughSpace == false
+    val layout = rawQualificationReadyLayout(options, info)
+    // A camera-only run writes nothing: no space section, and no free-space reason to refuse the start.
+    val space = info?.space?.takeIf { layout.showSpace }
+    val noSpace = layout.spaceBlocksStart
     RawStageScaffold(
         tag = "raw-qualification-ready",
         chips = { FactChips(info) },
@@ -673,8 +738,8 @@ private fun ReadyStage(
         },
         body = {
             if (info?.previousFailure == true) NoticeCard(stringResource(R.string.raw_qualification_previous_failure))
-            // PLAN-072 Delivery 3: with a USB drive configured, say which storage the run measures.
-            rawQualificationTargetText(info?.target)?.let { target ->
+            // PLAN-072 Delivery 3: with a USB drive configured, say which storage the run measures (none in a camera-only run).
+            rawQualificationTargetText(info?.target?.takeIf { layout.showTarget })?.let { target ->
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).testTag("raw-qualification-target"),
                     verticalAlignment = Alignment.CenterVertically,
@@ -685,6 +750,18 @@ private fun ReadyStage(
                 }
             }
             Checklist(conditions)
+            OptionsCard(options, layout, onOptionsChange)
+            if (layout.showReuse) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    StepIcon(StepGlyph.INFO, OnbMuted, Modifier.size(18.dp))
+                    Text(stringResource(R.string.raw_qualification_reuse), color = OnbMuted, fontSize = 14.sp, lineHeight = 19.sp,
+                        modifier = Modifier.weight(1f).testTag("raw-qualification-reuse"))
+                }
+            }
             when {
                 noSpace -> NoSpaceCard(space)
                 space != null && space.skippedRuns > 0 -> SpaceSection(space)
@@ -988,7 +1065,12 @@ private fun FinishedStage(state: RawVideoQualificationUi, onDone: () -> Unit) {
                 StageCard(Modifier.testTag("raw-qualification-risky"), padding = 12.dp) {
                     Row(Modifier.fillMaxWidth().padding(bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         StepIcon(StepGlyph.WARNING, riskyTint, Modifier.size(20.dp))
-                        Text(stringResource(R.string.raw_qualification_risky_body), color = OnbText, fontSize = 14.sp, lineHeight = 20.sp,
+                        val body = when (rawRiskKinds(risky.map { it.storageUntested })) {
+                            RawRiskKinds.UNTESTED -> R.string.raw_qualification_risky_body_untested
+                            RawRiskKinds.MIXED -> R.string.raw_qualification_risky_body_mixed
+                            else -> R.string.raw_qualification_risky_body
+                        }
+                        Text(stringResource(body), color = OnbText, fontSize = 14.sp, lineHeight = 20.sp,
                             modifier = Modifier.weight(1f).testTag("raw-qualification-risky-body"))
                     }
                     risky.forEach { item ->
@@ -1000,8 +1082,12 @@ private fun FinishedStage(state: RawVideoQualificationUi, onDone: () -> Unit) {
                                 Text(rawConfigLabelNoBreak(item.label, rawCompressedWord()), color = OnbText, fontSize = 17.sp)
                                 rawAchievedRate(item)?.let { Text(it, color = OnbMuted, fontSize = 14.sp, lineHeight = 20.sp) }
                                 val burst = item.burstSeconds
-                                Text(if (burst == null) stringResource(R.string.raw_qualification_item_risky)
-                                    else stringResource(R.string.raw_qualification_item_risky_burst, rawBurstDuration(burst)),
+                                Text(
+                                    when (rawRiskWording(item.storageUntested, burst)) {
+                                        RawRiskWording.UNTESTED -> stringResource(R.string.raw_qualification_item_untested)
+                                        RawRiskWording.BURST -> stringResource(R.string.raw_qualification_item_risky_burst, rawBurstDuration(burst ?: 0L))
+                                        RawRiskWording.GENERIC -> stringResource(R.string.raw_qualification_item_risky)
+                                    },
                                     color = OnbMuted, fontSize = 14.sp, lineHeight = 20.sp)
                             }
                             // No pill here: the card's body already names the risk, and at 384 dp a pill
@@ -1062,14 +1148,21 @@ internal fun RawQualificationStepHost(
     modifier: Modifier = Modifier,
     selectOnPass: Boolean = true,
 ) {
-    // Read again after a run: a cancelled or failed run may have changed the free space or the records.
-    val info = remember(binder, state?.outcome) { binder?.rawVideoQualificationEstimate() }
+    // The run's options: off by default, kept while the step is open (rotation included), never stored as settings.
+    var skipPredicted by rememberSaveable { mutableStateOf(false) }
+    var cameraOnly by rememberSaveable { mutableStateOf(false) }
+    val options = RawQualificationOptions(skipPredictedLongRuns = skipPredicted, cameraOnly = cameraOnly)
+    // Read again after a run (a cancelled or failed run may have changed the free space or the records) and for every
+    // change of the options, which change the plan, its duration and the space it needs.
+    val info = remember(binder, state?.outcome, options) { binder?.rawVideoQualificationEstimate(options) }
     val conditions = rememberRawQualificationConditions()
     RawQualificationStep(
         info = info,
         conditions = conditions,
         state = state,
-        onStart = { binder?.startRawVideoQualification(selectOnPass) },
+        options = options,
+        onOptionsChange = { skipPredicted = it.skipPredictedLongRuns; cameraOnly = it.cameraOnly },
+        onStart = { binder?.startRawVideoQualification(selectOnPass, rawQualificationStartOptions(options)) },
         onCancel = { reason -> binder?.cancelRawVideoQualification(reason) },
         onLeave = { passed ->
             binder?.dismissRawVideoQualification()

@@ -351,6 +351,16 @@ class RawVideoQualificationFlowTest {
         assertEquals(RawQualificationItemStatus.FAILED, rawQualificationRunStatus("FAIL", "dropped-frames", listOf("dropped-frames"), burstSeconds = 9L))
     }
 
+    @Test fun aCameraOnlyVerdictReadsRisky() {
+        // A camera-only run (PLAN-071, 2026-11-20) never tests the storage: no burst, so risky, reduced rate or not.
+        val untested = listOf(RawQualificationRisk.REASON_STORAGE_NOT_TESTED)
+        assertEquals(RawQualificationItemStatus.RISKY, rawQualificationRunStatus("FAIL", untested[0], untested))
+        val reduced = untested + RawQualificationStaging.REASON_FPS_REDUCED
+        assertEquals(RawQualificationItemStatus.RISKY, rawQualificationRunStatus("FAIL", reduced[0], reduced))
+        // A camera failure in the same run stays a failure.
+        assertEquals(RawQualificationItemStatus.FAILED, rawQualificationRunStatus("FAIL", "fps-not-reached", listOf("fps-not-reached")))
+    }
+
     @Test fun runStatusMapsResultRows() {
         assertEquals(RawQualificationItemStatus.PASSED, rawQualificationRunStatus("PASS", null))
         assertEquals(RawQualificationItemStatus.FAILED, rawQualificationRunStatus("FAIL", "dropped-frames"))

@@ -118,4 +118,13 @@
     <string name="raw_qualification_rest_body">O armazenamento do telefone ainda está gravando dados das últimas gravações, então a velocidade dele não pode ser medida de forma justa.</string>
     <string name="raw_qualification_rest_hint">Deixe o telefone parado por cerca de uma hora, sem gravar, e depois qualifique de novo.</string>
     <string name="raw_qualification_rest_kept">Sua qualificação anterior continua valendo.</string>
+    <!-- PLAN-071, 2026-11-20: the run's options, reused camera checks, and configurations whose storage a camera-only run did not test. -->
+    <string name="raw_qualification_option_predict">Pular gravações que o teste de armazenamento decide</string>
+    <string name="raw_qualification_option_predict_body">Mais rápido. Uma configuração que o armazenamento não consegue sustentar é marcada como arriscada pelo teste de armazenamento, sem gravá-la.</string>
+    <string name="raw_qualification_option_camera_only">Só teste da câmera</string>
+    <string name="raw_qualification_option_camera_only_body">Pula o teste de armazenamento. Toda configuração que a câmera entrega é marcada como arriscada: você pode escolhê-la manualmente, o Automático nunca a escolhe.</string>
+    <string name="raw_qualification_reuse">As medições da câmera da última qualificação são reaproveitadas</string>
+    <string name="raw_qualification_item_untested">armazenamento não testado</string>
+    <string name="raw_qualification_risky_body_untested">Você pode escolhê-las manualmente, mas o armazenamento não foi testado na taxa delas: uma tomada pode ter microtravamentos, atraso ou ficar corrompida. O Automático nunca as escolhe.</string>
+    <string name="raw_qualification_risky_body_mixed">Você pode escolhê-las, mas o armazenamento é lento demais para a taxa delas ou não foi testado: uma tomada pode ter microtravamentos, atraso ou ficar corrompida.</string>
 </resources>
