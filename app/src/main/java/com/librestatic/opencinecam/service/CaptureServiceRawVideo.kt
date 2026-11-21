@@ -56,6 +56,8 @@ import com.librestatic.opencinecam.capture.rawVideoModeFallback
 import com.librestatic.opencinecam.capture.RawVideoQualificationInfo
 import com.librestatic.opencinecam.capture.RawVideoQualificationUi
 import com.librestatic.opencinecam.rawvideo.RawQualificationEstimates
+import com.librestatic.opencinecam.rawvideo.RawQualificationEvidenceRules
+import com.librestatic.opencinecam.rawvideo.RawQualificationOptions
 import com.librestatic.opencinecam.rawvideo.RawQualificationPhase
 import com.librestatic.opencinecam.rawvideo.RawQualificationPlan
 import com.librestatic.opencinecam.rawvideo.RawQualificationProgress
@@ -67,6 +69,8 @@ import com.librestatic.opencinecam.rawvideo.RawVideoQualificationOutcome
 import com.librestatic.opencinecam.rawvideo.RawVideoQualifier
 import com.librestatic.opencinecam.capture.rawQualificationItemsCameraChecked
 import com.librestatic.opencinecam.capture.rawQualificationItemsFinished
+import com.librestatic.opencinecam.capture.rawQualificationItemsInForce
+import com.librestatic.opencinecam.capture.rawQualificationStorageUntested
 import com.librestatic.opencinecam.capture.rawQualificationItemsOnProgress
 import com.librestatic.opencinecam.capture.rawQualificationItemsWith
 import com.librestatic.opencinecam.capture.rawQualificationRunStatus
@@ -229,6 +233,16 @@ internal fun CaptureService.rawNearLosslessProfile(config: RawVideoConfig, ignor
 internal fun CaptureService.rawRiskyConfigs(cameraId: String, usable: List<RawVideoConfig>): Set<RawVideoConfig> =
     if (usable.isEmpty()) emptySet() else rawVideoRiskyConfigs(usable, rawRiskyRecordedConfigs(cameraId))
 
+/** The [risky] configurations a camera-only qualification left, their storage never tested ([rawVideoUntestedConfigs]). */
+internal fun CaptureService.rawRiskyUntested(risky: Set<RawVideoConfig>): Set<RawVideoConfig> {
+    if (risky.isEmpty()) return emptySet()
+    val current = runCatching {
+        (rawQualifications ?: rawQualificationStore.load().also { rawQualifications = it })
+            .current(rawQualificationStore.fingerprint, rawQualificationStore.protocolVersion)
+    }.getOrElse { return emptySet() }
+    return rawVideoUntestedConfigs(risky, current, rawLookupDestinationId())
+}
+
 /** The reduced-rate ones among [usable] configurations, with the rate each achieved ([rawVideoReducedRates]). */
 internal fun CaptureService.rawReducedRates(usable: List<RawVideoConfig>): Map<RawVideoConfig, Double?> {
     if (usable.isEmpty()) return emptyMap()
@@ -259,6 +273,7 @@ internal fun CaptureService.withRawVideoGate(state: CameraUiState, cameraId: Str
     val risky = if (cameraId == null) emptySet() else rawRiskyConfigs(cameraId, usable)
     val runtimeRisky = cameraId?.let { rawRuntimeRiskyConfig(it, usable) }
     val burst = rawRiskyBurstSeconds(risky)
+    val untested = rawRiskyUntested(risky)
     val reduced = rawReducedRates(usable)
     val gate = rawVideoGate(sizes, usable, cameraId in rawVideoFailedCameras)
     val available = gate == ModeGateState.AVAILABLE
@@ -272,7 +287,8 @@ internal fun CaptureService.withRawVideoGate(state: CameraUiState, cameraId: Str
         modeGates = state.modeGates + (CaptureMode.RAW_VIDEO to gate),
         // The runtime risk only warns (option and capture notice); selection above ignores it.
         rawVideoOptions = if (available) usable.map {
-            RawVideoConfigOption.of(it, risky = it in risky || it == runtimeRisky, burstSeconds = burst[it], achievedFps = reduced[it])
+            RawVideoConfigOption.of(it, risky = it in risky || it == runtimeRisky, burstSeconds = burst[it], achievedFps = reduced[it],
+                storageUntested = it in untested)
         } else emptyList(),
         rawVideoSelectedKey = selected?.let(RawVideoConfigKeys::key),
         rawVideoAutoKey = selectRawVideoConfig(usable, "", manualOnly).takeIf { available }?.let(RawVideoConfigKeys::key),
@@ -371,22 +387,29 @@ internal fun CaptureService.rawQualificationSensorSize(cameraId: String): Pair<I
 /**
  * Main: what the qualification prompt and step show; a few small reads (cached characteristics, the store, StatFs).
  * PLAN-072: a drive's free space is its last sample ([cachedDestinationFreeBytes]), never a provider call on main;
- * with no sample yet there is no space estimate. The qualifier reads the drive afresh on its own thread.
+ * with no sample yet there is no space estimate, except for a camera-only run, which writes nothing (its free space then
+ * reads 0). The qualifier reads the drive afresh on its own thread. [options] are the user's choices for a shorter run;
+ * the estimate leaves out the camera checks and benchmark sessions the run expects to reuse
+ * ([RawQualificationSpaceEstimate.reuse]).
  */
-internal fun CaptureService.rawQualificationInfo(): RawVideoQualificationInfo {
+internal fun CaptureService.rawQualificationInfo(options: RawQualificationOptions = RawQualificationOptions()): RawVideoQualificationInfo {
     val cameraId = rawQualificationCameraId()
-        ?: return RawVideoQualificationInfo(null, ModeGateState.UNSUPPORTED, null)
+        ?: return RawVideoQualificationInfo(null, ModeGateState.UNSUPPORTED, null, options = options)
     val usable = rawUsableConfigs(cameraId)
     val gate = rawVideoGate(raw10Sizes(cameraId), usable, cameraId in rawVideoFailedCameras)
     val sensor = rawQualificationSensorSize(cameraId)
     val destination = nextTakeDestination
     val free = cachedDestinationFreeBytes(destination.destination)
     val storage = rawQualificationStorageModel(cameraId, destination.destination)
-    val space = if (sensor != null && free != null) {
-        RawQualificationEstimates.forFreeSpace(
-            RawQualificationPlan.DEFAULT, cameraId, sensor.first, sensor.second,
-            com.librestatic.opencinecam.media.raw.NativeRawCodec.available, free, storage = storage,
-        )
+    val plan = RawQualificationPlan.DEFAULT.withOptions(options)
+    val space = if (sensor != null && (free != null || plan.cameraOnly)) {
+        val codecAvailable = com.librestatic.opencinecam.media.raw.NativeRawCodec.available
+        val now = System.currentTimeMillis()
+        val reuse = RawQualificationEvidenceRules.predictReuse(
+            plan, cameraId, sensor.first, sensor.second, codecAvailable,
+            com.librestatic.opencinecam.media.ocraw.OcrawFrameHeader.raw10RowBytes(sensor.first) * sensor.second, RawQualificationTiming(),
+        ) { kind, key -> runCatching { rawQualificationEvidenceStore.find(kind, key, now) }.getOrNull() }
+        RawQualificationEstimates.forFreeSpace(plan, cameraId, sensor.first, sensor.second, codecAvailable, free ?: 0L, storage = storage, reuse = reuse)
     } else null
     val previousFailure = usable.isEmpty() && runCatching {
         (rawQualifications ?: rawQualificationStore.load().also { rawQualifications = it })
@@ -394,7 +417,7 @@ internal fun CaptureService.rawQualificationInfo(): RawVideoQualificationInfo {
             .any { it.config.cameraId == cameraId && it.destinationId == rawDestinationId(destination.destination) }
     }.getOrDefault(false)
     return RawVideoQualificationInfo(cameraId, gate, space, previousFailure,
-        rawQualificationTarget(destination, cameraState.value.recordingDestination.driveLabel), storage)
+        rawQualificationTarget(destination, cameraState.value.recordingDestination.driveLabel), storage, options)
 }
 
 /**
@@ -460,7 +483,8 @@ internal fun CaptureService.recordRawQualificationResult(session: RawQualificati
     val needed = result.optLong("neededBytes", config?.let { RawQualificationTiming().neededBytes(it) } ?: 0L)
     val achievedFps = result.optDouble("achievedFps").takeIf { !it.isNaN() }
     session.items = rawQualificationItemsWith(session.items, spec, status,
-        config?.let { RawVideoConfigOption.of(it).label } ?: spec, needed, burstSeconds, achievedFps)
+        config?.let { RawVideoConfigOption.of(it).label } ?: spec, needed, burstSeconds, achievedFps,
+        storageUntested = rawQualificationStorageUntested(codes.orEmpty()))
     val last = session.lastPosted ?: return
     postRawQualificationUi(session, last.copy(items = session.items), android.os.SystemClock.elapsedRealtime())
 }
@@ -470,6 +494,27 @@ internal fun CaptureService.postRawQualificationUi(session: RawQualificationSess
     session.lastPostAtMs = now
     mainHandler.post {
         if (rawQualificationSession === session && !serviceDestroyed) cameraState.update { it.copy(rawVideoQualification = ui) }
+    }
+}
+
+/**
+ * Main, while [session] still holds the lookups on the run's destination: the finished run's items
+ * ([rawQualificationItemsFinished]) with each "storage not tested" row showing the verdict the reloaded [records] keep in
+ * force for its configuration ([rawQualificationItemsInForce]); a camera-only run never replaces a storage-tested record.
+ */
+internal fun CaptureService.rawQualificationItemsInForceOnFinish(
+    session: RawQualificationSession,
+    records: RawVideoQualificationSet,
+): List<com.librestatic.opencinecam.capture.RawQualificationItem> {
+    val finished = rawQualificationItemsFinished(session.items)
+    if (finished.none { it.storageUntested }) return finished
+    val current = runCatching { records.current(rawQualificationStore.fingerprint, rawQualificationStore.protocolVersion) }
+        .getOrElse { return finished }
+    val destinationId = rawLookupDestinationId()
+    return rawQualificationItemsInForce(finished) { item ->
+        RawQualificationSpecs.parse(item.spec, session.cameraId, session.sensorWidth, session.sensorHeight)?.config
+            ?.let { rawVideoNewestRecord(current, destinationId, it) }
+            ?.let(::rawQualificationInForceOf)
     }
 }
 
@@ -494,6 +539,8 @@ internal fun CaptureService.finishRawQualification(
     // must not be judged by the phone's records (PLAN-072).
     val usable = rawUsableConfigs(session.cameraId).let { all -> all - rawRiskyConfigs(session.cameraId, all) }
     val previousKept = rawQualificationStorageBusy(outcome.reasonCode) && rawUsableConfigs(session.cameraId).isNotEmpty()
+    // A camera-only run leaves storage-tested records in place: its "storage not tested" rows show the verdict in force.
+    val items = rawQualificationItemsInForceOnFinish(session, records)
     rawQualificationSession = null
     val kind = rawQualificationOutcome(outcome.status, usable.size, outcome.reasonCode)
     val reason = when (kind) {
@@ -510,7 +557,7 @@ internal fun CaptureService.finishRawQualification(
         passedLabels = if (kind == RawQualificationOutcomeKind.PASSED) usable.map { RawVideoConfigOption.of(it).label } else emptyList(),
         reason = reason,
         remainingMs = 0L,
-        items = rawQualificationItemsFinished(session.items),
+        items = items,
         // The run stored nothing: whatever the camera was qualified for before still holds.
         previousKept = previousKept,
     )

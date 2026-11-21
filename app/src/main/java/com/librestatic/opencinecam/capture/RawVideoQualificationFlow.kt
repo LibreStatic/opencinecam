@@ -16,6 +16,7 @@ import com.librestatic.opencinecam.diagnostics.label
 import com.librestatic.opencinecam.gallery.label
 import com.librestatic.opencinecam.ModeGateState
 import com.librestatic.opencinecam.rawvideo.RawQualificationFrameRate
+import com.librestatic.opencinecam.rawvideo.RawQualificationOptions
 import com.librestatic.opencinecam.rawvideo.RawQualificationPhase
 import com.librestatic.opencinecam.rawvideo.RawQualificationProgress
 import com.librestatic.opencinecam.camera.RawThroughputBenchmark
@@ -222,7 +223,8 @@ enum class RawQualificationItemStatus {
  * the rate the camera delivered, to a tenth (null when unknown); [liveFps], on a TESTING one, the
  * rate its camera session delivers now ([RawQualificationProgress.liveFps]), null when not known yet.
  * [benchmarking] marks an already judged item whose configuration an encode benchmark streams now,
- * at [benchLiveFps]; its status stays as it is.
+ * at [benchLiveFps]; its status stays as it is. [storageUntested], on a RISKY one, says a camera-only run judged it
+ * without testing the storage ([RawQualificationRisk.REASON_STORAGE_NOT_TESTED]).
  */
 data class RawQualificationItem(
     val spec: String,
@@ -234,6 +236,7 @@ data class RawQualificationItem(
     val liveFps: Double? = null,
     val benchmarking: Boolean = false,
     val benchLiveFps: Double? = null,
+    val storageUntested: Boolean = false,
 ) {
     /** The rate of the spec this item tests, or null when the spec names none. */
     val targetFps: Int? get() = rawQualificationSpecFps(spec)
@@ -304,7 +307,7 @@ internal fun rawQualificationRunStatus(
 /**
  * [items] with [spec] set to [status], or with a new item for it (a compressed follow-up) at the end.
  * [burstSeconds] is kept only on a RISKY item, [achievedFps] only on a PASSED, RISKY or MEASURED one,
- * [liveFps] only on a TESTING one.
+ * [liveFps] only on a TESTING one, [storageUntested] only on a RISKY one.
  */
 internal fun rawQualificationItemsWith(
     items: List<RawQualificationItem>,
@@ -315,16 +318,106 @@ internal fun rawQualificationItemsWith(
     burstSeconds: Long? = null,
     achievedFps: Double? = null,
     liveFps: Double? = null,
+    storageUntested: Boolean = false,
 ): List<RawQualificationItem> {
     val burst = burstSeconds.takeIf { status == RawQualificationItemStatus.RISKY }
     val rate = achievedFps.takeIf {
         status == RawQualificationItemStatus.PASSED || status == RawQualificationItemStatus.RISKY || status == RawQualificationItemStatus.MEASURED
     }
     val live = liveFps.takeIf { status == RawQualificationItemStatus.TESTING }
+    val untested = storageUntested && status == RawQualificationItemStatus.RISKY
     val index = items.indexOfFirst { it.spec == spec }
-    if (index < 0) return items + RawQualificationItem(spec, label, neededBytes, status, burst, rate, live)
-    return items.toMutableList().also { it[index] = it[index].copy(status = status, burstSeconds = burst, achievedFps = rate, liveFps = live) }
+    if (index < 0) return items + RawQualificationItem(spec, label, neededBytes, status, burst, rate, live, storageUntested = untested)
+    return items.toMutableList().also {
+        it[index] = it[index].copy(status = status, burstSeconds = burst, achievedFps = rate, liveFps = live, storageUntested = untested)
+    }
 }
+
+/** A result row's [reasonCodes] say a camera-only run judged its configuration without testing the storage. */
+internal fun rawQualificationStorageUntested(reasonCodes: List<String>): Boolean = RawQualificationRisk.REASON_STORAGE_NOT_TESTED in reasonCodes
+
+/**
+ * The verdict in force for a configuration once a run ended, read from the stored records: what the done screen
+ * shows instead of the run's own row when they differ (see [rawQualificationItemsInForce]).
+ */
+internal data class RawQualificationInForce(
+    val status: RawQualificationItemStatus,
+    val burstSeconds: Long? = null,
+    val achievedFps: Double? = null,
+    val storageUntested: Boolean = false,
+)
+
+/**
+ * [items] of a finished run with each "storage not tested" row ([RawQualificationItem.storageUntested]) replaced by
+ * the verdict [inForce] gives for it, when that verdict was not itself left by a camera-only run. A camera-only run
+ * never replaces a record whose storage was tested ([com.librestatic.opencinecam.rawvideo.RawQualificationRecords.cameraOnlyMerge]),
+ * so its own row would show "storage not tested" for a configuration that is in fact qualified, risky with a measured
+ * burst, or too slow. Every other row, and a row [inForce] knows nothing of (null), stays as it is.
+ */
+internal fun rawQualificationItemsInForce(
+    items: List<RawQualificationItem>,
+    inForce: (RawQualificationItem) -> RawQualificationInForce?,
+): List<RawQualificationItem> = items.map { item ->
+    if (!item.storageUntested) return@map item
+    val kept = inForce(item)?.takeUnless { it.storageUntested } ?: return@map item
+    val rate = kept.achievedFps.takeIf { kept.status == RawQualificationItemStatus.PASSED || kept.status == RawQualificationItemStatus.RISKY }
+    item.copy(status = kept.status, burstSeconds = kept.burstSeconds.takeIf { kept.status == RawQualificationItemStatus.RISKY },
+        achievedFps = rate, storageUntested = false)
+}
+
+/** How a risky configuration's warning reads: the storage not tested, a known burst, or the storage's generic hazards. */
+internal enum class RawRiskWording { UNTESTED, BURST, GENERIC }
+
+/** [RawRiskWording] of a risky configuration; "storage not tested" wins, since such a record never has a burst. */
+internal fun rawRiskWording(storageUntested: Boolean, burstSeconds: Long?): RawRiskWording = when {
+    storageUntested -> RawRiskWording.UNTESTED
+    burstSeconds != null -> RawRiskWording.BURST
+    else -> RawRiskWording.GENERIC
+}
+
+/** Which risks a list of risky configurations holds: only too slow storage, only untested storage, or both. */
+internal enum class RawRiskKinds { TESTED, UNTESTED, MIXED }
+
+/** [RawRiskKinds] of risky configurations given by their "storage not tested" flags; null for none. */
+internal fun rawRiskKinds(untested: List<Boolean>): RawRiskKinds? = when {
+    untested.isEmpty() -> null
+    untested.all { it } -> RawRiskKinds.UNTESTED
+    untested.none { it } -> RawRiskKinds.TESTED
+    else -> RawRiskKinds.MIXED
+}
+
+/**
+ * What the ready screen shows for [options] and [info] (PLAN-071, 2026-11-20). A camera-only run tests no storage, so
+ * it hides which storage would be tested ([showTarget]), the space section and the free-space line ([showSpace]), and
+ * needs no free space to start ([spaceBlocksStart] false); the predict switch is then disabled and reads off
+ * ([predictEnabled], [predictChecked]), its choice kept for when camera-only is turned off again. [showReuse] when the
+ * estimate expects to reuse camera checks or benchmarks from an earlier run.
+ */
+internal data class RawQualificationReadyLayout(
+    val showTarget: Boolean,
+    val showSpace: Boolean,
+    val spaceBlocksStart: Boolean,
+    val predictEnabled: Boolean,
+    val predictChecked: Boolean,
+    val showReuse: Boolean,
+)
+
+internal fun rawQualificationReadyLayout(options: RawQualificationOptions, info: RawVideoQualificationInfo?): RawQualificationReadyLayout {
+    val cameraOnly = options.cameraOnly
+    val reuse = info?.space?.reuse
+    return RawQualificationReadyLayout(
+        showTarget = !cameraOnly,
+        showSpace = !cameraOnly,
+        spaceBlocksStart = !cameraOnly && info?.space?.enoughSpace == false,
+        predictEnabled = !cameraOnly,
+        predictChecked = options.skipPredictedLongRuns && !cameraOnly,
+        showReuse = reuse != null && (reuse.cameraChecks.isNotEmpty() || reuse.benches.isNotEmpty()),
+    )
+}
+
+/** The options a Start passes on: camera-only wins, so the predict choice is dropped with it. */
+internal fun rawQualificationStartOptions(options: RawQualificationOptions): RawQualificationOptions =
+    if (options.cameraOnly) options.copy(skipPredictedLongRuns = false) else options
 
 /**
  * [items] once [progress] arrives: the configuration a long run or a camera check names becomes
@@ -542,6 +635,11 @@ internal data class RawVideoQualificationInfo(
     val target: RawQualificationTarget? = null,
     /** What is known of the storage the run would test, which [space]'s duration was planned with; the qualifier starts from it. */
     val storage: RawQualificationStorageModel? = null,
+    /**
+     * The options [space] was estimated with ([RawQualificationOptions]); [RawQualificationSpaceEstimate.reuse] says what
+     * the run expects to reuse from earlier runs.
+     */
+    val options: RawQualificationOptions = RawQualificationOptions(),
 )
 
 /**

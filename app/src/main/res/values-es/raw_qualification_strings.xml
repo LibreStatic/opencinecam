@@ -118,4 +118,13 @@
     <string name="raw_qualification_rest_body">El almacenamiento del teléfono todavía está escribiendo datos de las últimas grabaciones, así que no se puede medir su velocidad de forma justa.</string>
     <string name="raw_qualification_rest_hint">Deja el teléfono en reposo una hora, más o menos, sin grabar, y después vuelve a calificar.</string>
     <string name="raw_qualification_rest_kept">Tu calificación anterior se mantiene.</string>
+    <!-- PLAN-071, 2026-11-20: the run's options, reused camera checks, and configurations whose storage a camera-only run did not test. -->
+    <string name="raw_qualification_option_predict">Omitir grabaciones que decide la prueba de almacenamiento</string>
+    <string name="raw_qualification_option_predict_body">Más rápido. Una configuración que el almacenamiento no puede sostener se marca como riesgosa según la prueba de almacenamiento, sin grabarla.</string>
+    <string name="raw_qualification_option_camera_only">Solo prueba de la cámara</string>
+    <string name="raw_qualification_option_camera_only_body">Omite la prueba de almacenamiento. Cada configuración que la cámara entrega se marca como riesgosa: puedes elegirla a mano, Automática nunca la elige.</string>
+    <string name="raw_qualification_reuse">Se reutilizan las comprobaciones de la cámara de la última calificación</string>
+    <string name="raw_qualification_item_untested">almacenamiento no probado</string>
+    <string name="raw_qualification_risky_body_untested">Puedes elegirlas a mano, pero el almacenamiento no se probó a su tasa: una toma puede tener microcortes, latencia o terminar dañada. Automática nunca las elige.</string>
+    <string name="raw_qualification_risky_body_mixed">Puedes elegirlas, pero el almacenamiento es demasiado lento para su tasa o no se probó: una toma puede tener microcortes, latencia o terminar dañada.</string>
 </resources>

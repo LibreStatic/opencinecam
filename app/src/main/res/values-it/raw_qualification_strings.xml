@@ -118,4 +118,13 @@
     <string name="raw_qualification_rest_body">La memoria del telefono sta ancora scrivendo i dati delle ultime registrazioni, quindi la sua velocità non si può misurare in modo corretto.</string>
     <string name="raw_qualification_rest_hint">Lascia il telefono inattivo per circa un’ora, senza registrare, poi qualifica di nuovo.</string>
     <string name="raw_qualification_rest_kept">La qualifica precedente resta valida.</string>
+    <!-- PLAN-071, 2026-11-20: the run's options, reused camera checks, and configurations whose storage a camera-only run did not test. -->
+    <string name="raw_qualification_option_predict">Salta le prove decise dal test della memoria</string>
+    <string name="raw_qualification_option_predict_body">Più veloce. Una configurazione che la memoria non riesce a sostenere viene segnata come rischiosa dal test della memoria, senza registrarla.</string>
+    <string name="raw_qualification_option_camera_only">Solo test della fotocamera</string>
+    <string name="raw_qualification_option_camera_only_body">Salta il test della memoria. Ogni configurazione che la fotocamera fornisce viene segnata come rischiosa: puoi sceglierla a mano, Automatico non la sceglie mai.</string>
+    <string name="raw_qualification_reuse">Le verifiche della fotocamera dell’ultima qualifica vengono riutilizzate</string>
+    <string name="raw_qualification_item_untested">memoria non testata</string>
+    <string name="raw_qualification_risky_body_untested">Puoi sceglierle a mano, ma la memoria non è stata testata alla loro velocità: una ripresa può scattare, andare in ritardo o risultare danneggiata. Automatico non le sceglie mai.</string>
+    <string name="raw_qualification_risky_body_mixed">Puoi sceglierle, ma la memoria è troppo lenta per la loro velocità o non è stata testata: una ripresa può scattare, andare in ritardo o risultare danneggiata.</string>
 </resources>

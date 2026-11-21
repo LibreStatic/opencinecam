@@ -44,4 +44,9 @@
     <string name="raw_video_profile_drive">Qualifiziert auf dem USB-Laufwerk %1$s</string>
     <string name="raw_video_profile_drive_unnamed">Qualifiziert auf dem USB-Laufwerk</string>
     <string name="raw_video_left_out_title">NICHT VERFÜGBAR</string>
+    <!-- PLAN-071, 2026-11-20: a risky configuration whose storage a camera-only qualification did not test. -->
+    <string name="raw_video_untested_notice">Speicher nicht getestet: Bilder können verloren gehen</string>
+    <string name="raw_video_untested_label">%1$s, Speicher nicht getestet</string>
+    <string name="raw_video_config_risk_hint_untested">Das Warnzeichen kennzeichnet eine Rate, bei der der Speicher nicht getestet wurde, eine Aufnahme kann also ruckeln, verzögern oder beschädigt werden. Qualifiziere erneut mit dem Speichertest, um sie zu prüfen. Automatisch wählt sie nie.</string>
+    <string name="raw_video_config_risk_hint_mixed">Das Warnzeichen kennzeichnet eine riskante Rate: Der Speicher ist dafür zu langsam oder wurde nicht getestet, eine Aufnahme kann also ruckeln, verzögern oder beschädigt werden. Automatisch wählt sie nie.</string>
 </resources>

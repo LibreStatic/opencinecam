@@ -116,4 +116,13 @@
     <string name="raw_qualification_rest_body">Der Speicher des Telefons schreibt noch Daten von den letzten Aufnahmen weg, deshalb lässt sich seine Geschwindigkeit nicht fair messen.</string>
     <string name="raw_qualification_rest_hint">Lass das Telefon etwa eine Stunde ruhen, ohne aufzunehmen, und qualifiziere dann erneut.</string>
     <string name="raw_qualification_rest_kept">Deine bisherige Qualifizierung bleibt erhalten.</string>
+    <!-- PLAN-071, 2026-11-20: the run's options, reused camera checks, and configurations whose storage a camera-only run did not test. -->
+    <string name="raw_qualification_option_predict">Läufe überspringen, die der Speichertest entscheidet</string>
+    <string name="raw_qualification_option_predict_body">Schneller. Eine Konfiguration, die der Speicher nicht halten kann, wird nach dem Speichertest als riskant markiert, ohne sie aufzunehmen.</string>
+    <string name="raw_qualification_option_camera_only">Nur Kameratest</string>
+    <string name="raw_qualification_option_camera_only_body">Überspringt den Speichertest. Jede Konfiguration, die die Kamera liefert, wird als riskant markiert: Du kannst sie von Hand wählen, Automatisch wählt sie nie.</string>
+    <string name="raw_qualification_reuse">Kameraprüfungen der letzten Qualifizierung werden wiederverwendet</string>
+    <string name="raw_qualification_item_untested">Speicher nicht getestet</string>
+    <string name="raw_qualification_risky_body_untested">Du kannst sie von Hand wählen, aber der Speicher wurde bei ihrer Rate nicht getestet: Eine Aufnahme kann ruckeln, verzögern oder beschädigt werden. Automatisch wählt sie nie.</string>
+    <string name="raw_qualification_risky_body_mixed">Du kannst sie wählen, aber der Speicher ist für ihre Rate zu langsam oder wurde nicht getestet: Eine Aufnahme kann ruckeln, verzögern oder beschädigt werden.</string>
 </resources>

@@ -85,6 +85,7 @@ import com.librestatic.opencinecam.core.model.StableFailure
 import com.librestatic.opencinecam.core.model.CaptureStateMachine
 import com.librestatic.opencinecam.core.model.SerializedCaptureActor
 import com.librestatic.opencinecam.settings.CaptureNameSnapshot
+import com.librestatic.opencinecam.storage.RawQualificationEvidenceStore
 import com.librestatic.opencinecam.storage.StillImageSaver
 import com.librestatic.opencinecam.capture.RawVideoConfigKeys
 import com.librestatic.opencinecam.camera.RawVideoConfig
@@ -154,6 +155,8 @@ import com.librestatic.opencinecam.capture.RawQualificationStopReasons
 import com.librestatic.opencinecam.capture.RawVideoQualificationInfo
 import com.librestatic.opencinecam.capture.RawVideoQualificationUi
 import com.librestatic.opencinecam.capture.readRawQualificationConditions
+import com.librestatic.opencinecam.rawvideo.RawQualificationOptions
+import com.librestatic.opencinecam.rawvideo.RawQualificationPlan
 import com.librestatic.opencinecam.rawvideo.RawQualificationProgress
 import com.librestatic.opencinecam.rawvideo.RawVideoQualifier
 import com.librestatic.opencinecam.capture.RawQualificationItem
@@ -793,6 +796,8 @@ class CaptureService : Service() {
     /** Serialises arming, disarming, take start and take stop (which joins the writer) off main. */
     internal val rawControl = java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task, "occ-raw-control") }
     internal val rawQualificationStore by lazy { RawVideoQualificationStore.forContext(this) }
+    /** The camera checks and encode benchmarks a qualification reuses (PLAN-071, 2026-11-20), beside [rawQualificationStore]. */
+    internal val rawQualificationEvidenceStore by lazy { RawQualificationEvidenceStore.forContext(this) }
     /** Loaded on first use (one small file); [LocalBinder.refreshRawVideoQualifications] reloads it. */
     @Volatile internal var rawQualifications: RawVideoQualificationSet? = null
     internal val rawRaw10Sizes = java.util.concurrent.ConcurrentHashMap<String, List<Pair<Int, Int>>>()
@@ -1699,8 +1704,13 @@ class CaptureService : Service() {
             }
         }
 
-        /** OCC-PLAN-071: the camera a qualification would run on, its gate, and the duration and space for the free space now. Main thread. */
-        internal fun rawVideoQualificationEstimate(): RawVideoQualificationInfo = rawQualificationInfo()
+        /**
+         * OCC-PLAN-071: the camera a qualification would run on, its gate, and the duration and space for the free space now,
+         * for a run with [options] (what it reuses from earlier runs included). Main thread.
+         */
+        internal fun rawVideoQualificationEstimate(
+            options: RawQualificationOptions = RawQualificationOptions(),
+        ): RawVideoQualificationInfo = rawQualificationInfo(options)
 
         /**
          * Starts the RAW video qualification of [rawVideoQualificationEstimate]'s camera; null when it
@@ -1708,13 +1718,17 @@ class CaptureService : Service() {
          * shown on [CameraUiState.rawVideoQualification]. Works with or without a viewfinder: the
          * camera the engine holds is released first and reopened at the end if a surface is attached.
          * A camera qualified before is measured again (Settings); [selectOnPass] false keeps the mode
-         * as it is when something passes.
+         * as it is when something passes. [options] shorten the run ([RawQualificationOptions]);
+         * the defaults run it in full. The camera checks and benchmarks of earlier runs are always reused.
          */
-        fun startRawVideoQualification(selectOnPass: Boolean = true): String? {
+        fun startRawVideoQualification(
+            selectOnPass: Boolean = true,
+            options: RawQualificationOptions = RawQualificationOptions(),
+        ): String? {
             if (serviceDestroyed) return RawQualificationRefusals.BUSY
             val current = cameraState.value
             val conditions = readRawQualificationConditions(this@CaptureService)
-            val info = rawQualificationInfo()
+            val info = rawQualificationInfo(options)
             val sensor = info.cameraId?.let(::rawQualificationSensorSize)
             val refusal = rawQualificationStartRefusal(
                 running = rawQualificationSession != null,
@@ -1739,6 +1753,8 @@ class CaptureService : Service() {
             session.qualifier = RawVideoQualifier(
                 this@CaptureService,
                 cameraIds = listOf(cameraId),
+                plan = RawQualificationPlan.DEFAULT.withOptions(options),
+                evidenceStore = rawQualificationEvidenceStore,
                 // PLAN-072 Delivery 3: with the next RAW take going to a drive, the drive is what gets qualified.
                 driveTree = (nextTakeDestination.destination as? RecordingDestination.UsbFolder)?.treeUri,
                 // The model the screen's estimate was planned with, so the run's first figure matches it.
@@ -1763,7 +1779,9 @@ class CaptureService : Service() {
             cameraState.update {
                 it.copy(
                     phase = if (it.cameras.isEmpty()) it.phase else CameraUiPhase.READY,
-                    rawVideoQualification = RawVideoQualificationUi(remainingMs = estimateMs, items = session.items),
+                    // "Preparing" until the first report: a run starts with camera checks, a camera-only one has no storage test.
+                    rawVideoQualification = RawVideoQualificationUi(
+                        phase = com.librestatic.opencinecam.rawvideo.RawQualificationPhase.RING, remainingMs = estimateMs, items = session.items),
                     message = null,
                 )
             }

@@ -9,6 +9,10 @@ import com.librestatic.opencinecam.camera.RawVideoConfig
 import com.librestatic.opencinecam.camera.RawVideoQualification
 import com.librestatic.opencinecam.camera.RawVideoQualificationRecord
 import com.librestatic.opencinecam.camera.RawVideoQualificationSet
+import com.librestatic.opencinecam.rawvideo.RawQualificationRecords
+import com.librestatic.opencinecam.rawvideo.RawQualificationRisk
+import com.librestatic.opencinecam.rawvideo.RawQualificationStaging
+import com.librestatic.opencinecam.rawvideo.RawStageResult
 import java.io.File
 import java.nio.file.Files
 import java.util.concurrent.Executors
@@ -108,6 +112,22 @@ class RawVideoQualificationStoreTest {
         reopened.upsert(record(UHD30, status = RawBenchmarkStatus.FAIL, at = 2_000))
         assertTrue(store().qualifiedConfigs("0").isEmpty())
         assertEquals(4, store().load().records.size)
+    }
+
+    @Test
+    fun aCameraOnlyRecordWithoutSweepFiguresRoundTripsAsRisky() {
+        // PLAN-071 (2026-11-20): a camera-only run stores no sweep figures and no burst.
+        val verdict = RawQualificationStaging.cameraOnlyVerdict(RawStageResult.pass(listOf(RawQualificationStaging.REASON_FPS_REDUCED)))
+        val record = requireNotNull(RawQualificationRecords.cameraOnly(FP, RawVideoQualificationStore.DESTINATION_MEDIASTORE_DOCUMENTS,
+            UHD30, RING, verdict, 2_000, achievedFps = 26.0))
+        store().upsertAll(listOf(record))
+        val stored = store().currentRecords().single()
+        assertEquals(record, stored)
+        assertEquals(null, stored.qualification.sweepMedianBytesPerSecond)
+        assertEquals(0, stored.qualification.sweepWindows)
+        assertEquals(null, stored.burstSeconds)
+        assertTrue(store().qualifiedConfigs("0").isEmpty())
+        assertTrue(RawQualificationRisk.isRisky(stored.qualification, stored.burstSeconds))
     }
 
     @Test

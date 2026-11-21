@@ -44,4 +44,9 @@
     <string name="raw_video_profile_drive">Calificadas en la unidad USB %1$s</string>
     <string name="raw_video_profile_drive_unnamed">Calificadas en la unidad USB</string>
     <string name="raw_video_left_out_title">NO DISPONIBLES</string>
+    <!-- PLAN-071, 2026-11-20: a risky configuration whose storage a camera-only qualification did not test. -->
+    <string name="raw_video_untested_notice">Almacenamiento no probado: pueden perderse fotogramas</string>
+    <string name="raw_video_untested_label">%1$s, almacenamiento no probado</string>
+    <string name="raw_video_config_risk_hint_untested">El signo de advertencia marca una tasa a la que no se probó el almacenamiento, así que una toma puede tener microcortes, latencia o terminar dañada. Vuelve a calificar con la prueba de almacenamiento para comprobarla. Automática nunca la elige.</string>
+    <string name="raw_video_config_risk_hint_mixed">El signo de advertencia marca una tasa riesgosa: el almacenamiento es demasiado lento para ella o no se probó, así que una toma puede tener microcortes, latencia o terminar dañada. Automática nunca la elige.</string>
 </resources>

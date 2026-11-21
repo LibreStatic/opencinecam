@@ -118,4 +118,13 @@
     <string name="raw_qualification_rest_body">The phone\'s storage is still busy writing from recent recording, so its speed can\'t be measured fairly.</string>
     <string name="raw_qualification_rest_hint">Leave the phone idle for about an hour, without recording, then qualify again.</string>
     <string name="raw_qualification_rest_kept">Your previous qualification is kept.</string>
+    <!-- PLAN-071, 2026-11-20: the run's options, reused camera checks, and configurations whose storage a camera-only run did not test. -->
+    <string name="raw_qualification_option_predict">Skip runs the storage test decides</string>
+    <string name="raw_qualification_option_predict_body">Faster. A configuration the storage cannot sustain is marked risky from the storage test, without recording it.</string>
+    <string name="raw_qualification_option_camera_only">Camera test only</string>
+    <string name="raw_qualification_option_camera_only_body">Skips the storage test. Every configuration the camera delivers is marked risky: you can choose it by hand, Automatic never picks it.</string>
+    <string name="raw_qualification_reuse">Camera checks from the last qualification are reused</string>
+    <string name="raw_qualification_item_untested">storage not tested</string>
+    <string name="raw_qualification_risky_body_untested">You can choose these by hand, but the storage was not tested at their rate: a take may stutter, lag or end up corrupted. Automatic never picks them.</string>
+    <string name="raw_qualification_risky_body_mixed">You can choose these, but the storage is too slow for their rate or was not tested: a take may stutter, lag or end up corrupted.</string>
 </resources>

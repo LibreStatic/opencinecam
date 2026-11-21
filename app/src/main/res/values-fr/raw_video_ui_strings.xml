@@ -44,4 +44,9 @@
     <string name="raw_video_profile_drive">Qualifiées sur le disque USB %1$s</string>
     <string name="raw_video_profile_drive_unnamed">Qualifiées sur le disque USB</string>
     <string name="raw_video_left_out_title">NON DISPONIBLES</string>
+    <!-- PLAN-071, 2026-11-20: a risky configuration whose storage a camera-only qualification did not test. -->
+    <string name="raw_video_untested_notice">Stockage non testé : des images peuvent être perdues</string>
+    <string name="raw_video_untested_label">%1$s, stockage non testé</string>
+    <string name="raw_video_config_risk_hint_untested">Le signe d’avertissement signale un débit auquel le stockage n’a pas été testé, une prise peut donc saccader, prendre du retard ou finir corrompue. Qualifiez à nouveau avec le test du stockage pour le vérifier. Automatique ne le choisit jamais.</string>
+    <string name="raw_video_config_risk_hint_mixed">Le signe d’avertissement signale un débit risqué : le stockage est trop lent pour lui ou n’a pas été testé, une prise peut donc saccader, prendre du retard ou finir corrompue. Automatique ne le choisit jamais.</string>
 </resources>

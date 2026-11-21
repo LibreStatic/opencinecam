@@ -44,4 +44,9 @@
     <string name="raw_video_profile_drive">Qualificadas na unidade USB %1$s</string>
     <string name="raw_video_profile_drive_unnamed">Qualificadas na unidade USB</string>
     <string name="raw_video_left_out_title">INDISPONÍVEIS</string>
+    <!-- PLAN-071, 2026-11-20: a risky configuration whose storage a camera-only qualification did not test. -->
+    <string name="raw_video_untested_notice">Armazenamento não testado: podem perder-se fotogramas</string>
+    <string name="raw_video_untested_label">%1$s, armazenamento não testado</string>
+    <string name="raw_video_config_risk_hint_untested">O sinal de aviso marca uma taxa à qual o armazenamento não foi testado, por isso um take pode ter micropausas, atraso ou ficar corrompido. Qualifique de novo com o teste de armazenamento para a verificar. Automático nunca a escolhe.</string>
+    <string name="raw_video_config_risk_hint_mixed">O sinal de aviso marca uma taxa arriscada: o armazenamento é demasiado lento para ela ou não foi testado, por isso um take pode ter micropausas, atraso ou ficar corrompido. Automático nunca a escolhe.</string>
 </resources>

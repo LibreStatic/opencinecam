@@ -31,7 +31,8 @@ import kotlin.math.floor
  *    configuration, at most [RawQualificationStaging.MAX_ENCODE_BENCH_CONFIGS] configurations; a
  *    benchmark only the heat spoiled judges itself and the descent goes on to the next lighter one;
  * 5. a real long run of each compressed twin whose camera delivered and whose encoder keeps up,
- *    heaviest first, at most [RawQualificationStaging.MAX_COMPRESSED_LONG_RUNS]; the others are
+ *    heaviest first, at most [RawQualificationStaging.MAX_COMPRESSED_LONG_RUNS]; the others, and a
+ *    twin the phone is already too warm to run ([RawQualificationStaging.compressedHeatSkip]), are
  *    extrapolated from the benchmark ([RawQualificationStaging.compressedVerdict]).
  *
  * One sustained rule applies to every verdict ([RawQualificationStaging.sustainedRateReasons]).
@@ -53,6 +54,12 @@ object RawQualificationMethods {
      * take writes it: judged from its own frame loss, ring, writer and measured stored bytes.
      */
     const val COMPRESSED_LONG_RUN = "compressed-long-run"
+
+    /**
+     * A camera-only run ([RawQualificationOptions.cameraOnly]) judged it from its camera check (and, compressed, its
+     * codec's encode benchmark) alone; the storage was never tested ([RawQualificationRisk.REASON_STORAGE_NOT_TESTED]).
+     */
+    const val CAMERA_ONLY = "camera-only"
 
     /** [COMPRESSED_EXTRAPOLATED] as records stored before block-pack name it; still read as such. */
     const val LEGACY_LJ92_EXTRAPOLATED = "lj92-extrapolated"
@@ -375,6 +382,51 @@ object RawQualificationStaging {
         RawThroughputBenchmark.qualifyWithBuffer(config, config.bytesPerFrame, sweep, null, compressionRatio)
             .reasonCodes.filter { it in SWEEP_RULING_REASONS }
 
+    /**
+     * Why [config] gets no long run when [RawQualificationOptions.skipPredictedLongRuns] is [enabled]: the sweep found the
+     * write cache's cliff ([RawSustainedWrite.cliffDetected]) and [config]'s stream at the rate its camera check achieved
+     * ([achievedFps]), compressed at [ratio] for a twin, exceeds the sustained rate past it ([sustainedRateReasons]). Such a
+     * run could at best be risky; the sustained rule alone decides it. Empty when the option is off, with no cliff (the
+     * option then changes nothing), and when the configuration is within the sustained rate.
+     */
+    fun predictedLongRunSkip(
+        enabled: Boolean,
+        config: RawVideoConfig,
+        sustained: RawSustainedWrite?,
+        achievedFps: Double? = null,
+        ratio: Double = 1.0,
+    ): List<String> =
+        if (!enabled || sustained?.cliffDetected != true) emptyList() else sustainedRateReasons(config, ratio, sustained, achievedFps)
+
+    /**
+     * The verdict a camera-only run ([RawQualificationOptions.cameraOnly]) gives an uncompressed configuration from its
+     * [cameraCheck] alone: a pass (a reduced rate included, keeping its informational codes) is a FAIL with
+     * [RawQualificationRisk.REASON_STORAGE_NOT_TESTED], so it is risky; a failure keeps the check's reasons; a skipped or
+     * missing check leaves it UNKNOWN, never stored.
+     */
+    fun cameraOnlyVerdict(cameraCheck: RawStageResult?): RawStagedVerdict {
+        val method = RawQualificationMethods.CAMERA_ONLY
+        return when {
+            cameraCheck == null -> RawStagedVerdict(RawBenchmarkStatus.UNKNOWN, listOf(REASON_CAMERA_CHECK_MISSING), method)
+            cameraCheck.status == RawBenchmarkStatus.UNKNOWN -> RawStagedVerdict(RawBenchmarkStatus.UNKNOWN, cameraCheck.reasonCodes, method)
+            cameraCheck.status == RawBenchmarkStatus.FAIL -> RawStagedVerdict(RawBenchmarkStatus.FAIL, cameraCheck.reasonCodes, method)
+            else -> RawStagedVerdict(
+                RawBenchmarkStatus.FAIL,
+                (listOf(RawQualificationRisk.REASON_STORAGE_NOT_TESTED) + cameraCheck.reasonCodes.filter { it in RawQualificationRisk.INFORMATIONAL_REASONS }).distinct(),
+                method,
+            )
+        }
+    }
+
+    /**
+     * [compressedVerdict] for a camera-only run: no long run covers anything, so a twin whose camera delivered and whose
+     * [bench] encoder keeps up is a FAIL with [RawQualificationRisk.REASON_STORAGE_NOT_TESTED] (risky), any camera or
+     * encoder failure keeps its reasons, and a missing twin or benchmark leaves it UNKNOWN.
+     */
+    fun cameraOnlyCompressedVerdict(twin: RawVideoConfig, twinCamera: RawStageResult?, bench: RawEncodeBenchFigures?): RawStagedVerdict =
+        compressedVerdict(twin, twinCamera, bench, emptyMap(), listOf(RawQualificationRisk.REASON_STORAGE_NOT_TESTED))
+            .copy(method = RawQualificationMethods.CAMERA_ONLY, coveredBy = null)
+
     /** The descent goes on after [result] until a long run passes. */
     fun continueDescent(result: RawStageResult): Boolean = !result.passed
 
@@ -542,6 +594,45 @@ object RawQualificationStaging {
     fun compressedHeatOnly(result: RawStageResult?): Boolean =
         result != null && result.status == RawBenchmarkStatus.FAIL && REASON_THERMAL_LIMIT in result.reasonCodes &&
             result.reasonCodes.all { it == REASON_THERMAL_LIMIT || it in RawQualificationRisk.INFORMATIONAL_REASONS }
+
+    /** The thermal status ([android.os.PowerManager.THERMAL_STATUS_MODERATE]) at which a compressed twin's long run is not started. */
+    const val THERMAL_STATUS_MODERATE = 2
+
+    /**
+     * A compressed twin's long run is not started when the phone is already at [thermalStatus] MODERATE or hotter just
+     * before it: the run would wait for the heat, then most likely fail for it alone ([compressedHeatOnly]), and such a
+     * run is judged by the extrapolation anyway. The twin takes that verdict ([compressedFinalVerdict] with no run of
+     * its own), marked [REASON_COMPRESSED_HEAT_FALLBACK]. Below MODERATE the run goes ahead.
+     */
+    fun compressedHeatSkip(thermalStatus: Int): Boolean = thermalStatus >= THERMAL_STATUS_MODERATE
+
+    /** A long run's measured window ended as soon as its ring overflowed (`stoppedEarly`): it could no longer pass. */
+    const val STOPPED_EARLY_RING_OVERFLOW = "ring-overflow"
+
+    /** A long run's read-back was not done (`scan.skipped`): the run had already failed ([skipReadBack]). */
+    const val SCAN_SKIPPED_RUN_FAILED = "run-already-failed"
+
+    /**
+     * A long run's row need not be read back and checked ([com.librestatic.opencinecam.camera.OcrawStreamReader]): its
+     * ring overflowed, it lost frames ([lostFrames]) or its writer failed ([writerError]), so rule v2 or the writer
+     * check already fails it and the scan of tens of gigabytes would only add wear and time. A skipped scan adds no
+     * `ocraw-scan-mismatch`.
+     */
+    fun skipReadBack(ringOverflow: Boolean, lostFrames: Long, writerError: Boolean): Boolean =
+        ringOverflow || lostFrames > 0 || writerError
+
+    /**
+     * Rule v2's verdict [q] of a long run whose measured window [stoppedEarly] at its ring overflow: without
+     * [RawThroughputBenchmark.REASON_LIVE_RUN_TOO_SHORT], which only says the window was cut short on purpose (the
+     * full window would have met the minimum); its other reasons, the overflow among them, stand. [q] itself otherwise,
+     * also when the short window is its only reason: a cut window never passes.
+     */
+    fun earlyStopQualification(q: RawVideoQualification, stoppedEarly: Boolean): RawVideoQualification {
+        if (!stoppedEarly || RawThroughputBenchmark.REASON_LIVE_RUN_TOO_SHORT !in q.reasonCodes) return q
+        val codes = q.reasonCodes.filter { it != RawThroughputBenchmark.REASON_LIVE_RUN_TOO_SHORT && it != RawThroughputBenchmark.REASON_PASS }
+        // A cut window never passes: with no other reason (it was cut for an overflow rule v2 did not see) the short window stands.
+        return if (codes.isEmpty()) q else q.copy(reasonCode = codes.first(), reasonCodes = codes)
+    }
 
     /**
      * The verdict of a compressed configuration whose uncompressed twin is [twin] (camera evidence
@@ -736,4 +827,55 @@ object RawQualificationStaging {
     /** The benchmark entry verdicts use: the production thread count when it was measured, else the first. */
     fun verdictBench(entries: List<RawEncodeBenchFigures?>, productionThreads: Int): RawEncodeBenchFigures? =
         entries.firstOrNull { it?.threads == productionThreads } ?: entries.firstOrNull()
+}
+
+/**
+ * When a heavy session's wait for the thermal status to drop below MODERATE ends before its timeout: the phone has
+ * stopped cooling. After a heavy run it rarely gets below MODERATE within the wait, so the wait used to last its whole
+ * timeout and the session ran anyway. Every poll samples a continuous temperature signal, the thermal headroom
+ * (`PowerManager.getThermalHeadroom`, which falls as the phone cools) or else the battery temperature in °C; once the
+ * wait has lasted [MIN_WAIT_MS] and the signal fell by less than its minimum drop over the last [WINDOW_MS], waiting on
+ * would gain little. The constants are provisional until measured on the Razr.
+ */
+object RawThermalTrend {
+    /** The least a wait lasts before the trend can end it. */
+    const val MIN_WAIT_MS = 20_000L
+
+    /** The span the drop is measured over, ending at the latest sample. */
+    const val WINDOW_MS = 20_000L
+
+    /** Under this fall of the thermal headroom over [WINDOW_MS], the phone counts as no longer cooling. */
+    const val MIN_HEADROOM_DROP = 0.02
+
+    /** Under this fall of the battery temperature (°C) over [WINDOW_MS], the phone counts as no longer cooling. */
+    const val MIN_BATTERY_DROP_C = 0.3
+
+    /** Why a thermal wait ended (`thermalWaitEnded`): the status dropped below the threshold, the trend, or the timeout. */
+    const val ENDED_BELOW_THRESHOLD = "below-threshold"
+    const val ENDED_NOT_COOLING = "not-cooling"
+    const val ENDED_TIMEOUT = "timeout"
+
+    /** One reading [value] of a signal, [elapsedMs] after the wait began. */
+    data class Sample(val elapsedMs: Long, val value: Double)
+
+    /**
+     * The signal of [samples] (in time order; non-finite values ignored) fell by less than [minDrop] from the latest
+     * sample at least [WINDOW_MS] before the last one to the last one, and the wait has lasted [elapsedMs] of at least
+     * [MIN_WAIT_MS]. False until the samples cover the window.
+     */
+    fun stoppedCooling(samples: List<Sample>, elapsedMs: Long, minDrop: Double): Boolean {
+        if (elapsedMs < MIN_WAIT_MS) return false
+        val usable = samples.filter { it.value.isFinite() }
+        val latest = usable.lastOrNull() ?: return false
+        val from = usable.lastOrNull { it.elapsedMs <= latest.elapsedMs - WINDOW_MS } ?: return false
+        return from.value - latest.value < minDrop
+    }
+
+    /**
+     * [stoppedCooling] on the thermal [headroom] when it gave any usable value, else on the [batteryC] temperature;
+     * false with no usable signal, so the wait runs to its threshold or timeout as before.
+     */
+    fun stoppedCooling(headroom: List<Sample>, batteryC: List<Sample>, elapsedMs: Long): Boolean =
+        if (headroom.any { it.value.isFinite() }) stoppedCooling(headroom, elapsedMs, MIN_HEADROOM_DROP)
+        else stoppedCooling(batteryC, elapsedMs, MIN_BATTERY_DROP_C)
 }
