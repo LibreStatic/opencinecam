@@ -2358,8 +2358,14 @@ class Camera2PreviewEngine(
         // The GPU-crop route keeps the HAL zoom pinned at the anchor; the ratio moves the crop only.
         lensLockCrop?.let { crop ->
             val factor = LensLockCrop.cropFactor(ratio, crop.pinnedRatio, crop.uiRange)
-            crop.factor = factor
-            cameraExecutor.execute { if (lensLockCrop === crop && rawTake.get() == null) logPipeline?.setCropZoom(factor) }
+            cameraExecutor.execute {
+                // The same admission check as the HAL path below: a take admitted meanwhile keeps its framing.
+                synchronized(rawZoomAdmissionLock) {
+                    if (lensLockCrop !== crop || rawTake.get() != null) return@execute
+                    crop.factor = factor
+                    logPipeline?.setCropZoom(factor)
+                }
+            }
             return true
         }
         // A lens-locked session takes the ratio on the logical scale; the physical camera gets its own.
