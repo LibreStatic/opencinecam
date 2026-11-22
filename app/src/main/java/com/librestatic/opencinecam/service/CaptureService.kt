@@ -1640,9 +1640,12 @@ class CaptureService : Service() {
                 if (descriptor != null && surface?.isValid == true) {
                     cameraState.value = cameraState.value.copy(phase = CameraUiPhase.OPENING)
                     val start = Runnable {
-                    // A later mode change, a camera switch or a take admitted meanwhile supersedes this deferred start.
+                    // A later mode change, a camera switch, a take admitted meanwhile or the RAW qualification's hold on
+                    // the preview supersedes this deferred start. A lens calibration does not: it switches the mode and
+                    // then locks the controls, and its run waits for this very reopen.
                     val now = cameraState.value
-                    if (now.selectedMode != mode || !surface.isValid || now.structuralSettingsFrozen ||
+                    if (now.selectedMode != mode || !surface.isValid || rawQualificationPreviewHeld ||
+                        now.copy(lensCalibrationRunning = false).structuralSettingsFrozen ||
                         now.descriptor?.cameraId != descriptor.cameraId) return@Runnable
                     previewEngine.startPreview(
                         descriptor,
