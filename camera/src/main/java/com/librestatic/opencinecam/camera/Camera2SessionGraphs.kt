@@ -881,9 +881,10 @@ internal fun Camera2PreviewEngine.previewCaptureCallback(
     // against the argument dropped every HFR result and a GPU HFR preview never "started".
     val armedSession = session
     val armedAnchors = directRecorderAnchors
-    // Constrained high-speed bursts report every frame (240/s); the full per-result work below runs on about one per
-    // preview period so the camera executor, which also carries the analysis delivery, does not fall behind.
-    val highSpeedGate = if (isHighSpeedSession()) HighSpeedResultGate() else null
+    // Constrained high-speed bursts report every frame (240/s), and a RAW video session at 90 or 120 fps nearly as
+    // many; the full per-result work below runs on about one per preview period so the camera executor, which also
+    // carries the analysis delivery and the RAW take's results, does not fall behind.
+    val highSpeedGate = if (HighSpeedResultGate.needed(isHighSpeedSession(), requestedTargetFps)) HighSpeedResultGate() else null
     if (notifyStarted && descriptor != null && !disposed.get()) {
         armedSession?.let { pendingPreviewStartedReceipt = PreviewStartedReceipt(it, callbackGeneration, descriptor) }
     }
@@ -930,7 +931,7 @@ internal fun Camera2PreviewEngine.previewCaptureCallback(
                 reportRecordingWhiteBalance(request, result)
                 if (!processFully) return
                 // The audit counts frame-number gaps as dropped frames, which coalescing would fake, and its
-                // high-speed count was already an artefact (the file had every frame): skipped in high-speed.
+                // high-speed count was already an artefact (the file had every frame): skipped whenever results are coalesced.
                 if (highSpeedGate == null) auditCaptureResult(armedSession, result, sensorTimestamp)
                 driveCadenceGuard(result, sensorTimestamp)
                 reportEffectiveZoom(result)
