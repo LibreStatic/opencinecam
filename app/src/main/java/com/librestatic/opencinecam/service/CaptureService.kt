@@ -697,7 +697,10 @@ class CaptureService : Service() {
 
     // ---- Lens calibration run (PLAN-070) ----
 
-    internal class CalibrationRestore(val cameraId: String, val mode: CaptureMode, val zoom: Float)
+    internal class CalibrationRestore(val cameraId: String, val mode: CaptureMode, val zoom: Float) {
+        /** The high-speed size and rate (width, height, fps) the run moved the session off; null when it kept them. */
+        var highSpeedTarget: Triple<Int, Int, Int>? = null
+    }
 
     /** One run, from the binder call to its end. Fields are written by main and by the worker thread. */
     internal class CalibrationRun(val restore: CalibrationRestore) {
@@ -720,6 +723,8 @@ class CaptureService : Service() {
     @Volatile internal var savedCalibration: com.librestatic.opencinecam.core.model.CalibrationSet? = null
     @Volatile internal var liveRedBlueRatio: Float? = null
     internal val openingCount = AtomicInteger()
+    /** selectMode's deferred high-speed start while it waits on the main handler. Main thread only. */
+    internal var pendingModeStart: Runnable? = null
 
     internal val calibrationPrepareTimeoutMs = 15_000L
     internal val calibrationCaptureTimeoutMs = 10_000L
@@ -1112,12 +1117,29 @@ class CaptureService : Service() {
                 return
             }
             val relocked = wasLensLocked
-            if (relocked) attachedPreviewSurface?.takeIf { it.isValid }?.let { attachPreview(it, attachedPreviewRotationDegrees) }
+            // A constrained high-speed session (slow motion) gives the run no stable samples: it measures on a
+            // standard-rate profile, and finishCalibration puts the size and rate back.
+            val highSpeed = cameraState.value.activeVideoProfile?.takeIf { mode in CameraUiState.videoProfileModes && it.constrainedHighSpeed }
+            val standard = highSpeed?.let { profile ->
+                com.librestatic.opencinecam.capture.calibrationVideoProfile(
+                    current.descriptor?.videoProfiles.orEmpty().filter { !it.constrainedHighSpeed }.map { it.toSpec() },
+                    profile.size.width, profile.size.height,
+                )
+            }
+            if (highSpeed != null && standard != null) {
+                run.restore.highSpeedTarget = Triple(highSpeed.size.width, highSpeed.size.height, highSpeed.fps)
+                cameraState.update {
+                    it.copy(targetVideoWidth = standard.width, targetVideoHeight = standard.height, targetFps = standard.fps, effectiveFps = null)
+                }
+            }
+            // A start selectMode deferred reads the new size and rate when it runs; otherwise the session restarts here.
+            val restarted = relocked || (standard != null && pendingModeStart == null)
+            if (restarted) attachedPreviewSurface?.takeIf { it.isValid }?.let { attachPreview(it, attachedPreviewRotationDegrees) }
             // While locked the state holds the locked lens' range; the run sweeps the logical one.
             val zoomRange = current.descriptor?.effectiveZoomRange?.takeIf { wasLensLocked } ?: (current.zoomMinRatio..current.zoomMaxRatio)
             cameraState.update { it.copy(lensCalibrationRunning = true) }
             run.thread = Thread({
-                runCalibration(run, lenses, mode, zoomRange, openedBefore, switched || relocked)
+                runCalibration(run, lenses, mode, zoomRange, openedBefore, switched || restarted)
             }, "lens-calibration").also { it.isDaemon = true; it.start() }
         }
 
@@ -1651,7 +1673,10 @@ class CaptureService : Service() {
                 val surface = attachedPreviewSurface
                 if (descriptor != null && surface?.isValid == true) {
                     cameraState.value = cameraState.value.copy(phase = CameraUiPhase.OPENING)
+                    pendingModeStart?.let(mainHandler::removeCallbacks)
+                    pendingModeStart = null
                     val start = Runnable {
+                    pendingModeStart = null
                     // A later mode change, a camera switch, a take admitted meanwhile or the RAW qualification's hold on
                     // the preview supersedes this deferred start. A lens calibration does not: it switches the mode and
                     // then locks the controls, and its run waits for this very reopen.
@@ -1685,6 +1710,7 @@ class CaptureService : Service() {
                     // As in selectTargetFps: let the panel apply its high refresh-rate vote before a
                     // constrained high-speed stream starts.
                     if (cameraState.value.activeVideoProfile?.constrainedHighSpeed == true && mode in CameraUiState.videoProfileModes) {
+                        pendingModeStart = start
                         mainHandler.postDelayed(start, 350L)
                     } else start.run()
                 }

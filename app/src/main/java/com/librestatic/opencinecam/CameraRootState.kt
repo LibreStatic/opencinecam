@@ -102,10 +102,11 @@ internal fun rememberCameraRootNavigation(onboarding: OnboardingStore): CameraRo
 
 /**
  * Settings that follow what the camera settled on for the selected mode, so the next start of the
- * mode opens at the same size and rate. Unchanged while recording, and for modes that keep none.
+ * mode opens at the same size and rate. Unchanged while recording, for modes that keep none, and during
+ * a lens calibration, whose size and rate are the run's own and not a choice to keep.
  */
 internal fun CameraSettings.followingCameraSelection(state: CameraUiState): CameraSettings {
-    if (state.phase == CameraUiPhase.RECORDING) return this
+    if (state.phase == CameraUiPhase.RECORDING || state.lensCalibrationRunning) return this
     return when (state.selectedMode) {
         CaptureMode.LOG, CaptureMode.HLG -> copy(
             logWidth = state.targetVideoWidth,

@@ -298,8 +298,29 @@ internal fun CaptureService.finishCalibration(run: CalibrationRun, outcome: com.
     // The camera may be gone; the mode and zoom are still put back, without a reopen then.
     // A saved lens lock was set aside for the run; it returns with one restart.
     val relock = !run.lost && currentLensLockBinding() != null
+    // Another mode works out its own size and rate; the mode the run kept gets back the high-speed ones it had.
+    val highSpeed = restore.highSpeedTarget.takeIf { cameraState.value.selectedMode == restore.mode }
+    if (highSpeed != null) cameraState.update {
+        it.copy(targetVideoWidth = highSpeed.first, targetVideoHeight = highSpeed.second, targetFps = highSpeed.third, effectiveFps = null)
+    }
     if (cameraState.value.selectedMode != restore.mode) localBinder.selectMode(restore.mode, reopen = !run.lost && !relock)
-    if (relock) attachedPreviewSurface?.takeIf { it.isValid }?.let { localBinder.attachPreview(it, attachedPreviewRotationDegrees) }
+    val surface = attachedPreviewSurface?.takeIf { it.isValid }
+    if (surface != null && highSpeed != null && !run.lost) {
+        // As in selectMode: the panel applies its high refresh-rate vote before a constrained high-speed stream
+        // starts. OPENING keeps a take off the standard-rate session meanwhile.
+        cameraState.update { it.copy(phase = CameraUiPhase.OPENING) }
+        // A start selectMode deferred just before the run would open the restored rate ahead of this wait.
+        pendingModeStart?.let(mainHandler::removeCallbacks)
+        pendingModeStart = null
+        mainHandler.postDelayed({
+            val now = cameraState.value
+            // A new run, another mode, camera or rate, or a newer surface has opened its own session since.
+            if (!serviceDestroyed && calibrationRun == null && now.selectedMode == restore.mode && now.selectedCameraId == restore.cameraId &&
+                Triple(now.targetVideoWidth, now.targetVideoHeight, now.targetFps) == highSpeed &&
+                now.activeVideoProfile?.constrainedHighSpeed == true && attachedPreviewSurface === surface && surface.isValid
+            ) localBinder.attachPreview(surface, attachedPreviewRotationDegrees)
+        }, 350L)
+    } else if (surface != null && relock) localBinder.attachPreview(surface, attachedPreviewRotationDegrees)
     localBinder.setZoomRatio(restore.zoom)
     refreshLensCorrection()
     val success = outcome as? com.librestatic.opencinecam.camera.calibration.RunOutcome.Success
