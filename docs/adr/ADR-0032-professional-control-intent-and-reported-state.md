@@ -58,7 +58,7 @@ Three operator buttons use named actions: none, capture/stop/cancel, torch toggl
 
 Capture inputs reuse the same permission dialog and role/generation ticket as the touch button. C1/C2 still open the reviewed diff; an unavailable action is disabled or explicitly reported, not simulated. Exterior starts only a publicly available presentation or closes the current explicit session. Button names describe requested monitoring state; they do not claim physical output acceptance.
 
-Startup mode is PHOTO (default), VIDEO or LAST. The last mode is local session preference data, never a camera/device ID; unsupported remembered modes fall back to PHOTO. Startup applies once per capture-service creation, not per activity/fold recreation. Existing exposure/WB values restore by default; torch restoration defaults off. Disabling restoration resets the corresponding saved values on service startup. Focus/zoom/physical lens are not restored across service lifetimes, and capture never starts automatically.
+Startup mode is PHOTO, VIDEO or LAST (default). The last mode is local session preference data, never a camera/device ID; unsupported remembered modes fall back to PHOTO. Startup applies once per capture-service creation, not per activity/fold recreation. Existing exposure/WB values restore by default; torch restoration defaults off. Photo settings (format, quality, aspect ratio and the still size picked per camera and format) restore by default. Disabling restoration resets the corresponding saved values on service startup. Focus/zoom/physical lens are not restored across service lifetimes, and capture never starts automatically.
 
 The persistent take-lock preference applies from capture preparation through finalization. Direct focus/zoom/EV/AE/AF/preset commands are rejected while locked; exposure/WB/torch edits in Settings remain pending. Monitoring, layout, stop/cancel and explicit unlocking stay live. Turning the switch off applies pending live camera preferences; structural values still await take completion. A focus pull cancels at locked-take entry or when the lock is engaged. Presets cannot implicitly unlock an already locked take. Photo completion replays pending settings after the final burst result or DNG save.
 
@@ -68,8 +68,9 @@ The persistent take-lock preference applies from capture preparation through fin
 |---|---|---|---|
 | Button 1 / 2 / 3 | Torch / Peaking / View assist | Named non-system actions including None | Shared settings; live remapping, no action on selection |
 | Volume up / down | System volume / System volume | Named actions, None or System volume | Shared settings; new first-down only, capture screen/lifecycle/focus gated |
-| Startup mode | PHOTO | PHOTO / VIDEO / LAST | Next service creation; current capability gate, never capture |
+| Startup mode | LAST | PHOTO / VIDEO / LAST | Next service creation; current capability gate, never capture |
 | Restore exposure/WB | On | Boolean | Next service creation; off resets to AUTO/default exposure |
+| Restore photo settings | On | Boolean | Next service creation; off returns photo format, quality, aspect ratio and still sizes to their defaults, video geometry untouched |
 | Restore torch | Off | Boolean | Next service creation; off clears enabled intent, keeps preferred intensity |
 | Lock during take | Off | Boolean | Live policy; stop/cancel/monitoring/unlock stay accessible |
 

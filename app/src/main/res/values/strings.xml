@@ -447,7 +447,8 @@
     <string name="operator_startup_last">Last available mode</string>
     <string name="operator_restore_manual">Restore exposure and white balance</string>
     <string name="operator_restore_torch">Restore torch on startup</string>
-    <string name="operator_startup_help">Applied once when the capture service starts, not when folding or reopening a window. Unsupported last modes use Photo. No automatic capture, lens selection, manual focus or zoom restoration. Turning restoration off resets those saved values at startup.</string>
+    <string name="operator_restore_photo">Restore photo settings</string>
+    <string name="operator_startup_help">Applied once when the capture service starts, not when folding or reopening a window. Unsupported last modes use Photo. No automatic capture, lens selection, manual focus or zoom restoration. Turning restoration off resets those saved values at startup. Restore photo settings keeps the photo resolution, format, quality and aspect ratio; off returns them to their defaults at startup.</string>
     <string name="operator_lock">Lock capture controls during a take</string>
     <string name="operator_locked">Capture controls locked. Stop, cancel, monitoring and Settings remain available.</string>
     <string name="operator_lock_help">Locks exposure, WB, light, focus and zoom from preparation through finalization. Settings edits stay pending; turn this switch off to unlock. Presets cannot unlock a take. Monitoring and stop/cancel remain available.</string>

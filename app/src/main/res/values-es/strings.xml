@@ -442,7 +442,8 @@
     <string name="operator_startup_last">Último modo disponible</string>
     <string name="operator_restore_manual">Restaurar exposición y balance de blancos</string>
     <string name="operator_restore_torch">Restaurar antorcha al iniciar</string>
-    <string name="operator_startup_help">Se aplica al iniciar el servicio, no al plegar ni recrear la ventana. Un último modo no disponible vuelve a Foto. No inicia capturas ni restaura lente, enfoque manual o zoom. Desactivar la restauración reinicia esos valores guardados al iniciar.</string>
+    <string name="operator_restore_photo">Restaurar ajustes de foto</string>
+    <string name="operator_startup_help">Se aplica al iniciar el servicio, no al plegar ni recrear la ventana. Un último modo no disponible vuelve a Foto. No inicia capturas ni restaura lente, enfoque manual o zoom. Desactivar la restauración reinicia esos valores guardados al iniciar. Restaurar ajustes de foto conserva la resolución, el formato, la calidad y el aspecto de las fotos; desactivado, vuelven a sus valores predeterminados al iniciar.</string>
     <string name="operator_lock">Bloquear controles de captura durante la toma</string>
     <string name="operator_locked">Controles de captura bloqueados. Detener, cancelar, monitoreo y Ajustes siguen disponibles.</string>
     <string name="operator_lock_help">Bloquea exposición, WB, luz, enfoque y zoom desde la preparación hasta finalizar. Los cambios de Ajustes quedan pendientes; apaga este interruptor para desbloquear. Los presets no desbloquean una toma. Monitoreo y detener/cancelar siguen disponibles.</string>

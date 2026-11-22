@@ -41,17 +41,17 @@ class CameraPresetTest {
         for (secret in listOf(original.id, "12345", "private script", "private cue", "audio-input-device-id", "Private Lavalier", "audio-input-key", "audio-input-loss-policy")) assertFalse(text.contains(secret))
         assertEquals(original.mode, decoded.mode); assertEquals(original.focusDiopters, decoded.focusDiopters); assertEquals(original.zoomRatio, decoded.zoomRatio)
         assertFalse(text.contains("timecode-remember-position")); assertFalse(text.contains("timecode-reset-revision"))
-        assertEquals(186, CameraPresetCodec.portableKeys.size)
+        assertEquals(189, CameraPresetCodec.portableKeys.size)
         assertFalse(text.contains("video-codec")); assertFalse(text.contains("proxy-max-long-edge")); assertFalse(text.contains("proxy-video-bitrate-mbps"))
         val memory = PresetPreferences(); CameraSettingsStore(memory).save(CameraSettings())
-        assertEquals(memory.all.keys - setOf("audio-input-device-id", "audio-input-key", "audio-input-loss-policy", "audio-listening-output-device-id", "subject-script", "subject-cue", "audio-aac-log-migrated-v1", "mode-selector-carousel-migrated-v1", "recording-policy-migrated-v1", "recording-policy", "timecode-remember-position", "timecode-reset-revision", "geotagging-enabled", "proxy-max-long-edge", "proxy-video-bitrate-mbps", "log-grey-reference", "video-codec", "review-log-view", "review-native-surface", "review-raw-playback", "gyroflow-log-enabled", "zero-shutter-lag", "hdr-video-format", "low-light-boost", "image-saturation", "image-sharpness", "night-photo-mode", "video-low-light-fps", "video-fps-lock", "lens-correction-video", "lens-correction-photos", "lens-correction-alignment", "lens-lock", "smooth-lens-switch", "rotate-when-locked", "audio-sync-offset-ms") - subjectFeatureKeys, CameraPresetCodec.portableKeys)
+        assertEquals(memory.all.keys - setOf("audio-input-device-id", "audio-input-key", "audio-input-loss-policy", "audio-listening-output-device-id", "subject-script", "subject-cue", "audio-aac-log-migrated-v1", "mode-selector-carousel-migrated-v1", "recording-policy-migrated-v1", "recording-policy", "timecode-remember-position", "timecode-reset-revision", "geotagging-enabled", "proxy-max-long-edge", "proxy-video-bitrate-mbps", "log-grey-reference", "video-codec", "review-log-view", "review-native-surface", "review-raw-playback", "gyroflow-log-enabled", "zero-shutter-lag", "hdr-video-format", "low-light-boost", "image-saturation", "image-sharpness", "night-photo-mode", "video-low-light-fps", "video-fps-lock", "lens-correction-video", "lens-correction-photos", "lens-correction-alignment", "lens-lock", "smooth-lens-switch", "rotate-when-locked", "audio-sync-offset-ms", "still-sizes") - subjectFeatureKeys, CameraPresetCodec.portableKeys)
         println("PRESET_V20_KEYS=" + CameraPresetCodec.portableKeys.size)
     }
     @Test fun audioSyncOffsetStaysOnThisDeviceWhenAPresetIsApplied() {
         val text = CameraPresetCodec.encode(CameraPreset(name = "Look", settings = CameraSettings(audioSyncOffsetMs = 120)))
         assertFalse(text.contains("audio-sync-offset-ms")); assertFalse("audio-sync-offset-ms" in CameraPresetCodec.portableKeys)
         assertEquals(0, CameraPresetCodec.decode(text).settings.audioSyncOffsetMs)
-        assertEquals(29, CameraPresetCodec.VERSION)
+        assertEquals(30, CameraPresetCodec.VERSION)
         val current = CameraSettings(audioSyncOffsetMs = -80)
         assertEquals(-80, CameraPresetCodec.mergeLocal(CameraPresetCodec.decode(text).settings, current).audioSyncOffsetMs)
     }
@@ -95,7 +95,7 @@ class CameraPresetTest {
         assertEquals("1920x1080@60", CameraPresetCodec.mergeLocal(decoded.settings, CameraSettings()).rawVideoConfig)
     }
     @Test fun aPlacedRawVideoWindowRoundTripsWithoutAVersionBump() {
-        assertEquals(29, CameraPresetCodec.VERSION)
+        assertEquals(30, CameraPresetCodec.VERSION)
         val key = "1920x816+1080+1122@24+bp"
         val text = CameraPresetCodec.encode(CameraPreset(name = "Raw", settings = CameraSettings(rawVideoConfig = key), mode = CaptureMode.RAW_VIDEO))
         val decoded = CameraPresetCodec.decode(text)
@@ -202,7 +202,7 @@ class CameraPresetTest {
         // A full curve is longer than the 128 characters other strings may carry.
         val curve = EqCurve(points = List(EqCurve.MAX_POINTS) { EqPoint(EqFilterType.BELL, 100.0 + it * 500.0, -3.5, 1.25) }, trimDb = -1.5)
         val text = CameraPresetCodec.encode(CameraPreset(name = "Razr", settings = CameraSettings(audioEqCurve = curve, audioEqProfileId = "bundled-motorola-blanc")))
-        assertTrue(text.contains("\"version\":29"))
+        assertTrue(text.contains("\"version\":${CameraPresetCodec.VERSION}"))
         assertTrue(curve.toJson().length > 128)
         val decoded = CameraPresetCodec.decode(text).settings
         assertEquals(curve, decoded.audioEqCurve)
@@ -224,6 +224,55 @@ class CameraPresetTest {
         assertNull(settings.audioEqProfileId)
         // A V28 payload that already carries the V29 keys is not a V28 payload.
         invalid(document { it["version"] = JsonPrimitive(28) })
+    }
+    @Test fun photoSizeAndRestoreArePortableFromV30AndThePerCameraSizesAreNot() {
+        val keys = setOf("photo-width", "photo-height", "operator-restore-photo")
+        assertEquals(30, CameraPresetCodec.VERSION)
+        assertTrue(CameraPresetCodec.portableKeys.containsAll(keys))
+        assertTrue(CameraPresetCodec.portableKeysFor(29).none { it in keys })
+        assertTrue(CameraPresetCodec.portableKeysFor(30).containsAll(keys))
+        assertFalse("still-sizes" in CameraPresetCodec.portableKeys)
+        val settings = CameraSettings(photoWidth = 4000, photoHeight = 3000, stillSizes = mapOf("0:JPEG" to (4000 to 3000), "1:HEIC" to (1920 to 1080)),
+            operation = OperatorPreferences(restorePhotoSettings = false))
+        val text = CameraPresetCodec.encode(CameraPreset(name = "Stills", settings = settings, mode = CaptureMode.PHOTO))
+        assertTrue(text.contains("\"version\":30"))
+        assertFalse(text.contains("still-sizes")); assertFalse(text.contains("0:JPEG"))
+        val decoded = CameraPresetCodec.decode(text).settings
+        assertEquals(4000 to 3000, decoded.photoWidth to decoded.photoHeight)
+        assertFalse(decoded.operation.restorePhotoSettings)
+        assertTrue(decoded.stillSizes.isEmpty())
+        // The camera's largest travels as 0 by 0; a half-set or negative size is not canonical.
+        assertEquals(0 to 0, CameraPresetCodec.decode(CameraPresetCodec.encode(CameraPreset(name = "Largest", settings = CameraSettings()))).settings
+            .let { it.photoWidth to it.photoHeight })
+        invalid(document { it["settings"] = JsonObject(it.getValue("settings").jsonObject + ("photo-width" to JsonPrimitive(4000))) })
+        invalid(document { it["settings"] = JsonObject(it.getValue("settings").jsonObject + ("photo-height" to JsonPrimitive(-1))) })
+        invalid(document { it["settings"] = JsonObject(it.getValue("settings").jsonObject + ("still-sizes" to JsonPrimitive("0:JPEG=4000x3000"))) })
+    }
+    @Test fun v29PayloadWithoutThePhotoSizeDecodesToTheLargestAndRestoring() {
+        val v29 = document {
+            it["version"] = JsonPrimitive(29)
+            it["settings"] = JsonObject(it.getValue("settings").jsonObject.filterKeys { key -> key in CameraPresetCodec.portableKeysFor(29) })
+        }
+        val settings = CameraPresetCodec.decode(v29).settings
+        assertEquals(0 to 0, settings.photoWidth to settings.photoHeight)
+        assertTrue(settings.operation.restorePhotoSettings)
+        // A V29 payload that already carries the V30 keys is not a V29 payload.
+        invalid(document { it["version"] = JsonPrimitive(29) })
+    }
+    @Test fun applyingAPresetClearsThePerCameraSizes() {
+        val local = mapOf("0:JPEG" to (2000 to 1500), "1:HEIC" to (1920 to 1080))
+        val current = CameraSettings(photoWidth = 2000, photoHeight = 1500, stillSizes = local)
+        val other = CameraPresetCodec.decode(CameraPresetCodec.encode(CameraPreset(name = "Big", settings = CameraSettings(photoWidth = 4000, photoHeight = 3000)))).settings
+        val applied = CameraPresetCodec.mergeLocal(other, current)
+        assertEquals(4000 to 3000, applied.photoWidth to applied.photoHeight)
+        assertTrue(applied.stillSizes.isEmpty())
+        assertEquals(4000 to 3000, applied.stillSizeFor("0", StillPhotoFormat.JPEG))
+        // The same photo size as the current one still wins over a size a camera remembered before.
+        val same = CameraPresetCodec.decode(CameraPresetCodec.encode(CameraPreset(name = "Same", settings = CameraSettings(photoWidth = 4000, photoHeight = 3000)))).settings
+        val remembered = CameraSettings(photoWidth = 4000, photoHeight = 3000, stillSizes = local)
+        val reapplied = CameraPresetCodec.mergeLocal(same, remembered)
+        assertTrue(reapplied.stillSizes.isEmpty())
+        assertEquals(4000 to 3000, reapplied.stillSizeFor("0", StillPhotoFormat.JPEG))
     }
     @Test fun malformedRawVideoConfigIsRejectedNotNormalised() {
         for (bad in listOf("full", "4080x3060", "full@0", "0x10@30", "full@30 ", "FULL@30", "1920x1080@60@60")) {
@@ -351,4 +400,4 @@ class CameraPresetTest {
 }
 
 // Keys newer than preset V19 (V20 to V29), so the historical-document tests can strip them.
-internal val PRESET_V20_KEYS = setOf("audio-eq-curve", "audio-eq-profile-id", "slow-motion-take-length-s", "operator-volume-up-long", "operator-volume-down-long", "operator-volume-up-double", "operator-volume-down-double", "operator-volume-both", "operator-volume-pair", "operator-volume-pair-inverted", "translucent-chrome", "viewfinder-scale", "chrome-opacity", "subject-split-preview-modes", "subject-fill-light-preview-level", "image-picture-profile", "haptic-level", "haptic-capture", "haptic-controls", "haptic-focus-exposure", "haptic-navigation", "haptic-mute-during-take", "raw-video-config", "scroll-long-text", "raw-video-near-lossless")
+internal val PRESET_V20_KEYS = setOf("photo-width", "photo-height", "operator-restore-photo", "audio-eq-curve", "audio-eq-profile-id", "slow-motion-take-length-s", "operator-volume-up-long", "operator-volume-down-long", "operator-volume-up-double", "operator-volume-down-double", "operator-volume-both", "operator-volume-pair", "operator-volume-pair-inverted", "translucent-chrome", "viewfinder-scale", "chrome-opacity", "subject-split-preview-modes", "subject-fill-light-preview-level", "image-picture-profile", "haptic-level", "haptic-capture", "haptic-controls", "haptic-focus-exposure", "haptic-navigation", "haptic-mute-during-take", "raw-video-config", "scroll-long-text", "raw-video-near-lossless")

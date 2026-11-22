@@ -27,7 +27,7 @@ data class PresetDifference(val key: String, val before: Any?, val after: Any)
 
 /** Flat typed settings schema; never deserialize app/device identifiers or arbitrary file paths. */
 object CameraPresetCodec {
-    const val VERSION = 29
+    const val VERSION = 30
     const val MAX_BYTES = 65_536
     // Explicit V2 registry: adding an application preference never exports it accidentally.
     // A schema revision and privacy review are required before extending this registry.
@@ -145,6 +145,9 @@ object CameraPresetCodec {
     private val portableV28 = portableV27 + setOf("slow-motion-take-length-s")
     // PLAN-074 decision 8: the equaliser curve and the profile it was copied from travel with a look.
     private val portableV29 = portableV28 + setOf("audio-eq-curve", "audio-eq-profile-id")
+    // The last picked still size (0 by 0: the camera's largest) and whether photo settings survive a restart.
+    // The per-camera sizes (`still-sizes`) name this device's camera ids, so they never travel.
+    private val portableV30 = portableV29 + setOf("photo-width", "photo-height", "operator-restore-photo")
     /** The equaliser curve is a JSON string up to [EqCurve.MAX_POINTS] points; every other string stays short. */
     private val longStringKeys = mapOf("audio-eq-curve" to 4_096)
     /**
@@ -167,11 +170,12 @@ object CameraPresetCodec {
         version == 26 -> portableV26
         version == 27 -> portableV27
         version == 28 -> portableV28
-        else -> portableV29
+        version == 29 -> portableV29
+        else -> portableV30
     }
     private fun snapshot(settings: CameraSettings): Map<String, Any> {
         val memory = PresetPreferences(); CameraSettingsStore(memory).save(settings)
-        return memory.all.filterKeys { it in portableV29 }.mapValues { requireNotNull(it.value) }.toSortedMap()
+        return memory.all.filterKeys { it in portableV30 }.mapValues { requireNotNull(it.value) }.toSortedMap()
     }
     private val defaults by lazy { snapshot(CameraSettings()) }
     val portableKeys: Set<String> get() = defaults.keys
@@ -214,7 +218,9 @@ object CameraPresetCodec {
                 is Float -> p.also { require(!it.isString) }.float.also { require(it.isFinite()) }
                 else -> error("Unknown preference type")
             }
-            if (key.endsWith("width") || key.endsWith("height")) require((values[key] as Int) in 1..32_768)
+            // The photo size alone may be 0 by 0, the camera's largest; the store reads a half-set size as that.
+            if (key == "photo-width" || key == "photo-height") require((values[key] as Int) in 0..32_768)
+            else if (key.endsWith("width") || key.endsWith("height")) require((values[key] as Int) in 1..32_768)
             if (key.endsWith("-fps")) require((values[key] as Int) in 1..(if (version >= 4 && key == "timelapse-geometry-fps") 60000 else 1000))
         }
         val decoded = CameraSettingsStore(PresetPreferences(values)).load()
@@ -241,6 +247,10 @@ object CameraPresetCodec {
         lensCorrectionPhotos = current.lensCorrectionPhotos,
         lensCorrectionAlignment = current.lensCorrectionAlignment,
         lensLock = current.lensLock,
+        // The per-camera still sizes are this device's. Applying a preset clears them, even when its photo size
+        // matches the current one, so the preset's size governs every camera that offers it (one that does not
+        // falls back to its largest) instead of a size a camera remembered before.
+        stillSizes = emptyMap(),
         smoothLensSwitch = current.smoothLensSwitch,
         // Whether the interface rotates with the system lock on is a habit of this phone, not a portable key.
         rotateWhenLocked = current.rotateWhenLocked,

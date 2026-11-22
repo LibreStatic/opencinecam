@@ -442,7 +442,8 @@
     <string name="operator_startup_last">Ultima modalità disponibile</string>
     <string name="operator_restore_manual">Ripristina esposizione e bilanciamento del bianco</string>
     <string name="operator_restore_torch">Ripristina torcia all\'avvio</string>
-    <string name="operator_startup_help">Applicato una volta all\'avvio del servizio di acquisizione, non alla chiusura o alla riapertura di una finestra. Le ultime modalità non supportate usano Foto. Nessun ripristino automatico di acquisizione, scelta dell\'obiettivo, fuoco manuale o zoom. Disattivare il ripristino reimposta questi valori salvati all\'avvio.</string>
+    <string name="operator_restore_photo">Ripristina impostazioni foto</string>
+    <string name="operator_startup_help">Applicato una volta all\'avvio del servizio di acquisizione, non alla chiusura o alla riapertura di una finestra. Le ultime modalità non supportate usano Foto. Nessun ripristino automatico di acquisizione, scelta dell\'obiettivo, fuoco manuale o zoom. Disattivare il ripristino reimposta questi valori salvati all\'avvio. Ripristina impostazioni foto mantiene risoluzione, formato, qualità e proporzioni delle foto; se disattivato, tornano ai valori predefiniti all\'avvio.</string>
     <string name="operator_lock">Blocca i controlli di acquisizione durante una ripresa</string>
     <string name="operator_locked">Controlli di acquisizione bloccati. Stop, annulla, monitoraggio e Impostazioni restano disponibili.</string>
     <string name="operator_lock_help">Blocca esposizione, WB, luce, fuoco e zoom dalla preparazione alla finalizzazione. Le modifiche alle Impostazioni restano in sospeso; disattiva questo interruttore per sbloccare. I preset non possono sbloccare una ripresa. Monitoraggio e stop/annulla restano disponibili.</string>

@@ -42,8 +42,8 @@ class AudioRecordingGainSettingsTest {
         val original = CameraSettings(audioRecordingGain = DigitalRecordingGain(true, 0))
         val decoded = CameraPresetCodec.decode(document(original).toString())
         assertEquals(original, decoded.settings)
-        assertEquals(29, CameraPresetCodec.VERSION)
-        assertEquals(186, CameraPresetCodec.portableKeys.size)
+        assertEquals(30, CameraPresetCodec.VERSION)
+        assertEquals(189, CameraPresetCodec.portableKeys.size)
         assertTrue(CameraPresetCodec.portableKeys.containsAll(keys))
     }
     @Test fun versionTenRetainsExact127FieldsAndManualIsNeverEnabledByMigration() {

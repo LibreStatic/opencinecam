@@ -442,7 +442,8 @@
     <string name="operator_startup_last">Dernier mode disponible</string>
     <string name="operator_restore_manual">Restaurer l\'exposition et la balance des blancs</string>
     <string name="operator_restore_torch">Restaurer la torche au démarrage</string>
-    <string name="operator_startup_help">Appliqué une fois au démarrage du service de capture, pas lors du pliage ou de la réouverture d\'une fenêtre. Les derniers modes non pris en charge utilisent Photo. Aucune restauration automatique de la capture, de l\'objectif, de la mise au point manuelle ni du zoom. Désactiver la restauration réinitialise ces valeurs enregistrées au démarrage.</string>
+    <string name="operator_restore_photo">Restaurer les réglages photo</string>
+    <string name="operator_startup_help">Appliqué une fois au démarrage du service de capture, pas lors du pliage ou de la réouverture d\'une fenêtre. Les derniers modes non pris en charge utilisent Photo. Aucune restauration automatique de la capture, de l\'objectif, de la mise au point manuelle ni du zoom. Désactiver la restauration réinitialise ces valeurs enregistrées au démarrage. Restaurer les réglages photo conserve la résolution, le format, la qualité et le format d\'image des photos ; désactivé, ils reprennent leurs valeurs par défaut au démarrage.</string>
     <string name="operator_lock">Verrouiller les commandes de capture pendant une prise</string>
     <string name="operator_locked">Commandes de capture verrouillées. Arrêt, annulation, monitoring et Réglages restent disponibles.</string>
     <string name="operator_lock_help">Verrouille exposition, WB, lumière, mise au point et zoom de la préparation à la finalisation. Les modifications des Réglages restent en attente ; désactivez ce commutateur pour déverrouiller. Les presets ne peuvent pas déverrouiller une prise. Le monitoring et l\'arrêt/annulation restent disponibles.</string>

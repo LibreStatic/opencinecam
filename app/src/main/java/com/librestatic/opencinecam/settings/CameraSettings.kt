@@ -163,6 +163,14 @@ data class CameraSettings(
     val lensCorrectionAlignment: Boolean = true,
     /** Device-local lens lock: logical camera id to the physical id it is pinned to (digital zoom only). Absent = no lock. */
     val lensLock: Map<String, String> = emptyMap(),
+    /**
+     * Device-local: the still size last picked per camera and compressed format, keyed `"<cameraId>:<JPEG|HEIC>"`
+     * (see [stillSizeKey]). Not portable, because camera ids are not; [photoWidth]/[photoHeight] travel instead.
+     */
+    val stillSizes: Map<String, Pair<Int, Int>> = emptyMap(),
+    /** The still size last picked on any camera, portable through presets; 0 by 0 means the camera's largest. */
+    val photoWidth: Int = 0,
+    val photoHeight: Int = 0,
     /** Device-local, opt-in: GPU-crop the zoom the HAL holds back around an automatic lens switch, so the framing does not jump. */
     val smoothLensSwitch: Boolean = false,
     /**
@@ -264,6 +272,17 @@ data class CameraSettings(
         require(validProjectRate(videoProjectNumerator, videoProjectDenominator))
     }
 }
+
+/** The [CameraSettings.stillSizes] key of a camera and compressed still format. */
+fun stillSizeKey(cameraId: String, format: StillPhotoFormat): String = "$cameraId:${format.name}"
+
+/**
+ * The still size to run on [cameraId] in [format]: the one last picked on that camera and format, else the
+ * last one picked anywhere, else null (the camera's largest). The caller checks the camera offers it.
+ */
+fun CameraSettings.stillSizeFor(cameraId: String?, format: StillPhotoFormat): Pair<Int, Int>? =
+    cameraId?.let { stillSizes[stillSizeKey(it, format)] }
+        ?: (photoWidth to photoHeight).takeIf { photoWidth > 0 && photoHeight > 0 }
 
 /** Legacy local values are repaired to valid labels; strict preset decoding still rejects changed snapshots. */
 fun CameraSettings.normalizedTimecode(): CameraSettings {
@@ -415,9 +434,10 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             button3 = enumPreference("operator-button-3", OperatorAction.VIEW_ASSIST).takeUnless { it == OperatorAction.SYSTEM_VOLUME } ?: OperatorAction.VIEW_ASSIST,
             volumeUp = enumPreference("operator-volume-up", OperatorAction.SYSTEM_VOLUME),
             volumeDown = enumPreference("operator-volume-down", OperatorAction.SYSTEM_VOLUME),
-            startupMode = enumPreference("operator-startup-mode", StartupMode.PHOTO),
+            startupMode = enumPreference("operator-startup-mode", StartupMode.LAST),
             restoreExposureWhiteBalance = preferences.getBoolean("operator-restore-exposure-wb", true),
             restoreTorch = preferences.getBoolean("operator-restore-torch", false),
+            restorePhotoSettings = preferences.getBoolean("operator-restore-photo", true),
             lockDuringTake = preferences.getBoolean("operator-lock-during-take", false),
             volumeUpLong = volumeGesturePreference("operator-volume-up-long"),
             volumeDownLong = volumeGesturePreference("operator-volume-down-long"),
@@ -553,6 +573,9 @@ class CameraSettingsStore internal constructor(private val preferences: android.
         lensCorrectionPhotos = preferences.getBoolean(KEY_LENS_CORRECTION_PHOTOS, false),
         lensCorrectionAlignment = preferences.getBoolean(KEY_LENS_CORRECTION_ALIGNMENT, true),
         lensLock = LensLockCodec.decode(preferences.getString(KEY_LENS_LOCK, null)),
+        stillSizes = StillSizesCodec.decode(preferences.getString(KEY_STILL_SIZES, null)),
+        photoWidth = storedPhotoSize().first,
+        photoHeight = storedPhotoSize().second,
         smoothLensSwitch = preferences.getBoolean(KEY_SMOOTH_LENS_SWITCH, false),
         rawVideoConfig = preferences.getString(KEY_RAW_VIDEO_CONFIG, null)?.takeIf(RawVideoConfigKeys::isValid).orEmpty(),
         rawVideoNearLossless = preferences.getBoolean(KEY_RAW_VIDEO_NEAR_LOSSLESS, true),
@@ -628,6 +651,7 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             .putString("operator-startup-mode", settings.operation.startupMode.name)
             .putBoolean("operator-restore-exposure-wb", settings.operation.restoreExposureWhiteBalance)
             .putBoolean("operator-restore-torch", settings.operation.restoreTorch)
+            .putBoolean("operator-restore-photo", settings.operation.restorePhotoSettings)
             .putBoolean("operator-lock-during-take", settings.operation.lockDuringTake)
             .putString("operator-volume-up-long", settings.operation.volumeUpLong.name)
             .putString("operator-volume-down-long", settings.operation.volumeDownLong.name)
@@ -777,6 +801,9 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             .putBoolean(KEY_LENS_CORRECTION_PHOTOS, settings.lensCorrectionPhotos)
             .putBoolean(KEY_LENS_CORRECTION_ALIGNMENT, settings.lensCorrectionAlignment)
             .putString(KEY_LENS_LOCK, LensLockCodec.encode(settings.lensLock))
+            .putString(KEY_STILL_SIZES, StillSizesCodec.encode(settings.stillSizes))
+            .putInt(KEY_PHOTO_WIDTH, settings.photoWidth)
+            .putInt(KEY_PHOTO_HEIGHT, settings.photoHeight)
             .putBoolean(KEY_SMOOTH_LENS_SWITCH, settings.smoothLensSwitch)
             .putString(KEY_RAW_VIDEO_CONFIG, settings.rawVideoConfig.takeIf(RawVideoConfigKeys::isValid).orEmpty())
             .putBoolean(KEY_RAW_VIDEO_NEAR_LOSSLESS, settings.rawVideoNearLossless)
@@ -974,6 +1001,12 @@ class CameraSettingsStore internal constructor(private val preferences: android.
 
     private inline fun <reified T : Enum<T>> enumPreference(key: String, fallback: T): T =
         preferences.getString(key, null)?.let { saved -> enumValues<T>().firstOrNull { it.name == saved } } ?: fallback
+    /** The last picked still size; a negative side, or only one side set, reads as the camera's largest (0 by 0). */
+    private fun storedPhotoSize(): Pair<Int, Int> {
+        val width = preferences.getInt(KEY_PHOTO_WIDTH, 0)
+        val height = preferences.getInt(KEY_PHOTO_HEIGHT, 0)
+        return if (width in 1..StillSizesCodec.MAX_EDGE && height in 1..StillSizesCodec.MAX_EDGE) width to height else 0 to 0
+    }
     /** A volume-key gesture never maps to the system volume; a stored one reads as no action. */
     private fun volumeGesturePreference(key: String): OperatorAction =
         enumPreference(key, OperatorAction.NONE).takeUnless { it == OperatorAction.SYSTEM_VOLUME } ?: OperatorAction.NONE
@@ -1060,6 +1093,9 @@ class CameraSettingsStore internal constructor(private val preferences: android.
         const val KEY_LENS_CORRECTION_PHOTOS = "lens-correction-photos"
         const val KEY_LENS_CORRECTION_ALIGNMENT = "lens-correction-alignment"
         const val KEY_LENS_LOCK = "lens-lock"
+        const val KEY_STILL_SIZES = "still-sizes"
+        const val KEY_PHOTO_WIDTH = "photo-width"
+        const val KEY_PHOTO_HEIGHT = "photo-height"
         const val KEY_SMOOTH_LENS_SWITCH = "smooth-lens-switch"
         const val KEY_RAW_VIDEO_CONFIG = "raw-video-config"
         const val KEY_RAW_VIDEO_NEAR_LOSSLESS = "raw-video-near-lossless"
@@ -1144,6 +1180,38 @@ internal object LensLockCodec {
             val parts = pair.split('=')
             if (parts.size != 2 || !id.matches(parts[0]) || !id.matches(parts[1]) || parts[0] in result) return emptyMap()
             result[parts[0]] = parts[1]
+        }
+        return result
+    }
+}
+
+/**
+ * Stable text form of the remembered still sizes: `id:FORMAT=WxH` entries joined by commas, sorted by key.
+ * Ids are camera ids (letters, digits, `_`, `-`, `.`), the format is JPEG or HEIC and both sides are 1 to
+ * [MAX_EDGE] pixels; anything malformed decodes to an empty map.
+ */
+internal object StillSizesCodec {
+    const val MAX_EDGE = 32_768
+    private val key = Regex("[A-Za-z0-9_.-]{1,64}:(JPEG|HEIC)")
+    private val size = Regex("([1-9][0-9]{0,4})x([1-9][0-9]{0,4})")
+
+    private fun validEdge(value: Int) = value in 1..MAX_EDGE
+
+    fun encode(sizes: Map<String, Pair<Int, Int>>): String =
+        sizes.entries.filter { key.matches(it.key) && validEdge(it.value.first) && validEdge(it.value.second) }
+            .sortedBy { it.key }.joinToString(",") { "${it.key}=${it.value.first}x${it.value.second}" }
+
+    fun decode(text: String?): Map<String, Pair<Int, Int>> {
+        if (text.isNullOrEmpty()) return emptyMap()
+        val result = linkedMapOf<String, Pair<Int, Int>>()
+        for (entry in text.split(',')) {
+            val parts = entry.split('=')
+            if (parts.size != 2 || !key.matches(parts[0]) || parts[0] in result) return emptyMap()
+            val match = size.matchEntire(parts[1]) ?: return emptyMap()
+            val width = match.groupValues[1].toInt()
+            val height = match.groupValues[2].toInt()
+            if (!validEdge(width) || !validEdge(height)) return emptyMap()
+            result[parts[0]] = width to height
         }
         return result
     }

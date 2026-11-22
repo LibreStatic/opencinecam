@@ -442,7 +442,8 @@
     <string name="operator_startup_last">Último modo disponível</string>
     <string name="operator_restore_manual">Restaurar exposição e balanço de branco</string>
     <string name="operator_restore_torch">Restaurar lanterna na inicialização</string>
-    <string name="operator_startup_help">Aplicado uma vez quando o serviço de captura inicia, não ao dobrar ou reabrir uma janela. Últimos modos não compatíveis usam Foto. Sem restauração automática de captura, seleção de lente, foco manual ou zoom. Desativar a restauração redefine esses valores salvos na inicialização.</string>
+    <string name="operator_restore_photo">Restaurar configurações de foto</string>
+    <string name="operator_startup_help">Aplicado uma vez quando o serviço de captura inicia, não ao dobrar ou reabrir uma janela. Últimos modos não compatíveis usam Foto. Sem restauração automática de captura, seleção de lente, foco manual ou zoom. Desativar a restauração redefine esses valores salvos na inicialização. Restaurar configurações de foto mantém a resolução, o formato, a qualidade e a proporção das fotos; desativado, eles voltam ao padrão na inicialização.</string>
     <string name="operator_lock">Bloquear controles de captura durante a tomada</string>
     <string name="operator_locked">Controles de captura bloqueados. Parar, cancelar, monitoramento e Configurações continuam disponíveis.</string>
     <string name="operator_lock_help">Bloqueia exposição, WB, luz, foco e zoom da preparação até a finalização. As edições nas Configurações ficam pendentes; desative esta chave para desbloquear. Os presets não podem desbloquear uma tomada. Monitoramento e parar/cancelar continuam disponíveis.</string>
