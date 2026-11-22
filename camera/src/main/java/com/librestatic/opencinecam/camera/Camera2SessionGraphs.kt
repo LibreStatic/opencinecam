@@ -881,9 +881,11 @@ internal fun Camera2PreviewEngine.previewCaptureCallback(
     // against the argument dropped every HFR result and a GPU HFR preview never "started".
     val armedSession = session
     val armedAnchors = directRecorderAnchors
-    // Constrained high-speed bursts report every frame (240/s); the full per-result work below runs on about one per
-    // preview period so the camera executor, which also carries the analysis delivery, does not fall behind.
-    val highSpeedGate = if (isHighSpeedSession()) HighSpeedResultGate() else null
+    // Constrained high-speed bursts report every frame (240/s), and a RAW video session at 90 or 120 fps nearly as
+    // many; the full per-result work below runs on about one per preview period so the camera executor, which also
+    // carries the analysis delivery and the RAW take's results, does not fall behind.
+    val constrainedHighSpeed = isHighSpeedSession()
+    val highSpeedGate = if (HighSpeedResultGate.needed(constrainedHighSpeed, requestedTargetFps)) HighSpeedResultGate() else null
     if (notifyStarted && descriptor != null && !disposed.get()) {
         armedSession?.let { pendingPreviewStartedReceipt = PreviewStartedReceipt(it, callbackGeneration, descriptor) }
     }
@@ -928,10 +930,16 @@ internal fun Camera2PreviewEngine.previewCaptureCallback(
                 reportTapFocusResult(request, result)
                 reportAfLockResult(request, result)
                 reportRecordingWhiteBalance(request, result)
+                // Every result of a regular session is audited, coalesced or not: the audit is cheap, and it feeds the
+                // sustained-cadence guard (Strict / Adaptive policy) with the frame-number gaps between delivered results.
+                // Its constrained high-speed count was an artefact (the file had every frame): skipped there, and the
+                // previous graph's statistics are retired so captureDiagnostics() never reports them for this one.
+                if (!constrainedHighSpeed) {
+                    auditCaptureResult(armedSession, result, sensorTimestamp)
+                } else if (graphAudit != null || latestCaptureDiagnostics != null) {
+                    retireGraphAudit()
+                }
                 if (!processFully) return
-                // The audit counts frame-number gaps as dropped frames, which coalescing would fake, and its
-                // high-speed count was already an artefact (the file had every frame): skipped in high-speed.
-                if (highSpeedGate == null) auditCaptureResult(armedSession, result, sensorTimestamp)
                 driveCadenceGuard(result, sensorTimestamp)
                 reportEffectiveZoom(result)
                 reportActiveLens(result)
@@ -1027,7 +1035,9 @@ internal fun Camera2PreviewEngine.graphAuditor(session: CameraCaptureSession): C
         correlationId = "graph-audit").also { graphAudit = session to it }
 }
 
+/** cameraExecutor: summarizes and drops the current graph's auditor; [captureDiagnostics] reads null until the next audit. */
 internal fun Camera2PreviewEngine.retireGraphAudit() {
+    latestCaptureDiagnostics = null
     val auditor = graphAudit?.second ?: return
     graphAudit = null
     Log.i(TAG, "Capture audit (graph retired): ${auditor.diagnostics()}")
