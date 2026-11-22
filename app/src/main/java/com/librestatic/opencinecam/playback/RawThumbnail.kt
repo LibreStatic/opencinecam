@@ -2,9 +2,11 @@
 package com.librestatic.opencinecam.playback
 
 import com.librestatic.opencinecam.media.ocraw.OcrawFrameHeader
+import com.librestatic.opencinecam.media.ocraw.OcrawFrameIndex
 import com.librestatic.opencinecam.media.ocraw.OcrawFrameRead
 import com.librestatic.opencinecam.media.ocraw.OcrawFrameSource
 import com.librestatic.opencinecam.media.ocraw.OcrawStreamReader
+import com.librestatic.opencinecam.rawvideo.RawVideoRecorder
 import java.nio.ByteBuffer
 import java.nio.channels.ClosedByInterruptException
 import java.nio.channels.FileChannel
@@ -19,8 +21,11 @@ class RawThumbnail(val width: Int, val height: Int, val argb: IntArray)
  * real-time path ([RawDevelop.developHalf]) and turned upright by the take's `orientation`.
  *
  * A take can run to thousands of frames, so only its start is read: the frame index stops after
- * [LEADING_FRAMES] frames (headers only, plus the metadata between them, where a late capture result
- * still lands), and at most [FRAMES_TRIED] of them are read and decoded, one slot at a time.
+ * [LEADING_FRAMES] frames (headers only, plus the metadata between them), and at most [FRAMES_TRIED]
+ * of them are read and decoded, one slot at a time. A capture result can land well after its frame
+ * (the Razr holds them back at a take's start), so when none of the leading frames has its white
+ * balance yet the walk goes on for up to [RESULT_LOOKAHEAD_FRAMES] more frames to find it: without
+ * it the frame develops with unity gains, i.e. green.
  * Compressed frames decode through [OcrawFrameSource], exactly as the review reads them.
  */
 object RawThumbnails {
@@ -32,6 +37,9 @@ object RawThumbnails {
 
     /** Damaged or undecodable leading frames are skipped up to this many; then there is no picture. */
     const val FRAMES_TRIED = 4
+
+    /** How far past [LEADING_FRAMES] the walk looks for a late white balance: the recorder's match window. */
+    const val RESULT_LOOKAHEAD_FRAMES = RawVideoRecorder.RESULT_WINDOW_FRAMES
 
     /**
      * The picture of the take open on [channel] (left open), or null when it is no RAW take, has no
@@ -51,8 +59,12 @@ object RawThumbnails {
 
     private fun renderOrThrow(channel: FileChannel, maxEdge: Int): RawThumbnail? {
         require(maxEdge > 0) { "maxEdge must be positive" }
-        val index = OcrawStreamReader(channel, scratchBytes = OcrawFrameHeader.BYTES).indexFrames(maxFrames = LEADING_FRAMES)
-        if (index.frames.isEmpty()) return null
+        val leading = OcrawStreamReader(channel, scratchBytes = OcrawFrameHeader.BYTES).indexFrames(maxFrames = LEADING_FRAMES)
+        if (leading.frames.isEmpty()) return null
+        // Fewer frames than asked for is the whole take: nothing further to find.
+        val index = if (leading.frames.size < LEADING_FRAMES || hasNeutral(leading)) leading
+            else OcrawStreamReader(channel, scratchBytes = OcrawFrameHeader.BYTES)
+                .indexFrames(maxFrames = LEADING_FRAMES + RESULT_LOOKAHEAD_FRAMES)
         val colour = RawStaticColour.from(index.metadata)
         val orientation = index.orientationDegrees
         OcrawFrameSource(channel, index, slotCount = 1).use { source ->
@@ -65,6 +77,10 @@ object RawThumbnails {
         }
         return null
     }
+
+    /** Whether a frame [index] lists has its capture result's white balance, which [OcrawFrameSource] lends the others. */
+    private fun hasNeutral(index: OcrawFrameIndex): Boolean =
+        index.frames.any { OcrawFrameSource.NEUTRAL_KEY in index.frameMetadata[it.sequence].orEmpty() }
 
     private fun develop(read: OcrawFrameRead.Frame, buffer: ByteBuffer, params: RawDevelopParams, orientation: Int,
         maxEdge: Int): RawThumbnail? {

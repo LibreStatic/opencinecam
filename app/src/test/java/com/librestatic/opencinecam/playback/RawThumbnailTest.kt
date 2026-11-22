@@ -74,6 +74,27 @@ class RawThumbnailTest {
         assertEquals(stored.first(), turned.argb.last())
     }
 
+    @Test fun aCaptureResultLateBeyondTheLeadingFramesStillGivesTheWhiteBalance() {
+        // The Razr held its results back for ~70 frames at a take's start: frame 0's arrives after
+        // the leading frames, and without it the picture would develop with unity gains (green).
+        val lag = RawThumbnails.LEADING_FRAMES + 52
+        val file = temp.newFile("late-result.ocraw")
+        val frames = (0 until lag + 4).map(::frame)
+        writeTake(file, frames, resultLag = lag)
+        val thumbnail = render(file)!!
+        assertArrayEquals(expected(frames[0]), thumbnail.argb)
+        assertTrue(expected(frames[0]).contentEquals(expectedWithoutWhiteBalance(frames[0])).not())
+    }
+
+    @Test fun aTakeShorterThanItsResultLagDevelopsWithoutWhiteBalance() {
+        // Every result lost (the take stopped first): the walk ends at the take's end, and the frame
+        // still has a picture, with unity gains.
+        val file = temp.newFile("no-result.ocraw")
+        val frames = (0 until 3).map(::frame)
+        writeTake(file, frames, resultLag = 100)
+        assertArrayEquals(expectedWithoutWhiteBalance(frames[0]), render(file)!!.argb)
+    }
+
     @Test fun aLargeFrameIsSampledDownToTheLongEdge() {
         val file = temp.newFile("large.ocraw")
         val big = frame(0, frameWidth = 128, frameHeight = 32)
@@ -149,9 +170,15 @@ class RawThumbnailTest {
     private fun render(file: File): RawThumbnail? = FileChannel.open(file.toPath()).use { RawThumbnails.render(it) }
 
     /** What the review's half-resolution develop makes of [frame] with frame 0's metadata, as unturned ARGB. */
-    private fun expected(frame: Pair<OcrawFrameHeader, ByteArray>, step: Int = 1): IntArray {
+    private fun expected(frame: Pair<OcrawFrameHeader, ByteArray>, step: Int = 1): IntArray =
+        developed(frame, step, frameMetadata)
+
+    private fun expectedWithoutWhiteBalance(frame: Pair<OcrawFrameHeader, ByteArray>): IntArray =
+        developed(frame, 1, frameMetadata - "neutral")
+
+    private fun developed(frame: Pair<OcrawFrameHeader, ByteArray>, step: Int, values: Map<String, String>): IntArray {
         val (header, data) = frame
-        val params = RawDevelop.params(RawStaticColour.from(colour), frameMetadata)
+        val params = RawDevelop.params(RawStaticColour.from(colour), values)
         val rgb = RawDevelop.developHalf(ByteBuffer.allocateDirect(data.size).put(data).also { it.flip() }, header, params, step)
         return IntArray(rgb.size / 3) {
             fun c(v: Float) = (v.coerceIn(0f, 1f) * 255f).roundToInt()
@@ -164,13 +191,19 @@ class RawThumbnailTest {
         return header to Random(index + 1).nextBytes(header.dataLength)
     }
 
-    private fun writeTake(file: File, frames: List<Pair<OcrawFrameHeader, ByteArray>>, metadata: Map<String, String> = colour) {
+    /**
+     * Writes [frames]; each frame's capture result follows it, or with [resultLag] it follows the frame
+     * that many frames later, as the recorder writes a late result (results due after the last frame are lost).
+     */
+    private fun writeTake(file: File, frames: List<Pair<OcrawFrameHeader, ByteArray>>, metadata: Map<String, String> = colour,
+        resultLag: Int = 0) {
         FileChannel.open(file.toPath(), StandardOpenOption.WRITE).use { channel ->
             val writer = OcrawStreamWriter(channel, OcrawHeader(ByteArray(16) { it.toByte() }), nanos)
             writer.writeMetadata(metadata)
+            val sequences = ArrayList<Long>()
             frames.forEachIndexed { i, (header, data) ->
-                val sequence = writer.writeRawFrame(header, ByteBuffer.wrap(data), i * 33_333_333L)
-                writer.writeFrameMetadata(sequence, frameMetadata)
+                sequences += writer.writeRawFrame(header, ByteBuffer.wrap(data), i * 33_333_333L)
+                if (i >= resultLag) writer.writeFrameMetadata(sequences[i - resultLag], frameMetadata)
             }
             writer.finish()
         }
