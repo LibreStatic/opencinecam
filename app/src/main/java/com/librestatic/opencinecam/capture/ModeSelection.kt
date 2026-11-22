@@ -43,6 +43,21 @@ internal fun slowMotionProfile(profiles: List<VideoProfileSpec>, width: Int, hei
 }
 
 /**
+ * The profile a lens calibration measures on in place of a constrained high-speed one, whose session
+ * gives the run no stable samples. [standard] holds the camera's other profiles: one at the same size
+ * is preferred, at 30 fps or the rate nearest to it, then the size nearest to [width] x [height].
+ */
+internal fun calibrationVideoProfile(standard: List<VideoProfileSpec>, width: Int, height: Int): VideoProfileSpec? {
+    val area = width.toLong() * height
+    return standard.minWithOrNull(
+        compareBy<VideoProfileSpec> { it.width != width || it.height != height }
+            .thenBy { kotlin.math.abs(it.fps - 30) }
+            .thenBy { it.fps }
+            .thenBy { kotlin.math.abs(it.width.toLong() * it.height - area) },
+    )
+}
+
+/**
  * Whether [fps] plays back slower than [projectRate]: slow motion conforms any faster capture rate to
  * the project rate, so 60 fps in a 30 fps project is 2x slow motion, not only the high-speed rates.
  */

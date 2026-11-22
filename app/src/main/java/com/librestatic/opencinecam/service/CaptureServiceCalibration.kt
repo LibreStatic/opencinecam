@@ -298,8 +298,13 @@ internal fun CaptureService.finishCalibration(run: CalibrationRun, outcome: com.
     // The camera may be gone; the mode and zoom are still put back, without a reopen then.
     // A saved lens lock was set aside for the run; it returns with one restart.
     val relock = !run.lost && currentLensLockBinding() != null
+    // Another mode works out its own size and rate; the mode the run kept gets back the high-speed ones it had.
+    val highSpeed = restore.highSpeedTarget.takeIf { cameraState.value.selectedMode == restore.mode }
+    if (highSpeed != null) cameraState.update {
+        it.copy(targetVideoWidth = highSpeed.first, targetVideoHeight = highSpeed.second, targetFps = highSpeed.third, effectiveFps = null)
+    }
     if (cameraState.value.selectedMode != restore.mode) localBinder.selectMode(restore.mode, reopen = !run.lost && !relock)
-    if (relock) attachedPreviewSurface?.takeIf { it.isValid }?.let { localBinder.attachPreview(it, attachedPreviewRotationDegrees) }
+    if (relock || (highSpeed != null && !run.lost)) attachedPreviewSurface?.takeIf { it.isValid }?.let { localBinder.attachPreview(it, attachedPreviewRotationDegrees) }
     localBinder.setZoomRatio(restore.zoom)
     refreshLensCorrection()
     val success = outcome as? com.librestatic.opencinecam.camera.calibration.RunOutcome.Success
