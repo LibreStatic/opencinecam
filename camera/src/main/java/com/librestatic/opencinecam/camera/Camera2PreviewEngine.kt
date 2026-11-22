@@ -2359,7 +2359,7 @@ class Camera2PreviewEngine(
         lensLockCrop?.let { crop ->
             val factor = LensLockCrop.cropFactor(ratio, crop.pinnedRatio, crop.uiRange)
             crop.factor = factor
-            cameraExecutor.execute { if (lensLockCrop === crop) logPipeline?.setCropZoom(factor) }
+            cameraExecutor.execute { if (lensLockCrop === crop && rawTake.get() == null) logPipeline?.setCropZoom(factor) }
             return true
         }
         // A lens-locked session takes the ratio on the logical scale; the physical camera gets its own.
