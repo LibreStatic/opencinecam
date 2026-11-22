@@ -1640,8 +1640,10 @@ class CaptureService : Service() {
                 if (descriptor != null && surface?.isValid == true) {
                     cameraState.value = cameraState.value.copy(phase = CameraUiPhase.OPENING)
                     val start = Runnable {
-                    // A later mode change supersedes this deferred start.
-                    if (cameraState.value.selectedMode != mode || !surface.isValid) return@Runnable
+                    // A later mode change, a camera switch or a take admitted meanwhile supersedes this deferred start.
+                    val now = cameraState.value
+                    if (now.selectedMode != mode || !surface.isValid || now.structuralSettingsFrozen ||
+                        now.descriptor?.cameraId != descriptor.cameraId) return@Runnable
                     previewEngine.startPreview(
                         descriptor,
                         surface,
