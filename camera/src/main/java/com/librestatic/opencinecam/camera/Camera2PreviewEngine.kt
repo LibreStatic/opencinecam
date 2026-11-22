@@ -2344,10 +2344,12 @@ class Camera2PreviewEngine(
 
     /**
      * Applies the requested zoom ratio to the active repeating request. Returns false when no
-     * descriptor/session is active or the descriptor advertises no zoom range; in those cases the
+     * descriptor/session is active, the descriptor advertises no zoom range or a RAW take is running; in those cases the
      * internal state is left untouched. Coerces [ratio] into the active descriptor's range.
      */
     fun setZoomRatio(ratio: Float): Boolean {
+        // A RAW take keeps its zoom: a change mid-take can stall the RAW stream (the service refuses it first).
+        if (rawTake.get() != null) return false
         val descriptor = activeDescriptor ?: return false
         val range = descriptor.effectiveZoomRange ?: return false
         // The GPU-crop route keeps the HAL zoom pinned at the anchor; the ratio moves the crop only.

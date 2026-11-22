@@ -30,6 +30,7 @@
     <string name="capture_source_depth_not_claimed">profundidad de origen no declarada</string>
     <string name="capture_high_speed">ALTA VELOCIDAD</string>
     <string name="capture_zoom_rejected">Zoom %1$s× no aceptado; se mantiene %2$s×</string>
+    <string name="capture_zoom_locked_raw_take">El zoom queda fijo durante una toma RAW</string>
     <string name="capture_no_public_camera">No hay ninguna cámara Camera2 pública disponible.</string>
     <string name="capture_camera_selected">Cámara %1$s elegida</string>
     <string name="capture_target_fps">FPS objetivo %1$d · rango Camera2 fijo %1$d–%1$d</string>
