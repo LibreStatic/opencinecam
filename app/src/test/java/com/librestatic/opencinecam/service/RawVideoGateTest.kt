@@ -410,6 +410,40 @@ class RawVideoGateTest {
     private val heat = RawQualificationStaging.REASON_THERMAL_LIMIT
     private val sweepFail = RawThroughputBenchmark.REASON_SWEEP_MEDIAN_MARGIN_FAIL
 
+    // region storage not tested (PLAN-071, 2026-11-20)
+
+    private val untested = com.librestatic.opencinecam.rawvideo.RawQualificationRisk.REASON_STORAGE_NOT_TESTED
+
+    @Test fun riskyConfigsLeftByACameraOnlyRunAreUntested() {
+        val records = listOf(
+            verdict(full30, RawBenchmarkStatus.FAIL, untested, at = 2),
+            // A storage-tested risky verdict reads as before.
+            verdict(fullAt60, RawBenchmarkStatus.FAIL, sweepFail),
+            // The newest record counts: a full qualification after the camera-only one tested the storage.
+            verdict(full24, RawBenchmarkStatus.FAIL, untested, at = 1),
+            verdict(full24, RawBenchmarkStatus.FAIL, sweepFail, at = 3),
+            // Another destination's camera-only record says nothing here.
+            verdict(uhdAt60, RawBenchmarkStatus.FAIL, untested, destination = "other"),
+        )
+        assertEquals(setOf(full30), rawVideoUntestedConfigs(listOf(full30, fullAt60, full24, uhdAt60), records, "dest"))
+        assertTrue(rawVideoUntestedConfigs(emptyList(), records, "dest").isEmpty())
+    }
+
+    @Test fun theVerdictInForceOfARecordReadsAsAResultRow() {
+        val passed = rawQualificationInForceOf(record(full30).copy(achievedFps = 29.8))
+        assertEquals(RawQualificationItemStatus.PASSED, passed.status)
+        assertEquals(29.8, passed.achievedFps)
+        assertFalse(passed.storageUntested)
+        val cameraOnly = rawQualificationInForceOf(verdict(full30, RawBenchmarkStatus.FAIL, untested))
+        assertEquals(RawQualificationItemStatus.RISKY, cameraOnly.status)
+        assertTrue(cameraOnly.storageUntested)
+        val slow = rawQualificationInForceOf(verdict(fullAt60, RawBenchmarkStatus.FAIL, sweepFail))
+        assertFalse(slow.storageUntested)
+        assertTrue(slow.status == RawQualificationItemStatus.RISKY || slow.status == RawQualificationItemStatus.STORAGE_LIMIT)
+    }
+
+    // endregion
+
     @Test fun leftOutConfigsSayWhyEachJudgedConfigurationIsMissing() {
         val records = listOf(
             verdict(full30, RawBenchmarkStatus.PASS),

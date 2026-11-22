@@ -20,6 +20,8 @@
     <string name="gallery_empty">No captures match this search and these filters.</string>
     <string name="gallery_load_failed">The catalog could not be read. Existing results are retained; retry to continue.</string>
     <string name="gallery_retry">Retry reading</string>
+    <string name="gallery_error_title">Couldn\'t load your media</string>
+    <string name="gallery_error_body">Something went wrong while reading the catalog. Try again.</string>
     <string name="gallery_more">Load next results</string>
     <string name="gallery_no_more">End of results</string>
     <string name="gallery_declared">All files present</string>

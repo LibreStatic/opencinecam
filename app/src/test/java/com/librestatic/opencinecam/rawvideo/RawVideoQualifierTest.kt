@@ -12,6 +12,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.librestatic.opencinecam.storage.DriveDescriptorHandle
 import com.librestatic.opencinecam.storage.DriveDescriptors
 import com.librestatic.opencinecam.storage.EXTERNAL_STORAGE_AUTHORITY
+import com.librestatic.opencinecam.storage.RawQualificationEvidenceStore
 import com.librestatic.opencinecam.storage.RawVideoQualificationStore
 import java.io.File
 import java.io.FileOutputStream
@@ -59,6 +60,22 @@ class RawVideoQualifierTest {
         assertEquals(0, outcome.report.getJSONArray("steps").length())
         assertTrue(outcome.report.has("elapsedMs"))
         assertTrue(outcome.report.isNull("storageModel"))
+    }
+
+    @Test fun aCameraOnlyRunWithAnEvidenceStoreThatNeverStartsWritesNothing() {
+        val records = File(context.filesDir, RawVideoQualificationStore.FILE_NAME).apply { delete() }
+        val evidence = File(context.filesDir, RawQualificationEvidenceStore.FILE_NAME).apply { delete() }
+        val qualifier = RawVideoQualifier(
+            context,
+            plan = RawQualificationPlan.DEFAULT.withOptions(RawQualificationOptions(cameraOnly = true)),
+            evidenceStore = RawQualificationEvidenceStore(evidence, "fp", 1L),
+        )
+        assertNull(qualifier.estimate())
+        val outcome = qualifier.run(RawVideoQualificationStore(records, "fp"))
+        assertEquals(RawVideoQualifier.REASON_UNSUPPORTED, outcome.reasonCode)
+        assertTrue(outcome.records.isEmpty())
+        assertFalse(records.exists())
+        assertFalse(evidence.exists())
     }
 
     @Test fun withoutARaw10CameraItIsUnknownAndUnsupported() {

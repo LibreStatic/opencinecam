@@ -633,6 +633,21 @@ fun CaptureRawVideoRisky() = CaptureChrome(
 )
 
 /**
+ * RAW video after a camera-only qualification (PLAN-071, 2026-11-20): every configuration is risky with its storage
+ * not tested, so Automatic picks none; 4080×3060 at 30 fps is chosen by hand. The chooser's tiles read "…, storage not
+ * tested", its hint (`raw-video-config-risk-hint`) the untested wording, and the notice (`raw-video-risky-notice`)
+ * "Storage not tested: frames may drop".
+ */
+@Composable
+fun CaptureRawVideoUntested() = CaptureChrome(
+    driverRawVideoState().let { state ->
+        state.copy(rawVideoOptions = state.rawVideoOptions.map { it.copy(isRisky = true, storageUntested = true) }, rawVideoAutoKey = null)
+    },
+    DriverRawVideoSettings,
+    CaptureInitialPane.RESOLUTION,
+)
+
+/**
  * Reduced-rate configurations in the chooser (PLAN-071): 4080×3060 at 60 fps risky and reaching
  * 51.9 fps, 3840×2160 at 60 fps qualified but reaching 49.1 fps. Their tiles lead with "Reaches … fps";
  * Automatic still resolves to 4080×3060 at 30 fps, which reaches its target.
@@ -808,14 +823,20 @@ private fun RawQualificationDriver(
     conditions: RawQualificationConditions,
     state: RawVideoQualificationUi?,
     info: RawVideoQualificationInfo = driverRawQualificationInfo(),
+    initialOptions: com.librestatic.opencinecam.rawvideo.RawQualificationOptions = com.librestatic.opencinecam.rawvideo.RawQualificationOptions(),
+    infoFor: ((com.librestatic.opencinecam.rawvideo.RawQualificationOptions) -> RawVideoQualificationInfo)? = null,
 ) = DriverTheme {
     CompositionLocalProvider(LocalReducedMotion provides true) {
         var shown by remember { mutableStateOf(state) }
+        // The switches change the estimate as the service's does: a camera-only run needs no space and is shorter.
+        var options by remember { mutableStateOf(initialOptions) }
         RawQualificationFrame(hinge = null) {
             RawQualificationStep(
-                info = info,
+                info = infoFor?.invoke(options) ?: info,
                 conditions = conditions,
                 state = shown,
+                options = options,
+                onOptionsChange = { options = it },
                 onStart = { shown = RawVideoQualificationUi(phase = RawQualificationPhase.RING, remainingMs = 12 * 60_000L) },
                 onCancel = { shown = RawVideoQualificationUi(outcome = RawQualificationOutcomeKind.CANCELLED, reason = it) },
                 onLeave = { shown = null },
@@ -825,6 +846,41 @@ private fun RawQualificationDriver(
 }
 
 private val DriverRawReady = RawQualificationConditions(batteryPercent = 82, thermalStatus = 0)
+
+/**
+ * The estimate for [options] (PLAN-071, 2026-11-20), as the service answers it: a camera-only run plans only the
+ * camera checks (about 4 min, no storage needed, nothing skipped for space); otherwise the full estimate. With
+ * [reused] the camera checks of 4080×3060 at 30 and 24 fps are expected to be reused from the last qualification.
+ */
+private fun driverRawQualificationInfoFor(
+    options: com.librestatic.opencinecam.rawvideo.RawQualificationOptions,
+    reused: Boolean = true,
+): RawVideoQualificationInfo {
+    val base = driverRawQualificationInfo()
+    val space = requireNotNull(base.space)
+    val reusedConfigs = if (reused) space.configs.filter { it.spec == "full@30" || it.spec == "full@24" }.map { it.config }.toSet() else emptySet()
+    val reuse = com.librestatic.opencinecam.rawvideo.RawQualificationReuse(cameraChecks = reusedConfigs)
+    val configs = space.configs.map { it.copy(cameraCheckReused = it.config in reusedConfigs) }
+    return base.copy(options = options, space = if (options.cameraOnly) space.copy(
+        estimate = space.estimate.copy(durationMs = 4 * 60_000L + 20_000L, freeBytesNeeded = 0L, sweepFreeBytesNeeded = 0L, runCount = 8),
+        skippedRuns = 0, minimumFreeBytes = 0L, configs = configs.map { it.copy(neededBytes = 0L, fits = true) }, reuse = reuse,
+    ) else if (options.skipPredictedLongRuns) space.copy(
+        estimate = space.estimate.copy(durationMs = 9 * 60_000L + 40_000L), configs = configs, reuse = reuse,
+    ) else space.copy(configs = configs, reuse = reuse))
+}
+
+/**
+ * The ready step with the run's two switches (`raw-qualification-option-predict`, `raw-qualification-option-camera-only`)
+ * and the reuse line (`raw-qualification-reuse`): both off; clicking them changes the estimate.
+ */
+@Composable
+fun RawQualificationReadyOptions() = RawQualificationDriver(DriverRawReady, null, infoFor = { driverRawQualificationInfoFor(it) })
+
+/** The ready step with *Camera test only* on: predict disabled, no space section and no storage target, Start enabled. */
+@Composable
+fun RawQualificationReadyCameraOnly() = RawQualificationDriver(DriverRawReady, null,
+    initialOptions = com.librestatic.opencinecam.rawvideo.RawQualificationOptions(cameraOnly = true),
+    infoFor = { driverRawQualificationInfoFor(it) })
 
 /** The preconditions all pass with 26 GB free: Start is enabled and two 60 fps configurations are skipped for space. */
 @Composable
@@ -1002,6 +1058,21 @@ fun RawQualificationDoneCameraLimit() = RawQualificationDriver(DriverRawReady, r
         passedLabels = items.filter { it.status == RawQualificationItemStatus.PASSED }.map { it.label },
         items = items,
     )
+})
+
+/**
+ * A camera-only run's result on the Razr (PLAN-071, 2026-11-20): the five configurations at 15 to 30 fps delivered
+ * their rate and are risky with "storage not tested" (`raw-qualification-risky`, the untested body); the three at
+ * 60 fps are "Camera limit". Nothing qualified safely, so "Only risky rates".
+ */
+@Composable
+fun RawQualificationDoneCameraOnly() = RawQualificationDriver(DriverRawReady, run {
+    val items = rawQualificationPlanItems(driverRawQualificationInfoFor(
+        com.librestatic.opencinecam.rawvideo.RawQualificationOptions(cameraOnly = true), reused = false).space).map { item ->
+        if (item.spec.endsWith("@60")) item.copy(status = RawQualificationItemStatus.CAMERA_LIMIT)
+        else item.copy(status = RawQualificationItemStatus.RISKY, storageUntested = true, achievedFps = DriverRawChecked[item.spec])
+    }
+    RawVideoQualificationUi(phase = RawQualificationPhase.DONE, fraction = 1f, outcome = RawQualificationOutcomeKind.NO_CONFIG, items = items)
 })
 
 /**
@@ -1604,6 +1675,19 @@ fun GalleryError() = GalleryWith(object : MediaCatalogSource {
         throw IOException("MediaStore unavailable")
     override suspend fun thumbnail(artifact: LocalMediaArtifact): Bitmap? = null
 })
+
+/** The sample takes listed, with a next page whose read fails: `click tag=gallery-more` shows the inline notice under them. */
+@Composable
+fun GalleryErrorPartial() {
+    val catalog = remember { FakeCatalog(SampleTakes) }
+    GalleryWith(remember(catalog) {
+        object : MediaCatalogSource by catalog {
+            override suspend fun page(settings: GallerySettings, query: String, cursor: LocalMediaCursor?, limit: Int): LocalMediaPage =
+                if (cursor != null) throw IOException("MediaStore unavailable")
+                else catalog.page(settings, query, null, limit).copy(next = LocalMediaCursor("driver", emptyMap(), emptySet()))
+        }
+    })
+}
 
 /** About, with the bundled third-party license catalog. */
 @Composable

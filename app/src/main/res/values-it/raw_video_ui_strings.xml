@@ -44,4 +44,9 @@
     <string name="raw_video_profile_drive">Qualificate sull’unità USB %1$s</string>
     <string name="raw_video_profile_drive_unnamed">Qualificate sull’unità USB</string>
     <string name="raw_video_left_out_title">NON DISPONIBILI</string>
+    <!-- PLAN-071, 2026-11-20: a risky configuration whose storage a camera-only qualification did not test. -->
+    <string name="raw_video_untested_notice">Memoria non testata: si possono perdere fotogrammi</string>
+    <string name="raw_video_untested_label">%1$s, memoria non testata</string>
+    <string name="raw_video_config_risk_hint_untested">Il segnale di avviso indica una velocità a cui la memoria non è stata testata, quindi una ripresa può scattare, andare in ritardo o risultare danneggiata. Qualifica di nuovo con il test della memoria per verificarla. Automatico non la sceglie mai.</string>
+    <string name="raw_video_config_risk_hint_mixed">Il segnale di avviso indica una velocità rischiosa: la memoria è troppo lenta o non è stata testata, quindi una ripresa può scattare, andare in ritardo o risultare danneggiata. Automatico non la sceglie mai.</string>
 </resources>

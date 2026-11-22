@@ -44,4 +44,9 @@
     <string name="raw_video_profile_drive">Qualified on the USB drive %1$s</string>
     <string name="raw_video_profile_drive_unnamed">Qualified on the USB drive</string>
     <string name="raw_video_left_out_title">NOT AVAILABLE</string>
+    <!-- PLAN-071, 2026-11-20: a risky configuration whose storage a camera-only qualification did not test. -->
+    <string name="raw_video_untested_notice">Storage not tested: frames may drop</string>
+    <string name="raw_video_untested_label">%1$s, storage not tested</string>
+    <string name="raw_video_config_risk_hint_untested">The warning sign marks a rate the storage was not tested at, so a take may stutter, lag or end up corrupted. Qualify again with the storage test to check it. Automatic never picks one.</string>
+    <string name="raw_video_config_risk_hint_mixed">The warning sign marks a risky rate: the storage is too slow for it or was not tested, so a take may stutter, lag or end up corrupted. Automatic never picks one.</string>
 </resources>

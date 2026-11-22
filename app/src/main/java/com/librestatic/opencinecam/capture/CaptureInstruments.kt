@@ -110,7 +110,7 @@ internal fun InstrumentStack(
             if (showSuspension) AnalysisSuspensionNotice(state, width)
             if (showLensNotice) LensLockNotice(state.lensLock, width)
             if (graphNotice != null) GraphFallbackNotice(graphNotice, width)
-            if (showRawRisk) RawVideoRiskyNotice(width, rawVideoActiveOption(state)?.burstSeconds)
+            if (showRawRisk) rawVideoActiveOption(state).let { RawVideoRiskyNotice(width, it?.burstSeconds, it?.storageUntested == true) }
             if (destinationNotice != null) CaptureDestinationFallbackNotice(destinationNotice, width)
             if (showContinued) CaptureDestinationContinuedNotice(width)
             audioNotices.forEach { AudioInputNoticeView(it, width) }

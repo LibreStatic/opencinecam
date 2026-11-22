@@ -40,6 +40,11 @@ data class RawVideoConfigOption(
      * choosable by hand and never picked by Automatic.
      */
     val achievedFps: Double? = null,
+    /**
+     * For a risky option, the storage was never tested at its rate: a camera-only qualification stored it
+     * ([com.librestatic.opencinecam.rawvideo.RawQualificationRisk.REASON_STORAGE_NOT_TESTED]), so it has no burst either.
+     */
+    val storageUntested: Boolean = false,
 ) {
     /**
      * A block-pack (`+bp`) option: the one compression that records near-lossless where the camera
@@ -74,7 +79,13 @@ data class RawVideoConfigOption(
         /** Compression ratio assumed for compressed capacity estimates (never for throughput). */
         const val COMPRESSED_CAPACITY_RATIO = 1.8
 
-        fun of(config: RawVideoConfig, risky: Boolean = false, burstSeconds: Long? = null, achievedFps: Double? = null): RawVideoConfigOption = RawVideoConfigOption(
+        fun of(
+            config: RawVideoConfig,
+            risky: Boolean = false,
+            burstSeconds: Long? = null,
+            achievedFps: Double? = null,
+            storageUntested: Boolean = false,
+        ): RawVideoConfigOption = RawVideoConfigOption(
             key = RawVideoConfigKeys.key(config),
             label = "${config.cropWidth}×${config.cropHeight} · ${config.fps} fps" + if (config.isCompressed) RAW_LABEL_COMPRESSED_SUFFIX else "",
             bytesPerSecond = config.streamBytesPerSecond,
@@ -83,6 +94,7 @@ data class RawVideoConfigOption(
             isRisky = risky,
             burstSeconds = burstSeconds.takeIf { risky },
             achievedFps = achievedFps.takeIf { com.librestatic.opencinecam.rawvideo.RawQualificationFrameRate.isReducedRate(it, config.fps) },
+            storageUntested = storageUntested && risky,
         )
     }
 }
