@@ -23,7 +23,35 @@ class OperatorPreferencesTest {
         assertEquals(OperatorAction.SYSTEM_VOLUME, settings.operation.volumeUp)
         assertEquals(OperatorAction.SYSTEM_VOLUME, settings.operation.volumeDown)
         assertFalse(settings.forOperatorStartup().flashEnabled)
-        assertEquals(CaptureMode.PHOTO, settings.operation.startupCaptureMode(CaptureMode.LOG, CaptureMode.entries.toSet()))
+        // The last mode is the default; Photo remains the fallback with no last mode or an unavailable one.
+        assertEquals(StartupMode.LAST, settings.operation.startupMode)
+        assertEquals(CaptureMode.LOG, settings.operation.startupCaptureMode(CaptureMode.LOG, CaptureMode.entries.toSet()))
+        assertEquals(CaptureMode.PHOTO, settings.operation.startupCaptureMode(null, CaptureMode.entries.toSet()))
+        assertTrue(settings.operation.restorePhotoSettings)
+    }
+    @Test fun storedDefaultsAreTheLastModeAndRestoringPhotoSettings() {
+        val loaded = CameraSettingsStore(PresetPreferences()).load().operation
+        assertEquals(StartupMode.LAST, loaded.startupMode); assertTrue(loaded.restorePhotoSettings)
+        val op = OperatorPreferences(startupMode = StartupMode.PHOTO, restorePhotoSettings = false)
+        val memory = PresetPreferences(); CameraSettingsStore(memory).save(CameraSettings(operation = op))
+        assertEquals(false, memory.all["operator-restore-photo"])
+        assertEquals(op, CameraSettingsStore(memory).load().operation)
+    }
+    @Test fun startupWithoutPhotoRestorationResetsOnlyThePhotoSettings() {
+        val photo = CameraSettings(photoFormat = StillPhotoFormat.HEIC, photoQuality = 80,
+            photoAspect = PhotoAspectSelection(enabled = true, width = 16, height = 9),
+            stillSizes = mapOf("0:HEIC" to (4000 to 2250)), photoWidth = 4000, photoHeight = 2250,
+            videoWidth = 3840, videoHeight = 2160, videoFps = 60, logWidth = 3840, logHeight = 2160, timelapseWidth = 1280, timelapseHeight = 720,
+            zebraEnabled = true)
+        // On (the default): nothing photo-related changes.
+        assertEquals(photo, photo.forOperatorStartup())
+        val off = photo.copy(operation = photo.operation.copy(restorePhotoSettings = false))
+        val defaults = CameraSettings()
+        assertEquals(off.copy(photoFormat = defaults.photoFormat, photoQuality = defaults.photoQuality, photoAspect = defaults.photoAspect,
+            stillSizes = emptyMap(), photoWidth = 0, photoHeight = 0), off.forOperatorStartup())
+        val reset = off.forOperatorStartup()
+        assertEquals(3840 to 2160, reset.videoWidth to reset.videoHeight); assertEquals(60, reset.videoFps)
+        assertEquals(1280 to 720, reset.timelapseWidth to reset.timelapseHeight)
     }
     @Test fun everyOperationPreferenceSurvivesCanonicalPersistence() {
         val op = OperatorPreferences(OperatorAction.FOCUS_A, OperatorAction.PRESET_C2, OperatorAction.EXTERIOR,

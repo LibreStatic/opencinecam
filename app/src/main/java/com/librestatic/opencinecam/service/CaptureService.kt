@@ -2047,8 +2047,16 @@ class CaptureService : Service() {
             if (rejectLockedControl() || current.structuralSettingsFrozen || current.phase == CameraUiPhase.CAPTURING || rawQualificationSession != null) return
             if (current.selectedMode !in CameraUiState.photoResolutionModes || current.selectedMode == CaptureMode.RAW_PHOTO) return
             val size = width to height
-            if (size !in current.availableStillSizes || size == current.activeStillSize) return
-            cameraState.update { it.copy(targetStillSize = size) }
+            if (size !in current.availableStillSizes) return
+            val key = current.stillSizeKey ?: return
+            // Remembered for this camera and format, and as the last pick anywhere (the portable one).
+            val repository = SettingsRepositories.get(this@CaptureService)
+            repository.update { it.copy(stillSizes = it.stillSizes + (key to size), photoWidth = width, photoHeight = height) }
+            // A pick of the size already running (the largest standing in for a remembered one this camera
+            // does not offer now) is still remembered, but the session has nothing to change.
+            if (size == current.activeStillSize) return
+            // Applied now, not when the settings collector catches up, so the re-attach below reads the new size.
+            applySettings(repository.states.value)
             attachedPreviewSurface?.takeIf { it.isValid }?.let { attachPreview(it, attachedPreviewRotationDegrees) }
         }
 

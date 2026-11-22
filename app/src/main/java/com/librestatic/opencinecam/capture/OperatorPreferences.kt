@@ -34,7 +34,7 @@ data class OperatorPreferences(
     val button3: OperatorAction = OperatorAction.VIEW_ASSIST,
     val volumeUp: OperatorAction = OperatorAction.SYSTEM_VOLUME,
     val volumeDown: OperatorAction = OperatorAction.SYSTEM_VOLUME,
-    val startupMode: StartupMode = StartupMode.PHOTO,
+    val startupMode: StartupMode = StartupMode.LAST,
     val restoreExposureWhiteBalance: Boolean = true,
     val restoreTorch: Boolean = false,
     val lockDuringTake: Boolean = false,
@@ -47,6 +47,8 @@ data class OperatorPreferences(
     val volumePair: VolumeKeyPair = VolumeKeyPair.NONE,
     /** Swaps the pair so volume down zooms in, raises EV, ISO, the shutter time and focuses farther. */
     val volumePairInverted: Boolean = false,
+    /** Off returns the photo format, quality, aspect ratio and resolution to their defaults on every start. */
+    val restorePhotoSettings: Boolean = true,
 ) {
     val buttons: List<OperatorAction> get() = listOf(button1, button2, button3)
     /** Gestures only ever map to app actions; the system volume is a key's plain press alone. */
@@ -59,7 +61,20 @@ fun CameraSettings.forOperatorStartup(): CameraSettings = copy(
     flashEnabled = flashEnabled && operation.restoreTorch,
     exposure = if (operation.restoreExposureWhiteBalance) exposure else ExposureSelection(),
     whiteBalance = if (operation.restoreExposureWhiteBalance) whiteBalance else WhiteBalanceSelection.Auto,
-)
+).let { if (operation.restorePhotoSettings) it else it.withDefaultPhotoSettings() }
+
+/** The photo format, quality, aspect ratio and every remembered still size back to the defaults; video geometry untouched. */
+private fun CameraSettings.withDefaultPhotoSettings(): CameraSettings {
+    val defaults = CameraSettings()
+    return copy(
+        photoFormat = defaults.photoFormat,
+        photoQuality = defaults.photoQuality,
+        photoAspect = defaults.photoAspect,
+        stillSizes = emptyMap(),
+        photoWidth = 0,
+        photoHeight = 0,
+    )
+}
 fun OperatorPreferences.startupCaptureMode(last: CaptureMode?, available: Set<CaptureMode>): CaptureMode {
     val requested = when (startupMode) { StartupMode.PHOTO -> CaptureMode.PHOTO; StartupMode.VIDEO -> CaptureMode.VIDEO; StartupMode.LAST -> last ?: CaptureMode.PHOTO }
     return requested.takeIf { it in available } ?: CaptureMode.PHOTO

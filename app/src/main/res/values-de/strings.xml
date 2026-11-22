@@ -442,7 +442,8 @@
     <string name="operator_startup_last">Zuletzt verfügbarer Modus</string>
     <string name="operator_restore_manual">Belichtung und Weißabgleich wiederherstellen</string>
     <string name="operator_restore_torch">Taschenlampe beim Start wiederherstellen</string>
-    <string name="operator_startup_help">Wird einmal beim Start des Aufnahmedienstes angewendet, nicht beim Zuklappen oder erneuten Öffnen eines Fensters. Nicht unterstützte letzte Modi verwenden Foto. Keine automatische Wiederherstellung von Aufnahme, Objektivwahl, manuellem Fokus oder Zoom. Wird die Wiederherstellung ausgeschaltet, werden diese gespeicherten Werte beim Start zurückgesetzt.</string>
+    <string name="operator_restore_photo">Fotoeinstellungen wiederherstellen</string>
+    <string name="operator_startup_help">Wird einmal beim Start des Aufnahmedienstes angewendet, nicht beim Zuklappen oder erneuten Öffnen eines Fensters. Nicht unterstützte letzte Modi verwenden Foto. Keine automatische Wiederherstellung von Aufnahme, Objektivwahl, manuellem Fokus oder Zoom. Wird die Wiederherstellung ausgeschaltet, werden diese gespeicherten Werte beim Start zurückgesetzt. Fotoeinstellungen wiederherstellen behält Auflösung, Format, Qualität und Seitenverhältnis der Fotos; ausgeschaltet kehren sie beim Start zu ihren Standardwerten zurück.</string>
     <string name="operator_lock">Aufnahmesteuerung während eines Takes sperren</string>
     <string name="operator_locked">Aufnahmesteuerung gesperrt. Stopp, Abbrechen, Monitoring und Einstellungen bleiben verfügbar.</string>
     <string name="operator_lock_help">Sperrt Belichtung, WB, Licht, Fokus und Zoom von der Vorbereitung bis zur Finalisierung. Änderungen in den Einstellungen bleiben vorgemerkt; schalte diesen Schalter aus, um zu entsperren. Presets können einen Take nicht entsperren. Monitoring und Stopp/Abbrechen bleiben verfügbar.</string>

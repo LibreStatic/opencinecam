@@ -21,6 +21,7 @@ import com.librestatic.opencinecam.media.audio.ProfessionalAudioCapabilities
 import com.librestatic.opencinecam.settings.AudioListeningDevice
 import com.librestatic.opencinecam.settings.AudioListeningStatus
 import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.stillSizeFor
 import com.librestatic.opencinecam.settings.TimeLapseLimitMode
 
 enum class CameraUiPhase {
@@ -146,8 +147,6 @@ data class CameraUiState(
     val targetFps: Int = 30,
     val targetVideoWidth: Int = 1920,
     val targetVideoHeight: Int = 1080,
-    /** The operator's compressed still size; null means the camera's largest. Not persisted. */
-    val targetStillSize: Pair<Int, Int>? = null,
     val effectiveFps: Double? = null,
     val recordingFinalizing: Boolean = false,
     /** A lens calibration run owns the camera: mode, zoom, lens, recording and structural settings are locked. */
@@ -352,8 +351,7 @@ data class CameraUiState(
             if (selectedMode == CaptureMode.RAW_PHOTO) {
                 return listOfNotNull(descriptor.rawSize?.let { it.width to it.height })
             }
-            val heic = selectedMode == CaptureMode.PHOTO &&
-                effectiveSettings?.photoFormat == com.librestatic.opencinecam.camera.StillPhotoFormat.HEIC
+            val heic = stillSizeFormat == com.librestatic.opencinecam.camera.StillPhotoFormat.HEIC
             // OCC-PLAN-069: sizes only a public physical camera advertises ride that physical's
             // still stream, so they are offered while zoom sits at the base 1.0x window only.
             val physicalSizes = if (zoomRatio in PHYSICAL_STILL_ZOOM_WINDOW) {
@@ -363,9 +361,26 @@ data class CameraUiState(
             return com.librestatic.opencinecam.camera.stillSizeChoices(sizes.map { it.width to it.height }.distinct())
         }
 
-    /** The still size the session runs: the operator's pick when offered, otherwise the largest. */
+    /** The compressed format [availableStillSizes] lists sizes for, and the format a remembered size is kept under. */
+    private val stillSizeFormat: com.librestatic.opencinecam.camera.StillPhotoFormat
+        get() = if (selectedMode == CaptureMode.PHOTO &&
+            effectiveSettings?.photoFormat == com.librestatic.opencinecam.camera.StillPhotoFormat.HEIC
+        ) com.librestatic.opencinecam.camera.StillPhotoFormat.HEIC else com.librestatic.opencinecam.camera.StillPhotoFormat.JPEG
+
+    /**
+     * The still size the session runs: the one remembered for this camera and format (or the last one picked
+     * anywhere) when offered, otherwise the largest. A remembered size the camera does not offer is kept, not erased.
+     */
     val activeStillSize: Pair<Int, Int>?
-        get() = availableStillSizes.let { sizes -> targetStillSize?.takeIf { it in sizes } ?: sizes.firstOrNull() }
+        get() = availableStillSizes.let { sizes ->
+            if (selectedMode == CaptureMode.RAW_PHOTO) return@let sizes.firstOrNull()
+            effectiveSettings?.stillSizeFor(selectedCameraId, stillSizeFormat)?.takeIf { it in sizes } ?: sizes.firstOrNull()
+        }
+
+    /** The [CameraSettings.stillSizes] key a pick in the RES slot is remembered under; null outside the compressed photo modes. */
+    val stillSizeKey: String?
+        get() = selectedCameraId?.takeIf { selectedMode in photoResolutionModes && selectedMode != CaptureMode.RAW_PHOTO }
+            ?.let { com.librestatic.opencinecam.settings.stillSizeKey(it, stillSizeFormat) }
 
     val activeVideoProfile: Camera2VideoProfile?
         get() = availableVideoProfiles.firstOrNull {

@@ -472,6 +472,7 @@ internal fun OperatorSettings(state: CameraUiState, settings: CameraSettings, on
             label = { stringResource(when (it) { StartupMode.PHOTO -> R.string.operator_startup_photo; StartupMode.VIDEO -> R.string.operator_startup_video; StartupMode.LAST -> R.string.operator_startup_last }) },
             onSelect = { onChange(settings.copy(operation = operation.copy(startupMode = it))) }, tag = { "operator-startup-$it" })
         OperatorToggle(R.string.operator_restore_manual, "operator-restore-manual", operation.restoreExposureWhiteBalance) { onChange(settings.copy(operation = operation.copy(restoreExposureWhiteBalance = it))) }
+        OperatorToggle(R.string.operator_restore_photo, "operator-restore-photo", operation.restorePhotoSettings) { onChange(settings.copy(operation = operation.copy(restorePhotoSettings = it))) }
         OperatorToggle(R.string.operator_restore_torch, "operator-restore-torch", operation.restoreTorch) { onChange(settings.copy(operation = operation.copy(restoreTorch = it))) }
         SettingsHelp(stringResource(R.string.operator_startup_help_summary), stringResource(R.string.operator_startup_help))
         OperatorToggle(R.string.operator_lock, "operator-lock", operation.lockDuringTake) { onChange(settings.copy(operation = operation.copy(lockDuringTake = it))) }

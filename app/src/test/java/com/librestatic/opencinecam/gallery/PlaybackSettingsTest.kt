@@ -55,7 +55,7 @@ class PlaybackSettingsTest {
         assertFalse(CameraPresetCodec.mergeLocal(original, CameraSettings()).playback.nativeSurfaceFrames)
     }
     @Test fun versionEighteenHas160KeysAndSeventeenRetains157WithExactDefaults() {
-        assertEquals(29, CameraPresetCodec.VERSION); assertEquals(186, CameraPresetCodec.portableKeys.size)
+        assertEquals(30, CameraPresetCodec.VERSION); assertEquals(189, CameraPresetCodec.portableKeys.size)
         val original = CameraSettings(captureNaming = CaptureNamingSettings(true, "{scene}"))
         val root = document(original); val old = root.getValue("settings").jsonObject - keys - "gallery-auto-thumbnails" - PRESET_V20_KEYS
         assertEquals(157, old.size)
