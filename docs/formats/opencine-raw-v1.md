@@ -141,8 +141,9 @@ frame, so a reader detects a missing frame as a gap. It is never the Camera2
 capture frame number; that one is the `frameNumber` key of the frame's
 `FRAME_METADATA`.
 
-The crop origin is the frame's top-left corner within the sensor pixel array
-the static metadata describes. Both coordinates are even, so the frame keeps
+The crop origin is the frame's top-left corner within the camera's RAW output,
+whose size the static metadata gives as `sensorWidth` and `sensorHeight`. It
+can be anywhere the frame fits; a writer need not centre it. Both coordinates are even, so the frame keeps
 the sensor's CFA phase; a RAW10 crop left is also a multiple of 4 so packing
 groups stay whole. Writers write zero in the reserved bytes and readers
 ignore them. A reader rejects a frame header version other than 1 for that
@@ -189,7 +190,7 @@ converter needs. Later `METADATA` chunks may add keys; a later value wins.
 | `colorMatrix1`, `colorMatrix2` | 9 rationals, row-major |
 | `forwardMatrix1`, `forwardMatrix2` | 9 rationals, row-major |
 | `calibrationIlluminant1`, `calibrationIlluminant2` | EXIF LightSource integer |
-| `sensorWidth`, `sensorHeight` | pixel array size, integers |
+| `sensorWidth`, `sensorHeight` | size of the camera's RAW output the frames are cropped from (the RAW10 stream, which may be smaller than the pixel array), integers; `crop` origins are relative to it |
 | `activeArray` | `left top right bottom`, integers |
 | `crop` | `left top width height` of every frame, integers |
 | `fps` | rational |

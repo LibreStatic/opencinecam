@@ -386,15 +386,22 @@ class RawVideoRecorder(
      * Allocates the ring for [config]: as many frame slots as fit in [ringBytes] (at least
      * [RawRingBudget.MIN_SLOTS]). If memory runs out part way, the slots already allocated are kept
      * when there are enough of them. Re-arming frees the previous ring first. A block-pack [config]
-     * with a [noiseProfile] records near-lossless; the profile is ignored for any other encoding.
+     * with a [noiseProfile] records near-lossless; the profile is ignored for any other encoding. Every frame copies the
+     * [crop] window (PLAN-076), centred unless the operator placed it; it must have [config]'s size and fit its sensor.
      */
-    fun arm(config: RawVideoConfig, ringBytes: Long, noiseProfile: RawNoiseProfile? = null): RawVideoArmState = synchronized(control) {
+    fun arm(
+        config: RawVideoConfig,
+        ringBytes: Long,
+        noiseProfile: RawNoiseProfile? = null,
+        crop: RawVideoCrop = RawVideoCrop.centred(config),
+    ): RawVideoArmState = synchronized(control) {
         check(take == null) { "cannot arm during a take" }
         disarmLocked()
         require(config.encoding == RawVideoConfig.ENCODING_RAW10 || config.encoding in RawVideoConfig.COMPRESSED_ENCODINGS) {
             "unsupported RAW video encoding ${config.encoding}"
         }
-        val crop = RawVideoCrop.centred(config)
+        require(crop.width == config.cropWidth && crop.height == config.cropHeight) { "the crop must have the configuration's size" }
+        require(crop.left + crop.width <= config.sensorWidth && crop.top + crop.height <= config.sensorHeight) { "the crop must fit the sensor" }
         val frameBytes = OcrawFrameHeader.raw10RowBytes(crop.width).toLong() * crop.height
         require(frameBytes <= OcrawCodec.MAX_CHUNK_PAYLOAD - OcrawFrameHeader.BYTES) { "frame exceeds the bounded payload" }
         val slotBytes = frameBytes.toInt()

@@ -152,7 +152,15 @@ data class Camera2CameraDescriptor(
     val lowLightAutoFps: Boolean = false,
     /** Set on the descriptor of a lens-locked session, built from the physical camera (PLAN-070); null otherwise. */
     val lensLock: LensLockBinding? = null,
+    /**
+     * PLAN-076: the RAW_VIDEO viewfinder stream, of the aspect of the largest RAW10 output (the one RAW_VIDEO streams),
+     * chosen by [rawPreviewSizeIndex]; null without a RAW10 output.
+     */
+    val rawPreviewSize: Size? = null,
 ) {
+    /** The viewfinder stream of a RAW_VIDEO session: [rawPreviewSize], else [previewSize]. */
+    val rawVideoViewfinderSize: Size get() = rawPreviewSize ?: previewSize
+
     /** The id the app knows this camera by: the logical id of a lens-locked session, else [cameraId]. */
     val logicalCameraId: String get() = lensLock?.logicalId ?: cameraId
 
@@ -1363,7 +1371,7 @@ class Camera2PreviewEngine(
                 }
                 if (gpuPreviewEnabled) {
                     try {
-                        val size = activeVideoProfile?.size ?: descriptor.previewSize
+                        val size = activeVideoProfile?.size ?: baseViewfinderSize(descriptor)
                         logPipeline = OpenCineLogGpuPipeline(size, OpenCineLogSourcePath.SDR_BT709_ISP,
                             surface, descriptor.sensorOrientation, displayRotationDegrees,
                             descriptor.lensFacing == CameraCharacteristics.LENS_FACING_FRONT,
@@ -2048,7 +2056,7 @@ class Camera2PreviewEngine(
             // AF lock freezes the lens; reject tap-to-focus while locked so the lock survives.
             if (afLockState == LockState.LOCKED) return@execute
             val active = currentDescriptor.sensorActiveArray ?: return@execute
-            val stream = activeLogProfile?.size ?: activeVideoProfile?.size ?: currentDescriptor.previewSize
+            val stream = activeLogProfile?.size ?: activeVideoProfile?.size ?: baseViewfinderSize(currentDescriptor)
             // When the API 29 crop-region fallback is active, map the tap into the visible crop
             // so the focus point matches the zoomed viewfinder. With CONTROL_ZOOM_RATIO (API 30+)
             // the HAL applies the crop itself, so we map into the full active array as before.

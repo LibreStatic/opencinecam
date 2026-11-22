@@ -94,6 +94,14 @@ class CameraPresetTest {
         assertEquals("1920x1080@60", decoded.settings.rawVideoConfig)
         assertEquals("1920x1080@60", CameraPresetCodec.mergeLocal(decoded.settings, CameraSettings()).rawVideoConfig)
     }
+    @Test fun aPlacedRawVideoWindowRoundTripsWithoutAVersionBump() {
+        assertEquals(29, CameraPresetCodec.VERSION)
+        val key = "1920x816+1080+1122@24+bp"
+        val text = CameraPresetCodec.encode(CameraPreset(name = "Raw", settings = CameraSettings(rawVideoConfig = key), mode = CaptureMode.RAW_VIDEO))
+        val decoded = CameraPresetCodec.decode(text)
+        assertEquals(key, decoded.settings.rawVideoConfig)
+        assertEquals(key, CameraPresetCodec.mergeLocal(decoded.settings, CameraSettings()).rawVideoConfig)
+    }
     @Test fun v23PayloadWithoutRawVideoConfigDecodesToTheAutomaticChoice() {
         val v23 = document {
             it["version"] = JsonPrimitive(23)

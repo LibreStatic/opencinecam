@@ -129,4 +129,7 @@
     <string name="media_detail_motion_track">Traccia incorporata (CAMM)</string>
     <string name="media_detail_motion_track_packets">Sì, %1$d pacchetti</string>
     <string name="media_detail_motion_log">Log di Gyroflow</string>
+    <!-- PLAN-076: a RAW take's window in its RAW output, when smaller. -->
+    <string name="media_detail_crop">Ritaglio</string>
+    <string name="media_detail_crop_value">%1$d × %2$d a +%3$d +%4$d su %5$d × %6$d</string>
 </resources>

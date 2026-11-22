@@ -146,6 +146,15 @@ class RawQualificationStagingTest {
         assertEquals(listOf("full@60", "3840x2160@60", "full@30", "full@24").map(::config), lj92Candidates.take(4))
     }
 
+    @Test fun theHighRateCropsSortByTheirStreamAmongTheDefaults() {
+        // PLAN-076: 1280x720 at 120 and 90 fps carry less than 1920x1080 at 60 and more than at 30.
+        val order = listOf(
+            "full@60", "3840x2160@60", "full@30", "full@24", "3840x2160@30", "full@15",
+            "1920x1080@60", "1280x720@120", "1280x720@90", "1920x1080@30",
+        )
+        assertEquals(order.map(::config), lj92Candidates)
+    }
+
     @Test fun aHeldSufficientFirstBenchJudgesEverythingAlone() {
         val longRuns = descend(emptyMap())
         val first = bench(900e6, 1.6)

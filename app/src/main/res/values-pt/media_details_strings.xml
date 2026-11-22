@@ -129,4 +129,7 @@
     <string name="media_detail_motion_track">Faixa incorporada (CAMM)</string>
     <string name="media_detail_motion_track_packets">Sim, %1$d pacotes</string>
     <string name="media_detail_motion_log">Registro do Gyroflow</string>
+    <!-- PLAN-076: a RAW take's window in its RAW output, when smaller. -->
+    <string name="media_detail_crop">Recorte</string>
+    <string name="media_detail_crop_value">%1$d × %2$d em +%3$d +%4$d de %5$d × %6$d</string>
 </resources>

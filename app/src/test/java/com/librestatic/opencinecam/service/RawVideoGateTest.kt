@@ -7,9 +7,15 @@ import com.librestatic.opencinecam.capture.RAW_QUALIFICATION_THERMAL_SKIP
 import com.librestatic.opencinecam.capture.RawQualificationItemStatus
 import com.librestatic.opencinecam.capture.RawVideoConfigKeys
 import com.librestatic.opencinecam.capture.RawVideoConfigOption
+import com.librestatic.opencinecam.capture.RawVideoCropPreview
+import com.librestatic.opencinecam.capture.RawVideoCropStatus
 import com.librestatic.opencinecam.capture.RawVideoLeftOutReason
+import com.librestatic.opencinecam.capture.RawVideoSelection
+import com.librestatic.opencinecam.rawvideo.RawVideoArmState
+import com.librestatic.opencinecam.rawvideo.RawVideoCrop
 import com.librestatic.opencinecam.camera.RawThroughputBenchmark
 import com.librestatic.opencinecam.rawvideo.RawQualificationFrameRate
+import com.librestatic.opencinecam.rawvideo.RawQualificationSpecs
 import com.librestatic.opencinecam.rawvideo.RawQualificationStaging
 import com.librestatic.opencinecam.camera.BacklogSimulation
 import com.librestatic.opencinecam.camera.RawBenchmarkStatus
@@ -22,6 +28,7 @@ import com.librestatic.opencinecam.rawvideo.RawTakeReasons
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -528,6 +535,350 @@ class RawVideoGateTest {
         assertTrue(rawVideoLeftOutConfigs("0", sizes, records, "dest", emptyList()).isEmpty())
         // A risky (storage-only) record is usable and listed as such, never left out.
         assertTrue(rawVideoLeftOutConfigs("0", sizes, listOf(verdict(fullAt60, RawBenchmarkStatus.FAIL, sweepFail)), "dest", listOf(fullAt60)).isEmpty())
+    }
+
+    // endregion
+
+    // region PLAN-076 placed windows
+
+    @Test fun keysMayPlaceTheWindowAfterItsSize() {
+        for (key in listOf("1920x816+1080+1122@24", "1920x816+1080+1122@24+bp", "1920x816+0+0@24+lj92", "320x240+1880+1410@120")) {
+            assertTrue(key, RawVideoConfigKeys.isValid(key))
+        }
+        for (key in listOf(
+            "full+0+0@30", "1920x816+1080@24", "1920x816+1080+@24", "1920x816++1122@24", "1920x816+-4+2@24", "1920x816-4+2@24",
+            "1920x816+01+2@24", "1920x816+1080+1122", "1920x816@24+1080+1122", "1920x816+1080+1122+4@24", "1920x816+123456+0@24",
+        )) {
+            assertFalse(key, RawVideoConfigKeys.isValid(key))
+        }
+    }
+
+    @Test fun aPlacedKeyRoundTripsAndACentredOriginIsLeftOut() {
+        val config = config(cropWidth = 1920, cropHeight = 816, fps = 24).copy(encoding = RawVideoConfig.ENCODING_BLOCK_PACK)
+        val placed = RawVideoCrop(1000, 1100, 1920, 816)
+        val key = RawVideoConfigKeys.key(config, placed)
+        assertEquals("1920x816+1000+1100@24+bp", key)
+        assertEquals(RawVideoSelection(config, placed), RawVideoConfigKeys.parse(key, "0", 4080, 3060))
+
+        // (4080 - 1920) / 2 = 1080, (3060 - 816) / 2 = 1122: the centred origin, so the key omits it.
+        assertEquals("1920x816@24+bp", RawVideoConfigKeys.key(config, RawVideoCrop(1080, 1122, 1920, 816)))
+        val centred = config(cropWidth = 1920, cropHeight = 1080, fps = 60)
+        assertEquals("1920x1080@60", RawVideoConfigKeys.key(centred, RawVideoCrop.centred(centred)))
+        assertEquals("1920x1080+0+0@60", RawVideoConfigKeys.key(centred, RawVideoCrop(0, 0, 1920, 1080)))
+        assertEquals("full@30", RawVideoConfigKeys.key(full30, RawVideoCrop(0, 0, 4080, 3060)))
+        // An explicit centred origin parses to the same selection as none.
+        assertEquals(RawVideoConfigKeys.parse("1920x1080@60", "0", 4080, 3060), RawVideoConfigKeys.parse("1920x1080+1080+990@60", "0", 4080, 3060))
+        assertEquals(RawVideoSelection(centred, RawVideoCrop(1080, 990, 1920, 1080)), RawVideoConfigKeys.parse("1920x1080@60", "0", 4080, 3060))
+        assertEquals(RawVideoSelection(full30, RawVideoCrop(0, 0, 4080, 3060)), RawVideoConfigKeys.parse("full@30", "0", 4080, 3060))
+        // A small window at a high rate.
+        val small = config(cropWidth = 320, cropHeight = 240, fps = 120)
+        assertEquals(RawVideoSelection(small, RawVideoCrop(1880, 1410, 320, 240)), RawVideoConfigKeys.parse("320x240+1880+1410@120", "0", 4080, 3060))
+        assertThrows(IllegalArgumentException::class.java) { RawVideoConfigKeys.key(centred, RawVideoCrop(0, 0, 1920, 816)) }
+    }
+
+    @Test fun parseRefusesWindowsATakeCannotWrite() {
+        for (key in listOf(
+            "", "nonsense", "1920x817+1080+1122@24", "1918x816+1080+1122@24", "1920x816+1082+1122@24", "1920x816+1080+1121@24",
+            "1920x816+2164+0@24", "1920x816+0+2246@24", "5000x816@24", "124x240@120", "320x94@120", "1920x1081@24",
+        )) {
+            assertNull(key, RawVideoConfigKeys.parse(key, "0", 4080, 3060))
+        }
+        assertNull(RawVideoConfigKeys.parse("1920x816@24", " ", 4080, 3060))
+        // At the sensor's edge it still fits: 4080 - 1920 = 2160, 3060 - 816 = 2244.
+        assertEquals(RawVideoCrop(2160, 2244, 1920, 816), RawVideoConfigKeys.parse("1920x816+2160+2244@24", "0", 4080, 3060)?.crop)
+    }
+
+    private val custom = config(cropWidth = 1920, cropHeight = 816, fps = 24)
+    private val crop1080at24 = config(cropWidth = 1920, cropHeight = 1080, fps = 24)
+    private val crop720at24 = config(cropWidth = 1280, cropHeight = 720, fps = 24)
+
+    private fun customVerdict(
+        config: RawVideoConfig = custom,
+        usable: List<RawVideoConfig>,
+        risky: Set<RawVideoConfig> = emptySet(),
+        reduced: Map<RawVideoConfig, Double?> = emptyMap(),
+        leftOut: List<RawVideoLeftOutConfig> = emptyList(),
+        median: Long? = null,
+        ring: Long? = null,
+    ) = rawVideoCustomVerdict(config, usable, risky, reduced, leftOut, median, ring)
+
+    @Test fun aQualifiedSizeKeepsItsOwnVerdict() {
+        assertEquals(RawVideoCustomVerdict.Passed(false, null), customVerdict(crop1080at24, listOf(full24, crop1080at24)))
+        assertEquals(RawVideoCustomVerdict.Risky(null), customVerdict(crop1080at24, listOf(crop1080at24), risky = setOf(crop1080at24)))
+        assertEquals(RawVideoCustomVerdict.Passed(true, 21.3), customVerdict(crop1080at24, listOf(crop1080at24), reduced = mapOf(crop1080at24 to 21.3)))
+    }
+
+    @Test fun theCameraMustBeKnownToHoldTheRate() {
+        val at60 = config(cropWidth = 1920, cropHeight = 816, fps = 60)
+        val usable = listOf(full30, full24)
+        fun leftOut(vararg statuses: RawQualificationItemStatus) = statuses.mapIndexed { i, status ->
+            RawVideoLeftOutConfig(config(cropWidth = 4080 - 4 * i, fps = 60), status)
+        }
+        assertEquals(RawVideoCustomVerdict.Refused(RawVideoLeftOutReason.NOT_QUALIFIED), customVerdict(at60, usable))
+        assertEquals(RawVideoCustomVerdict.Refused(RawVideoLeftOutReason.CAMERA_LIMIT),
+            customVerdict(at60, usable, leftOut = leftOut(RawQualificationItemStatus.SKIPPED_HEAT, RawQualificationItemStatus.CAMERA_LIMIT)))
+        assertEquals(RawVideoCustomVerdict.Refused(RawVideoLeftOutReason.HEAT),
+            customVerdict(at60, usable, leftOut = leftOut(RawQualificationItemStatus.FAILED, RawQualificationItemStatus.SKIPPED_HEAT)))
+        assertEquals(RawVideoCustomVerdict.Refused(RawVideoLeftOutReason.NOT_QUALIFIED),
+            customVerdict(at60, usable, leftOut = leftOut(RawQualificationItemStatus.FAILED, RawQualificationItemStatus.SKIPPED_SPACE)))
+        // Another camera's 60 fps says nothing about this one.
+        assertEquals(RawVideoCustomVerdict.Refused(RawVideoLeftOutReason.NOT_QUALIFIED),
+            customVerdict(at60, usable + config(cameraId = "2", fps = 60)))
+        // A configuration left out for the storage alone proves the camera: the storage then decides.
+        assertEquals(RawVideoCustomVerdict.Refused(RawVideoLeftOutReason.STORAGE),
+            customVerdict(at60, usable, leftOut = leftOut(RawQualificationItemStatus.STORAGE_LIMIT)))
+        // So does any usable configuration at the rate, of any size or encoding.
+        assertEquals(RawVideoCustomVerdict.Refused(RawVideoLeftOutReason.STORAGE),
+            customVerdict(at60, usable + config(cropWidth = 1280, cropHeight = 720, fps = 60).copy(encoding = RawVideoConfig.ENCODING_BLOCK_PACK)))
+    }
+
+    @Test fun anUncompressedWindowPassesUnderAQualifiedOneThatStreamsMore() {
+        assertEquals(RawVideoCustomVerdict.Passed(false, null), customVerdict(usable = listOf(full24, crop1080at24, crop720at24)))
+        // Reduced-rate only when every coverer is, at the highest rate one of them achieved.
+        assertEquals(RawVideoCustomVerdict.Passed(true, 21.3),
+            customVerdict(usable = listOf(full24, crop1080at24), reduced = mapOf(crop1080at24 to 21.3, full24 to 20.1)))
+        assertEquals(RawVideoCustomVerdict.Passed(true, null), customVerdict(usable = listOf(crop1080at24), reduced = mapOf(crop1080at24 to null)))
+        assertEquals(RawVideoCustomVerdict.Passed(false, null), customVerdict(usable = listOf(full24, crop1080at24), reduced = mapOf(crop1080at24 to 21.3)))
+        // A risky coverer does not pass it; the passing one does.
+        assertEquals(RawVideoCustomVerdict.Passed(false, null), customVerdict(usable = listOf(full24, crop1080at24), risky = setOf(full24)))
+    }
+
+    @Test fun withoutAPassingCoverTheStorageDecides() {
+        // 1920 x 816 x 1.25 x 24 = 47 001 600 B/s; x 1.1225 = 52 759 296 B/s.
+        assertEquals(47_001_600L, custom.streamBytesPerSecond)
+        val usable = listOf(crop720at24)
+        val gib = 1L shl 30
+        // The sweep meets the margin, but no long run vouches for it.
+        assertEquals(RawVideoCustomVerdict.Risky(null), customVerdict(usable = usable, median = 52_759_296L))
+        // It keeps up below the margin: the cache does not limit it.
+        assertEquals(RawVideoCustomVerdict.Risky(null), customVerdict(usable = usable, median = 50_000_000L, ring = gib))
+        // Short of the stream: the ring lasts 1 GiB / 7 001 600 B/s = 153 s.
+        assertEquals(RawVideoCustomVerdict.Risky(153), customVerdict(usable = usable, median = 40_000_000L, ring = gib))
+        // A risky coverer keeps it risky even when the ring runs out sooner, or nothing is known.
+        assertEquals(RawVideoCustomVerdict.Risky(14), customVerdict(usable = listOf(full24), risky = setOf(full24), median = 40_000_000L, ring = 100_000_000L))
+        assertEquals(RawVideoCustomVerdict.Risky(null), customVerdict(usable = listOf(full24), risky = setOf(full24)))
+        // Too short a burst, or no figures, and no cover.
+        assertEquals(RawVideoCustomVerdict.Refused(RawVideoLeftOutReason.STORAGE), customVerdict(usable = usable, median = 40_000_000L, ring = 100_000_000L))
+        assertEquals(RawVideoCustomVerdict.Refused(RawVideoLeftOutReason.STORAGE), customVerdict(usable = usable, median = 40_000_000L))
+        assertEquals(RawVideoCustomVerdict.Refused(RawVideoLeftOutReason.STORAGE), customVerdict(usable = usable))
+        // A compressed configuration covers no uncompressed window.
+        val bp = crop1080at24.copy(encoding = RawVideoConfig.ENCODING_BLOCK_PACK)
+        assertEquals(RawVideoCustomVerdict.Refused(RawVideoLeftOutReason.STORAGE), customVerdict(usable = listOf(bp)))
+    }
+
+    @Test fun aBlockPackWindowNeedsABlockPackConfigurationWithAsManyPixels() {
+        val customBp = custom.copy(encoding = RawVideoConfig.ENCODING_BLOCK_PACK)
+        val bp1080 = crop1080at24.copy(encoding = RawVideoConfig.ENCODING_BLOCK_PACK)
+        val bp720 = crop720at24.copy(encoding = RawVideoConfig.ENCODING_BLOCK_PACK)
+        assertEquals(RawVideoCustomVerdict.Passed(false, null), customVerdict(customBp, listOf(bp1080, bp720)))
+        assertEquals(RawVideoCustomVerdict.Passed(true, 22.0), customVerdict(customBp, listOf(bp1080), reduced = mapOf(bp1080 to 22.0)))
+        assertEquals(RawVideoCustomVerdict.Risky(null), customVerdict(customBp, listOf(bp1080, bp720), risky = setOf(bp1080)))
+        // The uncompressed twin and a smaller block-pack one do not cover it, whatever the sweep says.
+        assertEquals(RawVideoCustomVerdict.Refused(RawVideoLeftOutReason.NOT_QUALIFIED),
+            customVerdict(customBp, listOf(full24, crop1080at24, bp720), median = 2_000_000_000L, ring = 1L shl 30))
+        // Any other compressed encoding is never judged.
+        val lj92 = custom.copy(encoding = RawVideoConfig.ENCODING_LJ92)
+        assertEquals(RawVideoCustomVerdict.Refused(RawVideoLeftOutReason.NOT_QUALIFIED),
+            customVerdict(lj92, listOf(crop1080at24.copy(encoding = RawVideoConfig.ENCODING_LJ92), full24)))
+    }
+
+    private fun context(
+        usable: List<RawVideoConfig>,
+        risky: Set<RawVideoConfig> = emptySet(),
+        reduced: Map<RawVideoConfig, Double?> = emptyMap(),
+        leftOut: List<RawVideoLeftOutConfig> = emptyList(),
+        median: Long? = null,
+        ring: Long? = null,
+        burst: Map<RawVideoConfig, Long> = emptyMap(),
+        armed: RawVideoArmState? = null,
+    ) = RawVideoCustomContext("0", 4080, 3060, usable, risky, reduced, leftOut, median, ring, burst, armed)
+
+    @Test fun anExactUsableKeySelectsItCentred() {
+        val usable = listOf(full24, crop1080at24)
+        val resolved = requireNotNull(resolveRawVideoSelection("1920x1080@24", usable, custom = context(usable)))
+        assertEquals(crop1080at24, resolved.config)
+        assertEquals(RawVideoCrop.centred(crop1080at24), resolved.crop)
+        assertNull(resolved.custom)
+        assertFalse(resolved.isCustom)
+        assertEquals("1920x1080@24", resolved.key)
+    }
+
+    @Test fun aWindowThePassedConfigurationsCoverIsSelectedAtItsOrigin() {
+        val usable = listOf(full24, crop1080at24)
+        val resolved = requireNotNull(resolveRawVideoSelection("1920x816+1000+1100@24", usable, custom = context(usable)))
+        assertEquals(custom, resolved.config)
+        assertEquals(RawVideoCrop(1000, 1100, 1920, 816), resolved.crop)
+        assertEquals(RawVideoCustomVerdict.Passed(false, null), resolved.custom)
+        assertTrue(resolved.isCustom)
+        assertEquals("1920x816+1000+1100@24", resolved.key)
+        // Centred, it is still a window of the operator's: no usable configuration has its size.
+        val centred = requireNotNull(resolveRawVideoSelection("1920x816@24", usable, custom = context(usable)))
+        assertEquals(RawVideoCrop.centred(custom), centred.crop)
+        assertTrue(centred.isCustom)
+    }
+
+    @Test fun aRiskyWindowIsSelectedWithItsVerdict() {
+        val usable = listOf(crop720at24)
+        val resolved = requireNotNull(resolveRawVideoSelection("1920x816+1000+1100@24", usable, custom = context(usable, median = 52_759_296L)))
+        assertEquals(RawVideoCustomVerdict.Risky(null), resolved.custom)
+        assertEquals(RawVideoCrop(1000, 1100, 1920, 816), resolved.crop)
+        val gib = 1L shl 30
+        assertEquals(RawVideoCustomVerdict.Risky(153),
+            resolveRawVideoSelection("1920x816+0+0@24", usable, custom = context(usable, median = 40_000_000L, ring = gib))?.custom)
+    }
+
+    @Test fun theRingArmedForAWindowSetsItsBurstButNotItsVerdict() {
+        val usable = listOf(crop720at24)
+        val gib = 1L shl 30
+        val window = RawVideoCrop(1000, 1100, 1920, 816)
+        // A 100 MB ring armed for this window lasts 100 000 000 / 7 001 600 B/s = 14 s, not the qualification ring's 153 s,
+        // and stays risky: a smaller ring never refuses the window it was armed for.
+        val armed = RawVideoArmState(custom, window, slotBytes = 1_000_000, slotCount = 100)
+        assertEquals(RawVideoCustomVerdict.Risky(14),
+            resolveRawVideoSelection("1920x816+1000+1100@24", usable, custom = context(usable, median = 40_000_000L, ring = gib, armed = armed))?.custom)
+        // A ring armed for another window leaves the qualification ring's estimate.
+        assertEquals(RawVideoCustomVerdict.Risky(153),
+            resolveRawVideoSelection("1920x816+0+0@24", usable, custom = context(usable, median = 40_000_000L, ring = gib, armed = armed))?.custom)
+        // A refused window stays refused whatever the armed ring.
+        assertEquals(RawVideoCustomVerdict.Refused(RawVideoLeftOutReason.STORAGE),
+            context(usable, median = 40_000_000L, ring = 100_000_000L, armed = armed.copy(slotCount = 1000)).judge("1920x816+1000+1100@24")?.custom)
+    }
+
+    @Test fun aRefusedWindowFallsBackToAutomatic() {
+        // At 24 fps only a smaller window passed, and nothing is known of the storage: refused.
+        val usable = listOf(full30, crop720at24)
+        assertEquals(RawVideoCustomVerdict.Refused(RawVideoLeftOutReason.STORAGE), context(usable).judge("1920x816+1000+1100@24")?.custom)
+        val resolved = requireNotNull(resolveRawVideoSelection("1920x816+1000+1100@24", usable, custom = context(usable)))
+        assertEquals(full30, resolved.config)
+        assertNull(resolved.custom)
+        // Automatic never picks a manual-only one.
+        assertEquals(crop720at24, resolveRawVideoSelection("1920x816+1000+1100@24", usable, setOf(full30), context(usable))?.config)
+        // Without a context nothing is judged; with nothing to fall back to, nothing is selected.
+        assertEquals(full30, resolveRawVideoSelection("1920x816@24", usable + crop1080at24)?.config)
+        assertNull(resolveRawVideoSelection("1920x816+1000+1100@24", listOf(crop720at24), setOf(crop720at24), context(listOf(crop720at24))))
+        // A key that does not parse falls back too.
+        assertEquals(full30, resolveRawVideoSelection("1920x817@24", usable, custom = context(usable))?.config)
+    }
+
+    @Test fun automaticNeverYieldsAWindowOfTheOperators() {
+        // Only a risky full sensor and a window the sweep would vouch for: Automatic selects nothing.
+        val usable = listOf(full24)
+        assertNull(resolveRawVideoSelection("", usable, setOf(full24), context(usable, risky = setOf(full24), median = 2_000_000_000L)))
+        assertEquals(full24, resolveRawVideoSelection("", usable, custom = context(usable, median = 2_000_000_000L))?.config)
+        assertNull(resolveRawVideoSelection("", usable, custom = context(usable))?.custom)
+    }
+
+    @Test fun anOriginAtAQualifiedSizeKeepsThatSizesVerdict() {
+        val usable = listOf(full24, crop1080at24)
+        val placed = "1920x1080+0+0@24"
+        assertEquals(RawVideoCustomVerdict.Passed(false, null), resolveRawVideoSelection(placed, usable, custom = context(usable))?.custom)
+        assertEquals(RawVideoCustomVerdict.Passed(true, 21.3),
+            resolveRawVideoSelection(placed, usable, setOf(crop1080at24), context(usable, reduced = mapOf(crop1080at24 to 21.3)))?.custom)
+        // A risky size stays risky at any origin, with its record's burst.
+        val risky = context(usable, risky = setOf(crop1080at24), burst = mapOf(crop1080at24 to 75L))
+        val resolved = requireNotNull(resolveRawVideoSelection(placed, usable, setOf(crop1080at24), risky))
+        assertEquals(RawVideoCustomVerdict.Risky(75), resolved.custom)
+        assertEquals(RawVideoCrop(0, 0, 1920, 1080), resolved.crop)
+        assertEquals(placed, resolved.key)
+    }
+
+    @Test fun customRatesAreTheUsableOnesAndThoseOnlyTheStorageLeftOut() {
+        val usable = listOf(full30, full24, crop720at24, config(cameraId = "2", fps = 50))
+        val leftOut = listOf(
+            RawVideoLeftOutConfig(config(fps = 60), RawQualificationItemStatus.STORAGE_LIMIT),
+            RawVideoLeftOutConfig(config(cropWidth = 1920, cropHeight = 1080, fps = 60), RawQualificationItemStatus.STORAGE_LIMIT),
+            RawVideoLeftOutConfig(config(cropWidth = 1920, cropHeight = 1080, fps = 120), RawQualificationItemStatus.CAMERA_LIMIT),
+            RawVideoLeftOutConfig(config(cropWidth = 1280, cropHeight = 720, fps = 90), RawQualificationItemStatus.SKIPPED_HEAT),
+            RawVideoLeftOutConfig(config(cropWidth = 1920, cropHeight = 1080, fps = 240).copy(sensorWidth = 4000, sensorHeight = 3000),
+                RawQualificationItemStatus.STORAGE_LIMIT),
+        )
+        assertEquals(listOf(24, 30, 60), rawVideoCustomRates("0", 4080, 3060, usable, leftOut))
+        assertEquals(listOf(24, 30, 60), context(usable, leftOut = leftOut).customRates)
+        assertEquals(emptyList<Int>(), rawVideoCustomRates("0", 4080, 3060, emptyList(), emptyList()))
+    }
+
+    // region PLAN-076 high-rate candidates
+
+    private val crop720at90 = config(cropWidth = 1280, cropHeight = 720, fps = 90)
+    private val crop720at120 = config(cropWidth = 1280, cropHeight = 720, fps = 120)
+    private val window240at120 = config(cropWidth = 320, cropHeight = 240, fps = 120)
+
+    @Test fun aUsableHighRateCropEnablesItsCustomRates() {
+        val usable = listOf(full30, crop720at90, crop720at120)
+        assertEquals(listOf(30, 90, 120), rawVideoCustomRates("0", 4080, 3060, usable, emptyList()))
+        assertEquals(listOf(30, 90, 120), context(usable).customRates)
+    }
+
+    @Test fun aSmallWindowPassesUnderAUsableHighRateCrop() {
+        assertEquals(RawVideoCustomVerdict.Passed(false, null), customVerdict(window240at120, listOf(full30, crop720at120)))
+        assertEquals(RawVideoCustomVerdict.Passed(false, null), context(listOf(full30, crop720at120)).judge("320x240@120")?.custom)
+    }
+
+    @Test fun aSmallWindowIsRefusedWhenTheHighRateCropIsACameraLimit() {
+        val leftOut = listOf(RawVideoLeftOutConfig(crop720at120, RawQualificationItemStatus.CAMERA_LIMIT))
+        assertEquals(RawVideoCustomVerdict.Refused(RawVideoLeftOutReason.CAMERA_LIMIT), customVerdict(window240at120, listOf(full30), leftOut = leftOut))
+        assertEquals(emptyList<Int>(), rawVideoCustomRates("0", 4080, 3060, emptyList(), leftOut))
+        // The record the qualifier stores for a rate the camera cannot be asked for reads as that left-out status.
+        val records = listOf(verdict(full30, RawBenchmarkStatus.PASS),
+            verdict(crop720at120, RawBenchmarkStatus.FAIL, RawQualificationFrameRate.REASON_CAMERA_FPS_LIMIT))
+        assertEquals(leftOut, rawVideoLeftOutConfigs("0", sizes, records, "dest", listOf(full30)))
+    }
+
+    @Test fun recordsOfTheEightEarlierSpecsKeepTheGateAsItWas() {
+        // A store written before PLAN-076 added 1280x720 at 90 and 120 fps: the Razr-like result, 60 fps the camera limit.
+        val earlier = RawQualificationSpecs.DEFAULT_RAW10.filterNot { it.startsWith("1280x720@") }
+        assertEquals(8, earlier.size)
+        val configs = earlier.map { requireNotNull(RawQualificationSpecs.parse(it, "0", 4080, 3060)).config }
+        val records = configs.map {
+            if (it.fps == 60) verdict(it, RawBenchmarkStatus.FAIL, RawQualificationFrameRate.REASON_CAMERA_FPS_LIMIT)
+            else verdict(it, RawBenchmarkStatus.PASS)
+        }
+        val passed = configs.filter { it.fps < 60 }
+        val usable = rawVideoUsableConfigs("0", sizes, passed, codecAvailable = false)
+        assertEquals(passed.sortedByDescending { it.streamBytesPerSecond }, usable)
+        assertEquals(ModeGateState.AVAILABLE, rawVideoGate(sizes, usable, failedThisSession = false))
+        assertEquals(full30, selectRawVideoConfig(usable, ""))
+        assertEquals(full30, selectRawVideoConfig(usable, "1280x720@120"))
+        // Nothing lists the new specs: no record, so neither failed nor left out, and no rate above 30 is offered.
+        val leftOut = rawVideoLeftOutConfigs("0", sizes, records, "dest", usable)
+        assertEquals(configs.filter { it.fps == 60 }.toSet(), leftOut.map { it.config }.toSet())
+        assertTrue(leftOut.all { it.status == RawQualificationItemStatus.CAMERA_LIMIT })
+        assertTrue(leftOut.none { it.config.fps > 60 })
+        assertEquals(listOf(15, 24, 30), rawVideoCustomRates("0", 4080, 3060, usable, leftOut))
+        assertEquals(RawVideoCustomVerdict.Refused(RawVideoLeftOutReason.NOT_QUALIFIED), customVerdict(window240at120, usable, leftOut = leftOut))
+    }
+
+    @Test fun automaticPrefersARateUpToSixtyAmongCrops() {
+        assertEquals(crop60, selectRawVideoConfig(listOf(crop720at120, crop720at90, crop60), ""))
+        // With only faster windows usable, the highest rate among them.
+        assertEquals(crop720at120, selectRawVideoConfig(listOf(crop720at90, crop720at120), ""))
+        // The full sensor still comes first.
+        assertEquals(full24, selectRawVideoConfig(listOf(crop720at120, full24), ""))
+    }
+
+    // endregion
+
+    @Test fun theCropPreviewReadsTheVerdictWithTheOptionsRates() {
+        val usable = listOf(full24, crop1080at24, crop720at24)
+        val passed = requireNotNull(rawVideoCropPreview(context(usable), "1920x816+1000+1100@24"))
+        assertEquals(RawVideoCropPreview("1920x816+1000+1100@24", 47_001_600L, 47_001_600L, RawVideoCropStatus.PASSED), passed)
+        // Not canonical in, canonical out.
+        assertEquals("1920x816@24", rawVideoCropPreview(context(usable), "1920x816+1080+1122@24")?.key)
+        val reduced = rawVideoCropPreview(context(listOf(crop1080at24), reduced = mapOf(crop1080at24 to 21.3)), "1920x816@24")
+        assertEquals(21.3, reduced?.achievedFps)
+        val refused = requireNotNull(rawVideoCropPreview(context(usable), "1920x816@60"))
+        assertEquals(RawVideoCropStatus.REFUSED, refused.status)
+        assertEquals(RawVideoLeftOutReason.NOT_QUALIFIED, refused.refusedReason)
+        // A usable configuration at its centred origin reads its own record.
+        val risky = requireNotNull(rawVideoCropPreview(context(usable, risky = setOf(crop1080at24), burst = mapOf(crop1080at24 to 75L)), "1920x1080@24"))
+        assertEquals(RawVideoCropStatus.RISKY, risky.status)
+        assertEquals(75L, risky.burstSeconds)
+        assertEquals(RawVideoCropStatus.PASSED, rawVideoCropPreview(context(usable), "full@24")?.status)
+        // A compressed window's capacity rate assumes the compression, as its option does.
+        val bp = crop1080at24.copy(encoding = RawVideoConfig.ENCODING_BLOCK_PACK)
+        val bpPreview = requireNotNull(rawVideoCropPreview(context(listOf(bp)), "1920x816+0+0@24+bp"))
+        assertEquals(RawVideoConfigOption.of(custom.copy(encoding = RawVideoConfig.ENCODING_BLOCK_PACK)).capacityBytesPerSecond, bpPreview.capacityBytesPerSecond)
+        assertNull(rawVideoCropPreview(context(usable), "1920x817@24"))
     }
 
     // endregion

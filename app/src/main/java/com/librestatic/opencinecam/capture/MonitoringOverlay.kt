@@ -182,6 +182,8 @@ internal fun MonitoringOverlay(
     drawScopesPanel: Boolean = true,
     /** Clears the F-key column that compact portrait chrome lays over the frame's end edge. */
     scopesPanelEndPadding: androidx.compose.ui.unit.Dp = 12.dp,
+    /** Draws the guide of a RAW video window smaller than the sensor (PLAN-076), where the capture chrome does not. */
+    drawRawCropGuide: Boolean = false,
 ) {
     val state = liveCameraState(state)
     val context = LocalContext.current
@@ -220,6 +222,7 @@ internal fun MonitoringOverlay(
         val peakingMask = state.focusPeakingMask.takeIf { showPeaking && analysisFresh }
         val peakingImage = rememberFocusPeakingImage(peakingMask, options.peakingColor.composeColor())
         ProfessionalScopeImage(state, options, analysisFresh, displayDegrees, sourceWidth, sourceHeight, squeezeFactor, Modifier.matchParentSize())
+        if (drawRawCropGuide) RawCropOverlayGuide(state, imageRect, sensorOrientation, displayDegrees, frontFacing, Modifier.matchParentSize())
         val levelColor = VerifiedCyan; val tiltColor = Amber
         val levelMarkColor = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f)
         Canvas(Modifier.matchParentSize()) {

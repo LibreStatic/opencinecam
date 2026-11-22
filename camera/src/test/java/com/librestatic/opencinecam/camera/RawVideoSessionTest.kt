@@ -100,6 +100,19 @@ class RawVideoSessionTest {
         assertTrue(rawVideoGraphDecision(RawVideoSessionConfig(4080, 3060, 120), listOf(4080 to 3060), s24Ranges) is RawVideoGraphDecision.Rejected)
     }
 
+    @Test fun graphAcceptsNinetyAndOneTwentyThroughTheQtiOverride() {
+        // PLAN-076: no AE range contains 90 or 120 on the Razr, yet the vendor override asks for them.
+        val ninety = rawVideoGraphDecision(RawVideoSessionConfig(4000, 3000, 90), listOf(4000 to 3000), razrRanges, declared30Ns, qtiOverride = true)
+        assertEquals(RawVideoGraphDecision.Accepted(30 to 30), ninety)
+        val oneTwenty = rawVideoGraphDecision(RawVideoSessionConfig(4000, 3000, 120), listOf(4000 to 3000), razrRanges, declared30Ns, qtiOverride = true)
+        assertEquals(RawVideoGraphDecision.Accepted(30 to 30), oneTwenty)
+    }
+
+    @Test fun graphRejectsNinetyWithoutTheOverride() {
+        val decision = rawVideoGraphDecision(RawVideoSessionConfig(4000, 3000, 90), listOf(4000 to 3000), razrRanges, declared30Ns, qtiOverride = false)
+        assertTrue(decision is RawVideoGraphDecision.Rejected)
+    }
+
     @Test fun framesBeforeTheTakeBeginsAreDiscarded() {
         val take = RawVideoTakeState()
         var calls = 0

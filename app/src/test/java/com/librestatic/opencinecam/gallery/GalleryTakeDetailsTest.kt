@@ -46,6 +46,7 @@ class GalleryTakeDetailsTest {
             R.string.media_detail_motion_sync_frames -> "Estimated: recorder timing"
             R.string.media_detail_motion_track_packets -> "Yes, ${args[0]} packets"
             R.string.media_detail_motion_no_samples -> "No samples"
+            R.string.media_detail_crop_value -> "${args[0]} × ${args[1]} at +${args[2]} +${args[3]} of ${args[4]} × ${args[5]}"
             else -> "#$id"
         }
     }, { "$it B" }, { "t$it" })
@@ -298,6 +299,25 @@ class GalleryTakeDetailsTest {
         assertTrue(raw.closedCleanly)
         assertNull(raw.bytesPerSecond)
         assertNull(raw.compressionRatio)
+    }
+
+    /** PLAN-076: a take written from a window smaller than its RAW output says where the window sat. */
+    @Test fun anOcrawTakeFromAWindowSaysWhereItSat() {
+        val frames = List(2) { i -> OcrawStreamFrame(i.toLong(), i * 100L, i.toLong(), OcrawFrameHeader(1920, 816, 2400, 1080, 1122,
+            i * 41_666_667L, i.toLong(), 2400 * 816)) }
+        fun summary(metadata: Map<String, String>) = OcrawSummary.from(metadata,
+            OcrawFrameIndex(OcrawHeader(ByteArray(16)), 0, 0, false, frames, metadata, emptyMap(), null, true, emptyList()), 0)
+        val windowed = summary(mapOf("sensorWidth" to "4000", "sensorHeight" to "3000", "crop" to "1080 1122 1920 816"))
+        val details = buildTakeDetails(TakeDetailInputs(LocalMediaKind.RAW_VIDEO, raw = windowed), text)
+        assertEquals("1920 × 816 at +1080 +1122 of 4000 × 3000", details.value("crop"))
+        assertEquals(DetailGroupKind.RAW, details.groupOf("crop"))
+        // The whole output, a take from before the crop metadata, or a value that is not a window: no row.
+        val whole = summary(mapOf("sensorWidth" to "4000", "sensorHeight" to "3000", "crop" to "0 0 4000 3000"))
+        assertNull(buildTakeDetails(TakeDetailInputs(LocalMediaKind.RAW_VIDEO, raw = whole), text).value("crop"))
+        assertNull(buildTakeDetails(TakeDetailInputs(LocalMediaKind.RAW_VIDEO, raw = summary(emptyMap())), text).value("crop"))
+        assertNull(parseRawCrop("1081 1122 1920 816"))
+        assertNull(parseRawCrop("1080 1122 1920"))
+        assertEquals(1920, parseRawCrop(" 1080  1122 1920 816 ")?.width)
     }
 
     @Test fun aFailingSectionDropsOnlyItsRows() {

@@ -197,6 +197,55 @@ class RawVideoRecorderTest {
     }
 
     @Test
+    fun anOffCentreWindowWritesThatWindowWithItsOriginInEveryHeaderAndTheStaticCrop() {
+        val recorder = recorder()
+        val window = RawVideoCrop(28, 6, 32, 8)
+        val armed = recorder.arm(CONFIG, ringBytes = CONFIG.bytesPerFrame * 8, crop = window)
+        assertEquals(window, armed.crop)
+        val output = FileOutput()
+        recorder.start(output, info())
+        recorder.onTakeStarted("2", RawVideoSessionConfig(WIDTH, HEIGHT, 30), emptyMap(), orientationDegrees = 0)
+        for (index in 0 until 3) assertTrue(recorder.onFrame(plane(index), STRIDE, WIDTH, HEIGHT, ts(index)))
+        val result = recorder.stop()
+        assertNull(result.reason)
+        assertEquals(3, result.framesWritten)
+
+        val scan = scan(output.file)
+        assertTrue(scan.errors.toString(), scan.cleanlyClosed)
+        assertEquals("28 6 32 8", scan.metadata["crop"])
+        assertEquals(3, scan.frameCount)
+        scan.frames.forEachIndexed { index, frame ->
+            val header = requireNotNull(frame.header)
+            assertEquals(28, header.cropLeft)
+            assertEquals(6, header.cropTop)
+            assertEquals(32, header.width)
+            assertEquals(8, header.height)
+            val (_, data) = frameData(output.file, frame.fileOffset, header.dataLength)
+            assertArrayEquals("frame $index", expectedCrop(index, window), data)
+        }
+    }
+
+    @Test
+    fun armRefusesAWindowOfAnotherSizeOrOutsideTheSensor() {
+        val recorder = recorder()
+        assertThrows(IllegalArgumentException::class.java) {
+            recorder.arm(CONFIG, CONFIG.bytesPerFrame * 8, crop = RawVideoCrop(0, 0, 36, 8))
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            recorder.arm(CONFIG, CONFIG.bytesPerFrame * 8, crop = RawVideoCrop(0, 0, 32, 10))
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            recorder.arm(CONFIG, CONFIG.bytesPerFrame * 8, crop = RawVideoCrop(36, 0, 32, 8))
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            recorder.arm(CONFIG, CONFIG.bytesPerFrame * 8, crop = RawVideoCrop(0, 10, 32, 8))
+        }
+        assertNull(recorder.armState)
+        // The default stays the centred window.
+        assertEquals(RawVideoCrop.centred(CONFIG), recorder.arm(CONFIG, CONFIG.bytesPerFrame * 8).crop)
+    }
+
+    @Test
     fun theLastFramesResultArrivingAfterItWasWrittenStillBecomesItsMetadata() {
         // The engine forwards the last frame's result before it reports the take stopped, so the
         // result reaches the recorder after the frame is on disk and before stop(); no backstop wait.

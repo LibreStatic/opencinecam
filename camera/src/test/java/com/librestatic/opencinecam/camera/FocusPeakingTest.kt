@@ -112,6 +112,22 @@ class FocusPeakingTest {
     }
 
     @Test
+    fun `the raw video preview takes the aspect of the raw output`() {
+        // PLAN-076: the Razr's YUV sizes against its 4:3 RAW10 output.
+        val razr = listOf(4000 to 3000, 3840 to 2160, 1920 to 1440, 1920 to 1080, 1440 to 1080, 1280 to 960,
+            1280 to 720, 640 to 480, 320 to 240)
+        assertEquals(1440 to 1080, razr[rawPreviewSizeIndex(razr, 4000, 3000)])
+        // A 16:9 RAW output keeps the 16:9 preview.
+        assertEquals(1920 to 1080, razr[rawPreviewSizeIndex(razr, 3840, 2160)])
+        // No size of the exact aspect: the nearest aspect within 1080p, then the nearest pixel count.
+        val noExact = listOf(1920 to 1080, 1600 to 900, 1280 to 1024, 640 to 512)
+        assertEquals(1280 to 1024, noExact[rawPreviewSizeIndex(noExact, 4080, 3060)])
+        // Nothing within 1080p: the whole list is considered.
+        val large = listOf(4000 to 3000, 3840 to 2160)
+        assertEquals(4000 to 3000, large[rawPreviewSizeIndex(large, 4000, 3000)])
+    }
+
+    @Test
     fun `photo mode on a 4 by 3 sensor analyses a stream of the preview aspect`() {
         // YUV sizes of a 4:3 sensor such as the emulator's back camera.
         val sizes = listOf(1920 to 1440, 1920 to 1080, 1440 to 1080, 1280 to 960, 1280 to 720, 640 to 480,

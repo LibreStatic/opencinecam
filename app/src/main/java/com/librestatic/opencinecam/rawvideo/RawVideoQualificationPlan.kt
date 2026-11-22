@@ -47,10 +47,16 @@ object RawQualificationSpecs {
         RawVideoConfig.ENCODING_LJ92 to LJ92_SUFFIX,
     )
 
-    /** The uncompressed configurations the app qualifies by default (PLAN-071 decision 5 crops included). */
+    /**
+     * The uncompressed configurations the app qualifies by default (PLAN-071 decision 5 crops included). The
+     * two 1280x720 windows at 90 and 120 fps (PLAN-076) establish whether the camera holds those rates under a
+     * light storage load, so the operator's small windows can be judged at them; 240 fps is never asked for
+     * (on the Razr it fails every capture and takes the camera service down).
+     */
     val DEFAULT_RAW10: List<String> = listOf(
         "full@15", "full@24", "full@30", "full@60",
         "3840x2160@30", "3840x2160@60", "1920x1080@30", "1920x1080@60",
+        "1280x720@90", "1280x720@120",
     )
 
     /** The encoding [spec] names: a compressed one from its suffix, else [RawVideoConfig.ENCODING_RAW10]. */
@@ -1011,8 +1017,22 @@ object RawQualificationRisk {
         val marginStream = q.streamBytesPerSecond * RawThroughputBenchmark.MARGIN_BASIS_POINTS / 10_000.0
         val ratio = (marginStream / q.requiredMedianBytesPerSecond).coerceAtLeast(1.0)
         val judgedStream = achievedStreamBytesPerSecond.coerceAtMost(q.streamBytesPerSecond) / ratio
+        return burstSeconds(q.ringBytes / ratio, judgedStream, median)
+    }
+
+    /**
+     * [estimateBurstSeconds] of an uncompressed [streamBytesPerSecond] with no record of its own: a [ringBytes] ring
+     * over the shortfall below [sweepMedianBytesPerSecond]. Null when either is unknown or the median keeps up.
+     */
+    fun estimateBurstSeconds(streamBytesPerSecond: Long, sweepMedianBytesPerSecond: Long?, ringBytes: Long?): Long? {
+        val median = sweepMedianBytesPerSecond ?: return null
+        if (streamBytesPerSecond <= 0 || ringBytes == null || ringBytes <= 0) return null
+        return burstSeconds(ringBytes.toDouble(), streamBytesPerSecond.toDouble(), median)
+    }
+
+    private fun burstSeconds(ringBytes: Double, judgedStream: Double, median: Long): Long? {
         if (median >= judgedStream) return null
-        return kotlin.math.floor((q.ringBytes / ratio) / (judgedStream - median)).toLong()
+        return kotlin.math.floor(ringBytes / (judgedStream - median)).toLong()
     }
 
     fun isRisky(record: RawVideoQualificationRecord): Boolean = isRisky(record.qualification, effectiveBurstSeconds(record))
@@ -1238,16 +1258,21 @@ object RawQualificationRecords {
 }
 
 /**
- * The viewfinder stream size of the RAW_VIDEO session: the engine feeds its GPU viewfinder at
- * `Camera2CameraDescriptor.previewSize` (RAW_VIDEO sets no video profile), chosen by `previewSizeIndex`
- * in `:camera`: among sizes of at most 1920 x 1080 pixels (all of them when none is), the aspect
- * nearest 16:9, then the pixel count nearest 1920 x 1080. Mirrored here because that one is internal.
+ * The viewfinder stream size of the RAW_VIDEO session over a [rawWidth] x [rawHeight] RAW10 output: the
+ * engine feeds its GPU viewfinder at `Camera2CameraDescriptor.rawPreviewSize` (RAW_VIDEO sets no video
+ * profile), chosen by `rawPreviewSizeIndex` in `:camera`: among sizes of at most 1920 x 1080 pixels (all of
+ * them when none is), those of exactly the RAW output's aspect, else those of the nearest aspect, then the
+ * pixel count nearest 1920 x 1080 (1440 x 1080 for the Razr's 4000 x 3000). Mirrored here because that one
+ * is internal. Null without sizes or a RAW output.
  */
-fun rawQualificationPreviewSize(sizes: List<Pair<Int, Int>>): Pair<Int, Int>? {
-    if (sizes.isEmpty()) return null
+fun rawQualificationPreviewSize(sizes: List<Pair<Int, Int>>, rawWidth: Int, rawHeight: Int): Pair<Int, Int>? {
+    if (sizes.isEmpty() || rawWidth <= 0 || rawHeight <= 0) return null
     val bounded = sizes.filter { it.first.toLong() * it.second <= PREVIEW_PIXELS }.ifEmpty { sizes }
-    return bounded.minWith(compareBy<Pair<Int, Int>> { (w, h) -> abs(maxOf(w, h).toDouble() / minOf(w, h) - 16.0 / 9.0) }
-        .thenBy { (w, h) -> abs(w.toLong() * h - PREVIEW_PIXELS) })
+    fun pixelDistance(size: Pair<Int, Int>) = abs(size.first.toLong() * size.second - PREVIEW_PIXELS)
+    val exact = bounded.filter { (w, h) -> w.toLong() * rawHeight == h.toLong() * rawWidth }
+    if (exact.isNotEmpty()) return exact.minBy(::pixelDistance)
+    val rawAspect = rawWidth.toDouble() / rawHeight
+    return bounded.minWith(compareBy<Pair<Int, Int>> { (w, h) -> abs(w.toDouble() / h - rawAspect) }.thenBy(::pixelDistance))
 }
 
 private const val PREVIEW_PIXELS = 1920L * 1080L

@@ -129,4 +129,7 @@
     <string name="media_detail_motion_track">Eingebettete Spur (CAMM)</string>
     <string name="media_detail_motion_track_packets">Ja, %1$d Pakete</string>
     <string name="media_detail_motion_log">Gyroflow-Protokoll</string>
+    <!-- PLAN-076: a RAW take's window in its RAW output, when smaller. -->
+    <string name="media_detail_crop">Ausschnitt</string>
+    <string name="media_detail_crop_value">%1$d × %2$d bei +%3$d +%4$d von %5$d × %6$d</string>
 </resources>

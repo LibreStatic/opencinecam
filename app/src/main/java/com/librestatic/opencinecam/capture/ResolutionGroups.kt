@@ -61,6 +61,23 @@ internal fun resolutionShortName(width: Int, height: Int): String {
     }
 }
 
+/**
+ * The short size class of a RAW video window of the operator's (PLAN-076), for the RES slot: its long edge in thousands
+ * ("1.9K"), "4K" and "4K+" like [resolutionShortName], and its short edge in lines under 1000 pixels ("240p"); never an
+ * aspect word or a saved name, so it fits the slot.
+ */
+internal fun rawCustomSizeClass(width: Int, height: Int): String {
+    val long = maxOf(width, height)
+    val short = minOf(width, height)
+    return when {
+        short <= 0 -> "—"
+        long < 1000 -> "${short}p"
+        long == 3840 -> "4K"
+        long in 3841..4199 -> "4K+"
+        else -> thousands(long) + "K"
+    }
+}
+
 /** A still size in megapixels: whole from 8 MP up, otherwise with one decimal ("12 MP", "1.6 MP"). */
 internal fun megapixelName(width: Int, height: Int): String {
     val mp = width.toLong() * height / 1_000_000.0

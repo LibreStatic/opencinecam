@@ -193,6 +193,21 @@ internal fun rawOptionChoiceLabel(option: RawVideoConfigOption, nearLossless: Bo
     }
 
 /**
+ * The label of the custom selection [option] (PLAN-076): its saved name, else "Custom 1920 × 816", then the rest of
+ * its label ("Scope 2.39 · 24 fps"), with the rate a reduced-rate window reaches.
+ */
+@Composable
+internal fun rawCustomOptionLabel(option: RawVideoConfigOption, state: CameraUiState, nearLossless: Boolean = false): String {
+    val ui = state.rawVideoCrop
+    val name = rawSavedCropSelected(state)?.name
+        ?: ui?.let { stringResource(R.string.raw_video_crop_custom_size, it.width, it.height) }
+        ?: stringResource(R.string.raw_video_crop_custom)
+    val rest = rawOptionBaseLabel(option, nearLossless).substringAfter(" · ", "")
+    val label = if (rest.isEmpty()) name else "$name · $rest"
+    return option.achievedFps?.let { stringResource(R.string.raw_video_reduced_label, label, it) } ?: label
+}
+
+/**
  * The spoken warning of a risky [option] ("4000×3000 · 60 fps, risky rate", or "…, storage not tested" for one a
  * camera-only qualification left); null when it is not risky.
  */
@@ -248,7 +263,8 @@ internal fun RawVideoRiskyNotice(modifier: Modifier = Modifier, burstSeconds: Lo
 
 /**
  * The capture panel behind RES and FPS in RAW video: Automatic, then the full-sensor and the crop
- * configurations, each tile its size and rate over its data rate and the time left at it.
+ * configurations, each tile its size and rate over its data rate and the time left at it, then the
+ * custom crops (PLAN-076). While the crop editor is open ([LocalRawCropEditor]) the pane is its panel.
  */
 @Composable
 internal fun RawVideoConfigDial(
@@ -257,6 +273,14 @@ internal fun RawVideoConfigDial(
     onSelect: (String) -> Unit,
     onClose: () -> Unit,
 ) {
+    val actions = LocalRawCropActions.current
+    val select: (String) -> Boolean = { key -> actions?.select(key) ?: run { onSelect(key); true } }
+    val editor = LocalRawCropEditor.current
+    val edit = editor?.editing
+    if (editor != null && edit != null) {
+        RawCropEditorPanel(state, settings, editor, edit, select, onClose)
+        return
+    }
     val options = state.rawVideoOptions
     val chosen = rawVideoChosenKey(settings.rawVideoConfig, options)
     val enabled = rawVideoConfigChangeAllowed(state)
@@ -270,22 +294,24 @@ internal fun RawVideoConfigDial(
             // Automatic never resolves to a risky or reduced-rate configuration; with only such ones it resolves to none.
             ChoiceTile(stringResource(R.string.raw_video_automatic), chosen.isEmpty(), modifier.testTag("raw-video-config-auto"),
                 enabled = enabled, detail = auto?.let { rawOptionLabel(it, nearLossless) } ?: stringResource(R.string.raw_video_automatic_detail)) {
-                onSelect(""); onClose()
+                select(""); onClose()
             }
         }
-        val (crops, full) = options.partition { it.isCrop }
+        // A custom selection is listed with the custom crops, not with the fixed configurations.
+        val (crops, full) = options.filterNot { it.isCustom }.partition { it.isCrop }
         listOf(R.string.raw_video_group_full to full, R.string.raw_video_group_crop to crops).forEach { (title, group) ->
             if (group.isEmpty()) return@forEach
             PanelSectionLabel(stringResource(title))
             ChoiceGrid(group, minTileWidth = 150.dp, maxColumns = 3) { option, modifier ->
                 ChoiceTile(rawOptionBaseLabel(option, nearLossless), option.key == chosen, modifier.testTag("raw-video-config-${option.key}"), enabled = enabled,
                     detail = rawOptionDetail(option, free), warning = rawOptionWarning(option, nearLossless)) {
-                    onSelect(option.key); onClose()
+                    select(option.key); onClose()
                 }
             }
         }
+        RawVideoCustomCropSection(state, chosen, nearLossless, enabled, select, onClose)
         rawVideoRiskHint(options)?.let { PanelNote(it, Modifier.testTag("raw-video-config-risk-hint")) }
-        if (crops.isNotEmpty()) PanelNote(stringResource(R.string.raw_video_crop_note), Modifier.testTag("raw-video-crop-note"))
+        if (crops.isNotEmpty() || state.rawVideoCrop != null) PanelNote(stringResource(R.string.raw_video_crop_note), Modifier.testTag("raw-video-crop-note"))
         RawVideoLeftOutSection(state.rawVideoLeftOut, nearLossless, "raw-video-left-out")
         if (!enabled) PanelNote(stringResource(R.string.raw_video_config_frozen), Modifier.testTag("raw-video-config-frozen"))
     }
@@ -312,19 +338,26 @@ internal fun RawVideoSettings(
             val active = rawVideoActiveOption(state)
             val nearLossless = rawVideoNearLosslessActive(state, settings)
             val summary = active?.let { option ->
-                stringResource(R.string.raw_video_settings_active, rawOptionLabel(option, nearLossless), rawOptionDetail(option, captureStatusFreeBytes(state)))
+                val label = if (option.isCustom) rawCustomOptionLabel(option, state, nearLossless) else rawOptionLabel(option, nearLossless)
+                stringResource(R.string.raw_video_settings_active, label, rawOptionDetail(option, captureStatusFreeBytes(state)))
             }
             SettingsOptionRow(
                 title = title,
                 summary = summary,
                 choices = listOf("") + options.map { it.key },
                 selected = rawVideoChosenKey(settings.rawVideoConfig, options),
-                label = { key -> options.firstOrNull { it.key == key }?.let { rawOptionChoiceLabel(it, nearLossless) } ?: stringResource(R.string.raw_video_automatic) },
+                label = { key ->
+                    options.firstOrNull { it.key == key }?.let { if (it.isCustom) rawCustomOptionLabel(it, state, nearLossless) else rawOptionChoiceLabel(it, nearLossless) }
+                        ?: stringResource(R.string.raw_video_automatic)
+                },
                 tag = { key -> "raw-video-option-${key.ifEmpty { "auto" }}" },
                 onSelect = { key -> onSelect?.invoke(key) },
                 enabled = onSelect != null && rawVideoConfigChangeAllowed(state),
                 choiceWarning = { key -> options.firstOrNull { it.key == key }?.let { rawOptionWarning(it, nearLossless) } },
             )
+            // PLAN-076: windows are drawn over the viewfinder, so Settings only points there.
+            Text(stringResource(R.string.raw_video_settings_crop_note), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp,
+                modifier = Modifier.testTag("settings-raw-video-crop-note"))
             SettingsRawVideoProfile(state.rawVideoProfile)
             rawVideoRiskHint(options)?.let {
                 Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, modifier = Modifier.testTag("settings-raw-video-risk-hint"))

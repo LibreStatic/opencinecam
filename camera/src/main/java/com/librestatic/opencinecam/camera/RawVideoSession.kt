@@ -98,14 +98,19 @@ sealed interface RawVideoGraphDecision {
 
 /**
  * Pre-check of a RAW_VIDEO graph before the session is built: the RAW10 size must be one the camera
- * advertises (PLAN-071: only full sensor size on the S24) and some AE range must contain the frame
- * rate. `minFrameDuration` is deliberately not checked: the S24 claims 30 fps for RAW10 and delivers 60.
- * A rejection is reported, never worked around by dropping RAW (ADR-0019).
+ * advertises (PLAN-071: only full sensor size on the S24) and the camera must be one that can be asked
+ * for the frame rate: [rawVideoFrameRatePlan] (with [declaredMinFrameDurationNs] and [qtiOverride] as
+ * there) gives an AE range, i.e. some AE range contains the rate or the vendor override reaches it
+ * (PLAN-076: 90 and 120 fps on the Razr, whose ranges stop below them). `minFrameDuration` is
+ * deliberately not checked otherwise: the S24 claims 30 fps for RAW10 and delivers 60. A rejection is
+ * reported, never worked around by dropping RAW (ADR-0019).
  */
 fun rawVideoGraphDecision(
     config: RawVideoSessionConfig,
     raw10Sizes: List<Pair<Int, Int>>,
     fpsRanges: List<Pair<Int, Int>>,
+    declaredMinFrameDurationNs: Long? = null,
+    qtiOverride: Boolean = false,
 ): RawVideoGraphDecision {
     if (raw10Sizes.isEmpty()) return RawVideoGraphDecision.Rejected("This camera advertises no RAW10 output.")
     if ((config.rawWidth to config.rawHeight) !in raw10Sizes) {
@@ -114,7 +119,7 @@ fun rawVideoGraphDecision(
                 raw10Sizes.joinToString { "${it.first}x${it.second}" } + ").",
         )
     }
-    val range = rawVideoFpsRange(fpsRanges, config.fps)
+    val range = rawVideoFrameRatePlan(fpsRanges, config.fps, declaredMinFrameDurationNs, qtiOverride).aeRange
         ?: return RawVideoGraphDecision.Rejected("No AE target range contains ${config.fps} fps.")
     return RawVideoGraphDecision.Accepted(range)
 }

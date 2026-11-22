@@ -5,6 +5,7 @@ package com.librestatic.opencinecam.capture
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -30,7 +31,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -148,6 +152,10 @@ internal fun ChoiceTile(
     detail: String? = null,
     /** Marks the tile with a warning glyph; the text is its content description (the label and the risk). */
     warning: String? = null,
+    /** A long press's action (a saved crop's rename and delete), also offered as a custom accessibility action. */
+    onLongClick: (() -> Unit)? = null,
+    /** What [onLongClick] does, as accessibility services say it. */
+    longClickLabel: String? = null,
     onClick: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
@@ -167,7 +175,16 @@ internal fun ChoiceTile(
                     else -> colors.surfaceContainerHighest
                 },
             )
-            .clickable(enabled = enabled, onClick = hapticClick(HapticEvent.Select, onClick))
+            .then(
+                if (onLongClick == null) Modifier.clickable(enabled = enabled, onClick = hapticClick(HapticEvent.Select, onClick))
+                // A disabled tile still opens its long-press action, so it only ignores the tap.
+                else Modifier.combinedClickable(onLongClickLabel = longClickLabel, onLongClick = hapticClick(HapticEvent.Select, onLongClick),
+                    onClick = if (enabled) hapticClick(HapticEvent.Select, onClick) else ({}))
+                    .semantics {
+                        if (!enabled) disabled()
+                        if (longClickLabel != null) customActions = listOf(CustomAccessibilityAction(longClickLabel) { onLongClick(); true })
+                    },
+            )
             .then(if (warning != null) Modifier.semantics { contentDescription = warning } else Modifier)
             .padding(horizontal = 8.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center,
