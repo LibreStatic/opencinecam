@@ -1444,7 +1444,10 @@ class Camera2PreviewEngine(
                                 camera = null
                                 // An accepted take that has not started yet (a queued recorder request) counts: its failure path ends it.
                                 val queuedTake = !recording && recorderRequest.get() != null
-                                val takeInProgress = recording || rawTake.get() != null || queuedTake
+                                // An accepted still too: only the failure path releases its owner in the app.
+                                val stillInFlight = photoRequest.get() != null || bracketRequest.get() != null ||
+                                    accumulationRequest.get() != null || burstRequest.get() != null || legacyStillRequest.get() != null
+                                val takeInProgress = recording || rawTake.get() != null || queuedTake || stillInFlight
                                 endTakeOnCameraLoss(RawVideoReasons.CAMERA_ERROR)
                                 // An accepted take that has not started gets its terminal failure below: the lens-lock
                                 // withdrawal would restart the preview and leave it without one.

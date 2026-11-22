@@ -11,9 +11,9 @@ import android.hardware.camera2.CameraDevice
  * The Razr's vendor camera provider can die under load (a pinch zoom in a 120 fps RAW session) and come back
  * about 3 s later; the camera device then reports [CameraDevice.StateCallback.ERROR_CAMERA_DEVICE]. Only that and
  * [CameraDevice.StateCallback.ERROR_CAMERA_SERVICE] are retried: the other codes (in use, too many cameras,
- * disabled by policy) would fail the same way again. A take in progress is never retried: the failure path
- * salvages it. [maxAttempts] reopens are allowed in a row; a failure [resetAfterMs] or more after the last one
- * starts a new row. Not thread safe: used on the camera executor only.
+ * disabled by policy) would fail the same way again. A take or an accepted still in progress is never retried:
+ * the failure path salvages or ends it. [maxAttempts] reopens are allowed in a row; a failure [resetAfterMs] or
+ * more after the last one starts a new row. Not thread safe: used on the camera executor only.
  */
 internal class CameraReopenPolicy(
     private val maxAttempts: Int = MAX_ATTEMPTS,
