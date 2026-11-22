@@ -1443,9 +1443,12 @@ class Camera2PreviewEngine(
                             if (currentGeneration == generation) {
                                 camera = null
                                 // An accepted take that has not started yet (a queued recorder request) counts: its failure path ends it.
-                                val takeInProgress = recording || rawTake.get() != null || recorderRequest.get() != null
+                                val queuedTake = !recording && recorderRequest.get() != null
+                                val takeInProgress = recording || rawTake.get() != null || queuedTake
                                 endTakeOnCameraLoss(RawVideoReasons.CAMERA_ERROR)
-                                if (withdrawLensLock(LensLockUnavailable.OPEN_FAILED)) return
+                                // An accepted take that has not started gets its terminal failure below: the lens-lock
+                                // withdrawal would restart the preview and leave it without one.
+                                if (!queuedTake && withdrawLensLock(LensLockUnavailable.OPEN_FAILED)) return
                                 if (reopenPolicy.shouldReopen(error, takeInProgress, SystemClock.elapsedRealtime())) {
                                     // The viewfinder may have moved to another surface since this start was queued.
                                     previewSurface?.takeIf { it.isValid }?.let {
