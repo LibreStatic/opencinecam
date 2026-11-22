@@ -5,7 +5,30 @@
   "device": {
     "buildFingerprint": "redacted",
     "sdkInt": 37,
-    "characteristicsDigest": "sha256:example"
+    "characteristicsDigest": "sha256:example",
+    "motionSensors": {
+      "gyroscope": {
+        "present": true,
+        "name": "Example Gyroscope",
+        "vendor": "Example",
+        "minDelayUs": 2000,
+        "maxRateHz": 500.0,
+        "resolution": 0.0012,
+        "maxRange": 34.9,
+        "fifoMaxEventCount": 3000,
+        "highSamplingRateCapped": false,
+        "unit": "rad/s"
+      },
+      "accelerometer": {
+        "present": true,
+        "minDelayUs": 2000,
+        "maxRateHz": 500.0,
+        "unit": "m/s²"
+      },
+      "magnetometer": {
+        "present": false
+      }
+    }
   },
   "cameras": [],
   "codecs": [],

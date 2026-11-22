@@ -15,6 +15,8 @@ import com.librestatic.opencinecam.media.ocraw.OcrawChunkId
 import com.librestatic.opencinecam.media.ocraw.OcrawCodec
 import com.librestatic.opencinecam.media.ocraw.OcrawFrameHeader
 import com.librestatic.opencinecam.media.ocraw.OcrawHeader
+import com.librestatic.opencinecam.media.ocraw.OcrawImuMetadata
+import com.librestatic.opencinecam.media.ocraw.OcrawImuSamples
 import com.librestatic.opencinecam.media.ocraw.OcrawStreamStats
 import com.librestatic.opencinecam.media.ocraw.OcrawStreamWriter
 import com.librestatic.opencinecam.media.ocraw.OcrawTimeBase
@@ -22,6 +24,7 @@ import com.librestatic.opencinecam.media.raw.RawVideoRing
 import com.librestatic.opencinecam.media.raw.SharedMemorySlots
 import com.librestatic.opencinecam.media.raw.copyRaw10Rows
 import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.nio.channels.FileChannel
 import java.util.UUID
 import java.util.concurrent.ArrayBlockingQueue
@@ -234,6 +237,13 @@ data class RawTakeResult(
  * source that fails to start (the take is then silent). [stop] stops the source before the ring
  * closes, so its last partial chunk is written, and a final `METADATA` chunk records
  * [RawAudioKeys.DROPPED_SAMPLES]. Every take-end path goes through [stop].
+ *
+ * **Motion data.** A take given a [RawMotionSource] starts it after the audio. Its sensor thread only appends
+ * into the preallocated batches of a [RawImuBuffer]; about once a second a batch is handed to the writer, which
+ * writes it as an `IMU_SAMPLES` chunk after the static `METADATA` (which carries the source's [OcrawImuMetadata]
+ * keys), at most one batch after each frame so the frames keep priority. A batch the writer has no room for is
+ * dropped and counted. [stop] stops the sensors before the ring closes and the writer writes the last batch, then
+ * the rolling shutter skew the capture results reported in a closing `METADATA` chunk. Motion data never ends a take.
  */
 class RawVideoRecorder(
     private val slotMemoryFactory: () -> RawSlotMemory = ::SharedMemorySlotMemory,
@@ -295,6 +305,15 @@ class RawVideoRecorder(
         val audioQueue = ArrayBlockingQueue<AudioBlock>(audioQueueChunks)
         val audioDroppedFrames = AtomicLong()
         @Volatile var audioFramesWritten = 0L
+
+        // Motion data: set by start() before the engine delivers frames; the buffer is the only hand-off.
+        @Volatile var motion: RawMotionSource? = null
+        @Volatile var imu: RawImuBuffer? = null
+        @Volatile var imuMetadata: Map<String, String> = emptyMap()
+        /** The latest `SENSOR_ROLLING_SHUTTER_SKEW` a capture result reported, or -1. */
+        @Volatile var rollingShutterSkewNs = -1L
+        /** Writer thread. */
+        var imuSamplesWritten = 0L
 
         // Producer thread (guarded by the Take monitor against stop()).
         var stopped = false
@@ -448,9 +467,16 @@ class RawVideoRecorder(
 
     /**
      * Starts a take into [output]; [output]'s channel must be empty. With [audio] the take also records
-     * sound; an audio source that fails to start leaves the take silent ([RawTakeResult.audioError]).
+     * sound; an audio source that fails to start leaves the take silent ([RawTakeResult.audioError]). With [motion]
+     * it also records the motion sensors; a source that does not start leaves the take without motion data.
      */
-    fun start(output: RawVideoTakeOutput, info: RawTakeInfo, audio: RawAudioSource? = null, onTakeMustEnd: (String) -> Unit = {}) {
+    fun start(
+        output: RawVideoTakeOutput,
+        info: RawTakeInfo,
+        audio: RawAudioSource? = null,
+        motion: RawMotionSource? = null,
+        onTakeMustEnd: (String) -> Unit = {},
+    ) {
         synchronized(control) {
             val current = checkNotNull(armed) { "arm the recorder before starting a take" }
             check(take == null) { "a take is already recording" }
@@ -465,7 +491,33 @@ class RawVideoRecorder(
             take = started
             started.thread.start()
             if (audio != null) startAudio(started, audio)
+            if (motion != null) startMotion(started, motion)
         }
+    }
+
+    private fun startMotion(current: Take, motion: RawMotionSource) {
+        try {
+            val buffer = RawImuBuffer(motion.clockOffsetNs)
+            val metadata = LinkedHashMap(motion.metadata)
+            if (!motion.start(RawMotionSink { kind, sensorNs, x, y, z -> buffer.append(kind, sensorNs, x, y, z) })) {
+                android.util.Log.i(TAG, "RAW take records no motion data: no gyroscope could be read")
+                runCatching { motion.stop() }
+                return
+            }
+            // Before the engine delivers the first frame, so the static metadata carries the keys.
+            current.imuMetadata = metadata
+            current.motion = motion
+            current.imu = buffer
+        } catch (problem: Throwable) {
+            android.util.Log.w(TAG, "RAW take records no motion data: the sensors did not start", problem)
+            runCatching { motion.stop() }
+        }
+    }
+
+    /** Stops the take's motion sensors and hands their last partial batch to the writer. */
+    private fun stopMotion(current: Take) {
+        current.motion?.let { runCatching { it.stop() } }
+        current.imu?.close()
     }
 
     private fun startAudio(current: Take, audio: RawAudioSource) {
@@ -502,8 +554,9 @@ class RawVideoRecorder(
      */
     fun stop(): RawTakeResult = synchronized(control) {
         val current = checkNotNull(take) { "no take is recording" }
-        // Audio stops first, so its last chunk is queued before the writer can finish.
+        // Audio and motion stop first, so their last chunk and batch are queued before the writer can finish.
         stopAudio(current)
+        stopMotion(current)
         synchronized(current) {
             current.stopped = true
             current.ring.close()
@@ -662,7 +715,8 @@ class RawVideoRecorder(
 
     override fun onRawResult(result: TotalCaptureResult) {
         val timestamp = result.get(CaptureResult.SENSOR_TIMESTAMP) ?: return
-        if (take == null) return
+        val current = take ?: return
+        if (current.imu != null) result.get(CaptureResult.SENSOR_ROLLING_SHUTTER_SKEW)?.let(::onRollingShutterSkew)
         onResult(timestamp, result.frameNumber, RawVideoMetadata.frameValues(result))
     }
 
@@ -727,6 +781,11 @@ class RawVideoRecorder(
         }
     }
 
+    /** A capture result's `SENSOR_ROLLING_SHUTTER_SKEW`; the latest positive one goes into the motion data's closing metadata. */
+    internal fun onRollingShutterSkew(skewNs: Long) {
+        if (skewNs > 0) take?.rollingShutterSkewNs = skewNs
+    }
+
     /** [onRawResult] with the values already extracted. */
     internal fun onResult(timestampNs: Long, frameNumber: Long, values: Map<String, String>) {
         val current = take ?: return
@@ -789,6 +848,46 @@ class RawVideoRecorder(
             }
         }
 
+        // One reused payload buffer for the motion batches; IMU failures cost only the motion data.
+        var imuPayload: ByteBuffer? = null
+        var imuFailed = false
+
+        fun drainImu(maxBatches: Int) {
+            val imu = current.imu ?: return
+            // Nothing before the static metadata, as for audio; the batches wait in the buffer meanwhile.
+            if (!metadataWritten) return
+            var batches = 0
+            while (batches < maxBatches) {
+                val batch = imu.poll() ?: break
+                batches++
+                if (imuFailed || !writable()) {
+                    imu.discard(batch)
+                    continue
+                }
+                val payload = try {
+                    val buffer = imuPayload ?: ByteBuffer.allocate(OcrawImuSamples.payloadBytes(imu.batchCapacity))
+                        .order(ByteOrder.LITTLE_ENDIAN).also { imuPayload = it }
+                    buffer.clear()
+                    OcrawImuSamples.encodeInto(buffer, batch.kinds, batch.timesNs, batch.xyz, batch.count)
+                    buffer.flip()
+                    buffer
+                } catch (problem: Exception) {
+                    android.util.Log.w(TAG, "RAW take motion data could not be encoded; it stops", problem)
+                    imuFailed = true
+                    imu.close()
+                    imu.discard(batch)
+                    continue
+                }
+                // A failing write is the file failing, which ends the take as any other write does.
+                guarded(current) {
+                    writer!!.writeImuSamples(ticksOf(batch.timesNs[0]), payload)
+                    current.imuSamplesWritten += batch.count
+                    current.bytesWritten = writer.stats().bytesWritten
+                }
+                if (current.writerError != null) imu.discard(batch) else imu.recycle(batch)
+            }
+        }
+
         fun drainResults() {
             while (true) handle(current.results.poll() ?: break)
             if (pending.isNotEmpty()) {
@@ -807,6 +906,7 @@ class RawVideoRecorder(
             drainResults()
             if (slot == null) {
                 drainAudio()
+                drainImu(maxBatches = 1)
                 if (current.ring.isClosed && current.ring.queuedSlots == 0) break
                 continue
             }
@@ -840,6 +940,7 @@ class RawVideoRecorder(
                 current.ring.release(slot)
             }
             drainAudio()
+            drainImu(maxBatches = 1)
         }
 
         // Results for the last frames may trail them slightly.
@@ -857,6 +958,18 @@ class RawVideoRecorder(
         while (true) current.audioDroppedFrames.addAndGet((current.audioQueue.poll() ?: break).frames.toLong())
         if (current.audioMetadata.isNotEmpty() && metadataWritten && writable()) guarded(current) {
             writer!!.writeMetadata(finalAudioMetadata(current))
+        }
+
+        // stop() closed the motion buffer before the ring, so its last batch is ready by now.
+        current.imu?.let { imu ->
+            drainImu(maxBatches = Int.MAX_VALUE)
+            while (true) imu.discard(imu.poll() ?: break)
+            val skew = current.rollingShutterSkewNs
+            if (skew > 0 && current.imuSamplesWritten > 0 && writable()) guarded(current) {
+                writer!!.writeMetadata(mapOf(OcrawImuMetadata.ROLLING_SHUTTER_SKEW_NS to skew.toString()))
+            }
+            android.util.Log.i(TAG, "RAW take motion data: ${current.imuSamplesWritten} samples written, " +
+                "${imu.droppedSamples} dropped")
         }
 
         if (writer != null) {
@@ -910,6 +1023,7 @@ class RawVideoRecorder(
         // A near-lossless encoder's keys replace the encoding with `bpq`.
         current.compressor?.let { values.putAll(it.metadata) }
         values.putAll(current.audioMetadata)
+        values.putAll(current.imuMetadata)
         return values
     }
 

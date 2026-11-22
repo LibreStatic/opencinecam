@@ -225,7 +225,8 @@ class WebDavSqliteOutbox(context: Context, databaseName: String = "webdav-outbox
             val artifacts = db.query("artifacts", null, "bundle_id=?", arrayOf(id), null, null, "role").use { rows ->
                 buildList {
                     while (rows.moveToNext()) {
-                        if (size == 4) throw WebDavOutboxCorruptData()
+                        // One row per role at most (UNIQUE(bundle_id,role)): a bound, not a format version.
+                        if (size == WebDavArtifactRole.entries.size) throw WebDavOutboxCorruptData()
                         add(readArtifact(rows))
                     }
                 }

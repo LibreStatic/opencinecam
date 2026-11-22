@@ -249,8 +249,8 @@ class PreparedArtifactProbeDeviceTest {
     }
 
     private fun create(rows: MutableList<Item>, role: CaptureArtifactRole, name: String? = null, byteCount: Int = 128): Item {
-        val extension = when (role) { CaptureArtifactRole.VIDEO -> "mp4"; CaptureArtifactRole.AUDIO -> "wav"; else -> "json" }
-        val mime = when (role) { CaptureArtifactRole.VIDEO -> "video/mp4"; CaptureArtifactRole.AUDIO -> "audio/wav"; else -> "application/json" }
+        val extension = when (role) { CaptureArtifactRole.VIDEO -> "mp4"; CaptureArtifactRole.AUDIO -> "wav"; CaptureArtifactRole.MOTION_LOG -> "gcsv"; else -> "json" }
+        val mime = when (role) { CaptureArtifactRole.VIDEO -> "video/mp4"; CaptureArtifactRole.AUDIO -> "audio/wav"; CaptureArtifactRole.MOTION_LOG -> "text/csv"; else -> "application/json" }
         val path = when (role) { CaptureArtifactRole.VIDEO -> "Movies"; CaptureArtifactRole.AUDIO -> "Music"; else -> "Download" }
         val uri = requireNotNull(resolver.insert(collection(role), ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, name ?: "Probe-${role.name}-${System.nanoTime()}.$extension")

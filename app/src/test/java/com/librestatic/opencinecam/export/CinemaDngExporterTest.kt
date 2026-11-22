@@ -4,9 +4,13 @@
 package com.librestatic.opencinecam.export
 
 import com.librestatic.opencinecam.media.ocraw.CinemaDngWriter
+import com.librestatic.opencinecam.media.ocraw.OcrawChunkId
 import com.librestatic.opencinecam.media.ocraw.OcrawCodec
 import com.librestatic.opencinecam.media.ocraw.OcrawFrameHeader
+import com.librestatic.opencinecam.media.ocraw.OcrawImuSamples
 import com.librestatic.opencinecam.media.ocraw.OcrawStreamReader
+import com.librestatic.opencinecam.media.ocraw.OcrawStreamWriter
+import com.librestatic.opencinecam.media.ocraw.OcrawTimeBase
 import com.librestatic.opencinecam.media.raw.NativeRawCodec
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -285,7 +289,172 @@ class CinemaDngExporterTest {
         }
     }
 
+    @Test
+    fun aTakeWithMotionDataExportsItsGyroflowLog() {
+        val file = takeWithMotion()
+        RandomAccessFile(file, "r").use { raf ->
+            val destination = FakeDestination()
+            val outcome = CinemaDngExporter(raf.channel, TAKE).run(destination)
+            outcome as CinemaDngExportOutcome.Exported
+            assertTrue(outcome.motionLog)
+            val target = destination.targets.single()
+            val gcsv = "$TAKE.gcsv"
+            assertEquals(convertedFrames.map { "${TAKE}_%06d.dng".format(it) } + "$TAKE.wav" + gcsv, target.files.keys.toList())
+            assertEquals(CinemaDngExporter.GCSV_MIME_TYPE, target.mimeTypes.getValue(gcsv))
+            assertEquals(target.files.values.sumOf { it.size.toLong() }, outcome.bytes)
+            // The pictures are not compared with the golden folder: the rewrite renumbers the chunks after the
+            // first frame, which the DNGs' frame metadata references by sequence.
+
+            val reader = OcrawStreamReader(raf.channel)
+            val rendered = java.io.StringWriter()
+            assertTrue(OcrawGyroflowLog.render(rendered, reader, reader.indexFrames(), "$TAKE.ocraw")!!.rows > 0)
+            val text = String(target.files.getValue(gcsv), Charsets.UTF_8)
+            assertEquals(rendered.toString(), text)
+            assertTrue(text.startsWith("GYROFLOW IMU LOG\n"))
+            assertTrue("videofilename,$TAKE.ocraw\n" in text)
+        }
+    }
+
+    @Test
+    fun aMotionLogThatCannotBeWrittenCostsOnlyTheLog() {
+        val file = takeWithMotion()
+        RandomAccessFile(file, "r").use { raf ->
+            val destination = FakeDestination(failOn = "$TAKE.gcsv")
+            val outcome = CinemaDngExporter(raf.channel, TAKE).run(destination)
+            outcome as CinemaDngExportOutcome.Exported
+            assertFalse(outcome.motionLog)
+            val target = destination.targets.single()
+            assertTrue(target.published)
+            assertFalse("$TAKE.gcsv" in target.files)
+            assertEquals(convertedFrames.size, outcome.frames)
+            assertTrue(outcome.audio)
+        }
+    }
+
+    @Test
+    fun aMotionLogNeverUsesTheSpaceReserve() {
+        val file = takeWithMotion()
+        RandomAccessFile(file, "r").use { raf ->
+            val plan = requireNotNull(CinemaDngExporter(raf.channel, TAKE).plan())
+            // Room for the DNGs, the WAV and the reserve, not one byte more: the log is left out.
+            val destination = FakeDestination(free = plan.bytes(compress = false) + CinemaDngExportPlan.SPACE_RESERVE_BYTES)
+            val outcome = CinemaDngExporter(raf.channel, TAKE).run(destination)
+            outcome as CinemaDngExportOutcome.Exported
+            assertFalse(outcome.motionLog)
+            val target = destination.targets.single()
+            assertTrue(target.published)
+            assertFalse("$TAKE.gcsv" in target.files)
+            assertEquals(target.files.values.sumOf { it.size.toLong() }, outcome.bytes)
+            assertEquals(plan.bytes(compress = false), outcome.bytes)
+
+            // A few bytes over the reserve are not enough for the log either: it is started and removed.
+            val tight = FakeDestination(free = plan.bytes(compress = false) + CinemaDngExportPlan.SPACE_RESERVE_BYTES + 64)
+            val tightOutcome = CinemaDngExporter(raf.channel, TAKE).run(tight)
+            tightOutcome as CinemaDngExportOutcome.Exported
+            assertFalse(tightOutcome.motionLog)
+            assertFalse("$TAKE.gcsv" in tight.targets.single().files)
+            assertTrue("$TAKE.gcsv" in tight.targets.single().failed)
+        }
+    }
+
+    @Test
+    fun cancellingDuringTheMotionLogStopsItBeforeItIsRendered() {
+        val file = takeWithMotion()
+        RandomAccessFile(file, "r").use { raf ->
+            var cancelled = false
+            val destination = FakeDestination(onWrite = { if (it == "$TAKE.gcsv") cancelled = true })
+            val outcome = CinemaDngExporter(raf.channel, TAKE).run(destination, isCancelled = { cancelled })
+            outcome as CinemaDngExportOutcome.Stopped
+            assertEquals(CinemaDngStopReason.CANCELLED, outcome.reason)
+            assertTrue(outcome.cleaned)
+            val target = destination.targets.single()
+            assertTrue(target.discarded)
+            assertFalse(target.published)
+            // The render gave up at its first sample chunk instead of finishing the log.
+            assertTrue("$TAKE.gcsv" in target.failed)
+        }
+    }
+
+    @Test
+    fun recordingStartingDuringTheMotionLogStopsTheExport() {
+        val file = takeWithMotion()
+        RandomAccessFile(file, "r").use { raf ->
+            var recording = false
+            val destination = FakeDestination(onWrite = { if (it == "$TAKE.gcsv") recording = true })
+            val outcome = CinemaDngExporter(raf.channel, TAKE).run(destination, isRecording = { recording })
+            outcome as CinemaDngExportOutcome.Stopped
+            assertEquals(CinemaDngStopReason.RECORDING, outcome.reason)
+            assertTrue("$TAKE.gcsv" in destination.targets.single().failed)
+        }
+    }
+
+    @Test
+    fun aMotionLogWithoutRowsIsLeftOut() {
+        val file = takeWithMotion(beforeFirstFrame = true)
+        RandomAccessFile(file, "r").use { raf ->
+            val destination = FakeDestination()
+            val outcome = CinemaDngExporter(raf.channel, TAKE).run(destination)
+            outcome as CinemaDngExportOutcome.Exported
+            assertFalse(outcome.motionLog)
+            val target = destination.targets.single()
+            assertTrue(target.published)
+            assertFalse("$TAKE.gcsv" in target.files)
+            assertEquals(target.files.values.sumOf { it.size.toLong() }, outcome.bytes)
+        }
+    }
+
+    @Test
+    fun aTakeWithoutMotionDataHasNoGyroflowLog() = withTake { channel ->
+        val outcome = CinemaDngExporter(channel, TAKE).run(FakeDestination())
+        outcome as CinemaDngExportOutcome.Exported
+        assertFalse(outcome.motionLog)
+    }
+
     private fun withTake(block: (FileChannel) -> Unit) = RandomAccessFile(take, "r").use { block(it.channel) }
+
+    /**
+     * The fixture take rewritten chunk by chunk with `IMU_SAMPLES` after its first frame: gyroscope and
+     * accelerometer samples every 5 ms from 10 ms before its first frame to 10 ms after its last; with
+     * [beforeFirstFrame], ten samples ending 10 ms before its first frame, which leave the log no row.
+     */
+    private fun takeWithMotion(beforeFirstFrame: Boolean = false): File {
+        val scan = OcrawCodec.scanContainer(take.readBytes())
+        val frames = scan.chunks.filter { it.wireId == OcrawChunkId.RAW_FRAME.wireId }
+        val timeBase = frames.first().timeBase
+        assertEquals("the fixture's ticks are ns", OcrawTimeBase(1, 1_000_000_000), timeBase)
+        val first = frames.first().timestampTicks - if (beforeFirstFrame) 55_000_000L else 10_000_000L
+        val count = if (beforeFirstFrame) 10 else ((frames.last().timestampTicks + 10_000_000L - first) / 5_000_000L + 1).toInt()
+        val kinds = ByteArray(count * 2) { if (it % 2 == 0) OcrawImuSamples.KIND_GYROSCOPE.toByte() else OcrawImuSamples.KIND_ACCELEROMETER.toByte() }
+        val times = LongArray(count * 2) { first + (it / 2) * 5_000_000L }
+        val xyz = FloatArray(count * 6) { (it % 7) * 0.125f }
+
+        val file = temp.newFile("motion.ocraw")
+        RandomAccessFile(file, "rw").use { raf ->
+            val writer = OcrawStreamWriter(raf.channel, requireNotNull(scan.header), timeBase, OcrawStreamWriter.Options(forceOnFinish = false), force = null)
+            var imuWritten = false
+            for (chunk in scan.chunks) {
+                when (chunk.wireId) {
+                    OcrawChunkId.PERIODIC_INDEX.wireId, OcrawChunkId.FINAL_INDEX.wireId, OcrawChunkId.END.wireId -> Unit
+                    OcrawChunkId.RAW_FRAME.wireId -> {
+                        val header = OcrawFrameHeader.decode(chunk.payload, 0)
+                        val data = ByteBuffer.allocateDirect(chunk.payload.size - OcrawFrameHeader.BYTES)
+                        data.put(chunk.payload, OcrawFrameHeader.BYTES, data.capacity()).flip()
+                        writer.writeRawFrame(header, data, chunk.timestampTicks)
+                        if (!imuWritten) {
+                            // Two chunks: the samples' first and second halves.
+                            val half = count / 2 * 2
+                            writer.writeImuSamples(times[0], OcrawImuSamples.encode(kinds, times, xyz, half))
+                            writer.writeImuSamples(times[half], OcrawImuSamples.encode(kinds, times, xyz, kinds.size - half, from = half))
+                            imuWritten = true
+                        }
+                    }
+                    else -> writer.writeChunk(chunk.wireId, chunk.timestampTicks, ByteBuffer.wrap(chunk.payload))
+                }
+            }
+            writer.finish()
+        }
+        return file
+    }
 
     /**
      * Decodes the fixture take's block-pack and LJ92 frames without the native codec: their rows are
@@ -323,11 +492,12 @@ class CinemaDngExporterTest {
         private val failOn: String? = null,
         private val discardSucceeds: Boolean = true,
         private val noMediaSucceeds: Boolean = true,
+        private val onWrite: (String) -> Unit = {},
     ) : CinemaDngDestination {
         val targets = mutableListOf<FakeTarget>()
         override fun freeBytes(): Long? = free
         override fun open(takeName: String): CinemaDngTarget =
-            FakeTarget(CinemaDngExporter.folderName(takeName) { false }, failOn, discardSucceeds, noMediaSucceeds).also { targets += it }
+            FakeTarget(CinemaDngExporter.folderName(takeName) { false }, failOn, discardSucceeds, noMediaSucceeds, onWrite).also { targets += it }
     }
 
     private class FakeTarget(
@@ -335,8 +505,11 @@ class CinemaDngExporterTest {
         private val failOn: String?,
         private val discardSucceeds: Boolean,
         private val noMediaSucceeds: Boolean,
+        private val onWrite: (String) -> Unit,
     ) : CinemaDngTarget {
         val files = LinkedHashMap<String, ByteArray>()
+        /** Files whose body threw, so the target removed them. */
+        val failed = mutableListOf<String>()
         val mimeTypes = mutableMapOf<String, String>()
         var noMedia = false
         var published = false
@@ -350,11 +523,13 @@ class CinemaDngExporterTest {
 
         override fun write(name: String, mimeType: String, body: (WritableByteChannel) -> Unit) {
             if (name == failOn) throw IOException("disk full")
+            onWrite(name)
             val out = ByteArrayOutputStream()
             try {
                 Channels.newChannel(out).use(body)
             } catch (failure: Throwable) {
                 files -= name
+                failed += name
                 throw failure
             }
             files[name] = out.toByteArray()

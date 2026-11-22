@@ -8,6 +8,7 @@
     <string name="media_detail_group_colour">Colour</string>
     <string name="media_detail_group_audio">Audio</string>
     <string name="media_detail_group_camera">Camera and exposure</string>
+    <string name="media_detail_group_motion">Motion data</string>
     <string name="media_detail_group_raw">RAW</string>
     <string name="media_detail_group_recording">Recording</string>
     <!-- Shown in the inspector while a take's files and sidecars are read. -->
@@ -126,4 +127,16 @@
     <string name="media_detail_audio_separate_wav">Separate file (WAV)</string>
     <string name="media_detail_audio_separate_flac">Separate file (FLAC)</string>
     <string name="media_detail_eis_preview">Preview stabilisation</string>
+    <!-- The Motion data group: the motion sensors' measured rates, how they were synced, the CAMM track and the Gyroflow log. -->
+    <string name="media_detail_gyroscope">Gyroscope</string>
+    <string name="media_detail_accelerometer">Accelerometer</string>
+    <string name="media_detail_magnetometer">Magnetometer</string>
+    <string name="media_detail_motion_no_samples">No samples</string>
+    <string name="media_detail_motion_sync">Sync</string>
+    <string name="media_detail_motion_sync_measured">Measured</string>
+    <string name="media_detail_motion_sync_clock">Estimated: camera clock</string>
+    <string name="media_detail_motion_sync_frames">Estimated: recorder timing</string>
+    <string name="media_detail_motion_track">Embedded track (CAMM)</string>
+    <string name="media_detail_motion_track_packets">Yes, %1$d packets</string>
+    <string name="media_detail_motion_log">Gyroflow log</string>
 </resources>

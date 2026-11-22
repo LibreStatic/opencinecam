@@ -24,6 +24,9 @@ internal fun Camera2PreviewEngine.startExistingGpuVideo(output: ParcelFileDescri
     pipeline.onFirstRecordedFrame = { timestampNs ->
         if (generation == cameraGeneration && logPipeline === pipeline) listener?.onRecordingFirstFrame(timestampNs)
     }
+    pipeline.onRecordedFrame = { timestampNs, ptsNs ->
+        if (generation == cameraGeneration && logPipeline === pipeline) listener?.onRecordingFrame(timestampNs, ptsNs)
+    }
     return pipeline.startRecording(output, bitrate, geometry, audio, minimumSensorTimestampNs = recordingWbMinimumTimestampNs,
         timelapse = timelapse, projectRateOverride = projectRateOverride, separateAudioClock = separateAudioClock,
         recordingLut = recordingLut, videoCodec = videoCodec,
@@ -148,6 +151,9 @@ internal fun Camera2PreviewEngine.startGpuVideo(
             passthroughVideoPipeline = true
             pipeline.onFirstRecordedFrame = { timestampNs ->
                 if (generation == cameraGeneration && logPipeline === pipeline) listener?.onRecordingFirstFrame(timestampNs)
+            }
+            pipeline.onRecordedFrame = { timestampNs, ptsNs ->
+                if (generation == cameraGeneration && logPipeline === pipeline) listener?.onRecordingFrame(timestampNs, ptsNs)
             }
             val accepted = pipeline.startRecording(
                 output = output,

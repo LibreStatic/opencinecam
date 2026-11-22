@@ -208,6 +208,9 @@ internal class MuxTimestampNormalizer(private val captureEpoch: CaptureEpochCloc
         private set
     var audioOriginUs: Long? = null
         private set
+    /** The constant added to every rebased video time; the motion log maps frames to the file with it. */
+    var videoOffsetUs: Long = 0L
+        private set
     private var lastVideoUs = 0L
     private var lastAudioUs = 0L
     fun normalize(video: Boolean, presentationTimeUs: Long): Long {
@@ -215,6 +218,7 @@ internal class MuxTimestampNormalizer(private val captureEpoch: CaptureEpochCloc
         val origin = if (video) videoOriginUs ?: presentationTimeUs.also { videoOriginUs = it }
             else audioOriginUs ?: presentationTimeUs.also { audioOriginUs = it }
         val offset = captureEpoch?.offsetUs(video) ?: 0L
+        if (video) videoOffsetUs = offset
         val rebased = Math.addExact(Math.subtractExact(presentationTimeUs, origin).coerceAtLeast(0L), offset)
         return if (video) rebased.coerceAtLeast(lastVideoUs).also { lastVideoUs = it }
             else rebased.coerceAtLeast(lastAudioUs).also { lastAudioUs = it }
@@ -736,6 +740,11 @@ class OpenCineLogGpuPipeline(
     @Volatile private var recording: Recording? = null
     /** Called once per recording, on the GL thread, with the sensor timestamp of the first frame sent to the encoder. */
     @Volatile var onFirstRecordedFrame: ((Long) -> Unit)? = null
+    /**
+     * Called on the GL thread for every frame sent to the encoder, with its sensor timestamp and the presentation time
+     * given to the encoder (nanoseconds, before the muxer's rebase). Must be cheap: it runs inside the frame loop.
+     */
+    @Volatile var onRecordedFrame: ((sensorTimestampNs: Long, presentationTimeNs: Long) -> Unit)? = null
     private val recordingPreparation = java.util.concurrent.atomic.AtomicReference<RecordingPreparation?>()
     @Volatile private var lastSourceDataSpace: Int? = null
     private var lastAnalysisAtMs = 0L
@@ -1396,6 +1405,12 @@ class OpenCineLogGpuPipeline(
                     check(EGLExt.eglPresentationTimeANDROID(display, encoderEglSurface, selectedPts)) { "Encoder rejected presentation timestamp." }
                     check(EGL14.eglSwapBuffers(display, encoderEglSurface)) { "Encoder EGL swap failed." }
                     frameDiag?.mark(OpenCineLogFrameDiagnostics.Phase.ENCODER_SWAP)
+                    if (!active.recordedFrameListenerFailed) onRecordedFrame?.let { report ->
+                        try { report(timestampNs, selectedPts) } catch (problem: Exception) {
+                            active.recordedFrameListenerFailed = true
+                            android.util.Log.w(LOG_TAG, "Recorded frame listener failed; it is not called again for this take", problem)
+                        }
+                    }
                     if (!active.firstFrameReported) {
                         active.firstFrameReported = true
                         onFirstRecordedFrame?.let { report ->
@@ -1975,6 +1990,7 @@ class OpenCineLogGpuPipeline(
                 OpenCineLogRecordingEvidence(
                     encodedProgress = active.encodedProgress(),
                     avTiming = active.captureEpoch?.report(timestampNormalizer.videoOriginUs, timestampNormalizer.audioOriginUs, audioEncoderDelayFrames)
+                        ?.copy(videoMuxOffsetUs = timestampNormalizer.videoOffsetUs)
                         ?.let { report -> active.audio?.let { audio -> report.copy(submittedPcmFrames = audio.submittedPcmFrames,
                             encodedAudioPackets = active.audioPackets, aacCalibration = audio.calibration,
                             audioDrainPaddingFrames = audio.drainPaddingFrames, audioSourceWindow = audioSourceWindow,
@@ -2517,6 +2533,7 @@ class OpenCineLogGpuPipeline(
         @Volatile var drainThread: Thread? = null
         @Volatile var frames = 0L
         var firstFrameReported = false
+        var recordedFrameListenerFailed = false
         var audioPackets = 0L
         var firstPtsUs: Long? = null
         var lastPtsUs: Long? = null

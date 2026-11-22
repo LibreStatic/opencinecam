@@ -116,6 +116,7 @@ Summary answer: **no user data is collected or shared with the developer or any 
 | `ACCESS_FINE_LOCATION` / `ACCESS_COARSE_LOCATION` | Opt-in geotagging of captures, off by default, requested at runtime, used only while the app is in the foreground. No background location. The Console may ask for a permission declaration: describe it as an optional feature that records the capture location in metadata. `uses-feature` for GPS/network location is `required=false`. |
 | `INTERNET`, `ACCESS_NETWORK_STATE` | Opt-in WebDAV transfers of finished takes only; network state is used to restrict uploads to Wi-Fi unless cellular is allowed. |
 | `FOREGROUND_SERVICE_DATA_SYNC` | The opt-in "Upload new takes automatically" WebDAV switch (off by default): WorkManager runs the upload as a `dataSync` foreground service with a visible "Uploading take" notification. See the foreground service section. |
+| `HIGH_SAMPLING_RATE_SENSORS` | Opt-in "Motion data" setting (off by default): gyroscope, accelerometer and magnetometer at their full rate while a video take records, saved only in the take's files for stabilization. Normal permission, no prompt and no declaration form. |
 | `POST_NOTIFICATIONS` | Visible recording notification with a stop action. |
 | `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_CAMERA` + `FOREGROUND_SERVICE_MICROPHONE` | Foreground-service declaration, see next section. |
 | `READ/WRITE_EXTERNAL_STORAGE`, `MANAGE_EXTERNAL_STORAGE`, `READ_MEDIA_*` | Not declared. MediaStore and the Storage Access Framework own destinations. |

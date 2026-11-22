@@ -10,12 +10,15 @@ import java.util.concurrent.CancellationException
 import java.text.Normalizer
 import java.util.Locale
 
-enum class MediaShareRole { ORIGINAL, RELATIONSHIP, PRODUCTION, TECHNICAL, LUT }
+/** [MOTION_LOG] is a take's Gyroflow `.gcsv` log, shared as it is with the originals it belongs to. */
+enum class MediaShareRole { ORIGINAL, RELATIONSHIP, PRODUCTION, TECHNICAL, LUT, MOTION_LOG }
 data class PreparedMediaShareFile(val uri: String, val name: String, val mimeType: String, val role: MediaShareRole)
 internal data class MediaShareSnapshot(val take: LocalMediaTake, val documents: List<MetadataDocument>)
 internal data class MediaShareText(val name: String, val role: MediaShareRole, val text: String)
+/** [motionLogs] are the take's Gyroflow logs, delivered whenever its originals are: Gyroflow finds one beside its video. */
 internal data class MediaSharePlan(val take: LocalMediaTake, val settings: MediaSharingSettings,
-    val originals: List<LocalMediaArtifact>, val generated: List<MediaShareText>, val referencedLuts: List<String>)
+    val originals: List<LocalMediaArtifact>, val generated: List<MediaShareText>, val referencedLuts: List<String>,
+    val motionLogs: List<LocalMediaArtifact> = emptyList())
 internal data class MediaShareLut(val hash: String, val name: String?, val bytes: Long?, val included: Boolean)
 internal const val MEDIA_SHARE_EXPIRY_MS = 24 * 60 * 60 * 1000L
 internal const val MEDIA_SHARE_MAX_LUTS = 8
@@ -41,6 +44,8 @@ internal fun mediaSharePlan(snapshot: MediaShareSnapshot, settings: MediaSharing
     require(take.primary in take.originals && take.originals.map { it.uri }.distinct().size == take.originals.size)
     require(take.originals.all { takeOriginalKind(it.uri) != null && it.sizeBytes >= 0 })
     val originals = if (settings.content == MediaShareContent.METADATA_ONLY) emptyList() else take.originals
+    val motionLogs = if (originals.isEmpty()) emptyList() else take.attachments.filter(::isMotionLogAttachment)
+    require(motionLogs.all { it.sizeBytes >= 0 } && motionLogs.map { it.uri }.distinct().size == motionLogs.size)
     val generated = mutableListOf<MediaShareText>()
     val hashes = linkedSetOf<String>()
     if (settings.content != MediaShareContent.ORIGINALS_ONLY) {
@@ -91,9 +96,9 @@ internal fun mediaSharePlan(snapshot: MediaShareSnapshot, settings: MediaSharing
             }.toString())
         }
     }
-    requirePortableShareNames(originals.map { it.name } + generated.map { it.name } + "relationships.json" +
+    requirePortableShareNames(originals.map { it.name } + motionLogs.map { it.name } + generated.map { it.name } + "relationships.json" +
         if (settings.includeReferencedLut) hashes.map { "$it.cube" } else emptyList())
-    return MediaSharePlan(take, settings, originals.toList(), generated.toList(), hashes.toList())
+    return MediaSharePlan(take, settings, originals.toList(), generated.toList(), hashes.toList(), motionLogs.toList())
 }
 internal fun stripProductionSlate(value: JsonElement): JsonElement = when (value) {
     is JsonObject -> JsonObject(value.filterKeys { it != "productionSlate" && it != "captureLocation" }.mapValues { stripProductionSlate(it.value) })
@@ -130,6 +135,10 @@ internal fun mediaShareManifest(plan: MediaSharePlan, luts: List<MediaShareLut>)
     put("originals", buildJsonArray { plan.take.originals.forEach { artifact -> add(buildJsonObject {
         put("file", mediaIdentity(artifact)); put("role", MediaShareRole.ORIGINAL.name)
         put("included", artifact in plan.originals)
+    }) } })
+    put("motionLogs", buildJsonArray { plan.take.attachments.filter(::isMotionLogAttachment).forEach { artifact -> add(buildJsonObject {
+        put("file", mediaIdentity(artifact)); put("role", MediaShareRole.MOTION_LOG.name)
+        put("included", artifact in plan.motionLogs)
     }) } })
     put("sourceMetadata", buildJsonArray { plan.take.metadata.forEach { artifact -> add(buildJsonObject {
         put("file", mediaIdentity(artifact)); put("includedRaw", false)

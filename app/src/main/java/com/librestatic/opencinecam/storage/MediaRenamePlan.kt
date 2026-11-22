@@ -40,14 +40,27 @@ fun mediaRenamePreview(take: LocalMediaTake, stem: String): MediaRenamePreview {
     take.attachments.forEach { artifact -> require(isTakeAttachment(artifact)) { "Unknown attachment cannot be renamed coherently" } }
     // The clip sidecar keeps the `.clip.json` shape so it is still recognised after the rename.
     take.attachments.filter(::isClipSidecarAttachment).forEach { names[it.uri] = "$normalized$CLIP_SIDECAR_SUFFIX" }
-    take.attachments.filter { !isClipSidecarAttachment(it) }.sortedBy { requireNotNull(mediaDeleteIdentity(it.uri)).id }.forEachIndexed { index, artifact ->
+    // Gyroflow pairs a log with its video only by an identical stem, so each log follows the video it belonged to.
+    val logs = take.attachments.filter { !isClipSidecarAttachment(it) }.sortedBy { requireNotNull(mediaDeleteIdentity(it.uri)).id }
+    val videos = take.originals.filter { it.mimeType.equals("video/mp4", ignoreCase = true) }
+    val paired = logs.associateWith { log ->
+        val stem = log.name.substringBeforeLast('.')
+        // A sole video and log pair even when an earlier rename left the log as `-motion-NN`.
+        val video = videos.singleOrNull { it.name.substringBeforeLast('.') == stem } ?: videos.singleOrNull()?.takeIf { logs.size == 1 }
+        video?.let { names.getValue(it.uri).substringBeforeLast('.') + renameExtension(log) }
+    }
+    val unique = paired.values.filterNotNull().groupingBy { it }.eachCount()
+    logs.filter { log -> paired[log]?.let { unique[it] != 1 } ?: true }.forEachIndexed { index, artifact ->
         names[artifact.uri] = "$normalized-motion-${(index + 1).toString().padStart(2, '0')}" + renameExtension(artifact)
     }
+    logs.forEach { log -> paired[log]?.takeIf { unique[it] == 1 }?.let { names[log.uri] = it } }
     val files = all.map { MediaRenameTarget(it, names.getValue(it.uri)) }
     requirePortableShareNames(files.map { it.newName })
     return MediaRenamePreview(normalized, files)
 }
 private fun renameExtension(artifact: LocalMediaArtifact): String {
+    // The log's type is opaque (see GyroflowLog.MIME_TYPE), so it is known by its name, as the catalog knows it.
+    if (artifact.name.endsWith("." + GyroflowLog.EXTENSION, ignoreCase = true)) return "." + GyroflowLog.EXTENSION
     val extensions = when (artifact.mimeType.lowercase(Locale.ROOT)) {
         "image/jpeg" -> listOf("jpg", "jpeg")
         "image/x-adobe-dng", "image/dng" -> listOf("dng")
@@ -60,7 +73,7 @@ private fun renameExtension(artifact: LocalMediaArtifact): String {
         "audio/wav", "audio/x-wav", "audio/wave", "audio/vnd.wave" -> listOf("wav")
         "audio/flac", "audio/x-flac" -> listOf("flac")
         "application/json" -> listOf("json")
-        GyroflowLog.MIME_TYPE -> listOf(GyroflowLog.EXTENSION)
+        "text/csv" -> listOf(GyroflowLog.EXTENSION)
         else -> error("Unsupported original MIME extension")
     }
     val existing = artifact.name.substringAfterLast('.', "")

@@ -34,11 +34,18 @@ AUDIO_PCM16 = 0x0020
 PERIODIC_INDEX = 0x0030
 FINAL_INDEX = 0x0031
 FRAME_METADATA = 0x0040
+IMU_SAMPLES = 0x0050
 END = 0x00FF
 FRAME_HEADER_BYTES = 64
 FRAME_HEADER_VERSION = 1
 ENCODINGS = {0: "raw10", 1: "lj92", 2: "bayer-block-pack", 3: "bayer-block-pack-quantised"}
 READ_BLOCK = 4 * 1024 * 1024
+# IMU_SAMPLES payload (OcrawImuSamples.kt): u8 version, u8 + u16 reserved, u32 count, 21-byte records.
+IMU_PAYLOAD_VERSION = 1
+IMU_HEADER_BYTES = 8
+IMU_RECORD = struct.Struct("<Bqfff")
+IMU_GYROSCOPE, IMU_ACCELEROMETER, IMU_MAGNETOMETER = 1, 2, 3
+IMU_KINDS = {IMU_GYROSCOPE: "gyroscope", IMU_ACCELEROMETER: "accelerometer", IMU_MAGNETOMETER: "magnetometer"}
 
 
 @dataclass(frozen=True)
@@ -159,6 +166,20 @@ def decode_frame_header(payload: bytes) -> dict[str, int | str]:
         "frameNumber": frame_number,
         "dataLength": data_length,
     }
+
+
+def decode_imu_samples(payload: bytes) -> list[tuple[int, int, float, float, float]] | None:
+    """`(kind, timeNs, x, y, z)` records of an IMU_SAMPLES payload, unknown kinds skipped.
+
+    None when the payload version is not 1 or the record count disagrees with
+    the payload length, so callers ignore the chunk as the Kotlin reader does.
+    """
+    if len(payload) < IMU_HEADER_BYTES or payload[0] != IMU_PAYLOAD_VERSION:
+        return None
+    count = struct.unpack_from("<I", payload, 4)[0]
+    if len(payload) - IMU_HEADER_BYTES != count * IMU_RECORD.size:
+        return None
+    return [record for record in IMU_RECORD.iter_unpack(payload[IMU_HEADER_BYTES:]) if record[0] in IMU_KINDS]
 
 
 def scan_stream(stream: BinaryIO, size: int | None = None, verify_raw_crc: bool = True) -> Scan:

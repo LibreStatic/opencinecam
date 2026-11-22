@@ -5,6 +5,7 @@ import com.librestatic.opencinecam.camera.toJsonObject
 import com.librestatic.opencinecam.core.model.ClipSidecarDocument
 import com.librestatic.opencinecam.core.model.SchemaEvidence
 import com.librestatic.opencinecam.core.model.encodeClipSidecar
+import com.librestatic.opencinecam.motion.MotionTakeSummary
 import java.time.Instant
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -166,7 +167,87 @@ data class ClipSidecarPrepareContext(
     /** ADR-0011 reasons; null for a take being completed normally. */
     val incompleteReasons: List<String>? = null,
     val observedAt: Instant = Instant.now(),
+    /** What the take's motion data came to; null when it has none or none rendered. */
+    val motion: ClipMotion? = null,
 )
+
+/** One motion sensor of a take: [nominalMaxHz] is its declared fastest rate, [measuredHz] the take's. */
+data class ClipMotionSensor(val present: Boolean, val nominalMaxHz: Double?, val measuredHz: Double?, val samples: Int)
+
+enum class ClipMotionSync(val wire: String) {
+    MEASURED("measured"),
+    /** The camera clock is not the sensor clock. */
+    ESTIMATED_CLOCK("estimated-clock"),
+    /** The recorder's frame timing was not measured. */
+    ESTIMATED_FRAMES("estimated-frames"),
+}
+
+/** The `motion` block of the clip sidecar, from [com.librestatic.opencinecam.motion.MotionTakeSummary]. */
+data class ClipMotion(
+    val gyroscope: ClipMotionSensor,
+    val accelerometer: ClipMotionSensor,
+    val magnetometer: ClipMotionSensor,
+    val sync: ClipMotionSync,
+    val rateScale: Double,
+    val largestGyroGapUs: Long,
+    val cammPresent: Boolean,
+    val cammPackets: Int,
+    val cammBinUs: Long?,
+    /** The Gyroflow log's file name; null when it was not attached. */
+    val logName: String?,
+)
+
+/** [summary] as the sidecar's motion facts; [logName] is the attached log's name, used only when it was attached. */
+internal fun clipMotion(summary: MotionTakeSummary, logName: String?): ClipMotion {
+    val info = summary.info
+    val result = summary.result
+    return ClipMotion(
+        gyroscope = ClipMotionSensor(true, info.gyroMaxHz, result.measuredGyroHz, result.gyroSamples),
+        accelerometer = ClipMotionSensor(info.accelerometer, info.accelMaxHz, result.measuredAccelHz, result.accelSamples),
+        magnetometer = ClipMotionSensor(info.magnetometer, info.magMaxHz, result.measuredMagHz, result.magSamples),
+        // The same order as the log's note (MotionTakeRender.input): the clock first, then the recorder timing.
+        sync = when {
+            summary.synced -> ClipMotionSync.MEASURED
+            !info.cameraClockRealtime -> ClipMotionSync.ESTIMATED_CLOCK
+            else -> ClipMotionSync.ESTIMATED_FRAMES
+        },
+        rateScale = result.globalRateScale,
+        largestGyroGapUs = result.largestGyroGapNs / 1_000L,
+        cammPresent = summary.cammAppended,
+        cammPackets = if (summary.cammAppended) summary.cammPackets else 0,
+        cammBinUs = summary.cammBinUs,
+        logName = logName?.takeIf { summary.gcsvAttached },
+    )
+}
+
+/** [value] to [decimals] places, or JSON null when it is unknown or not finite. */
+private fun rounded(value: Double?, decimals: Int): JsonElement = value?.takeIf { it.isFinite() }
+    ?.let { JsonPrimitive(java.math.BigDecimal(it).setScale(decimals, java.math.RoundingMode.HALF_EVEN).toDouble()) }
+    ?: JsonNull
+
+private fun sensorJson(sensor: ClipMotionSensor): JsonObject = buildJsonObject {
+    put("present", sensor.present)
+    put("nominalMaxHz", rounded(sensor.nominalMaxHz, 2))
+    put("measuredHz", rounded(sensor.measuredHz, 2))
+    put("samples", sensor.samples)
+}
+
+private fun motionJson(motion: ClipMotion): JsonObject = buildJsonObject {
+    put("sensors", buildJsonObject {
+        put("gyroscope", sensorJson(motion.gyroscope))
+        put("accelerometer", sensorJson(motion.accelerometer))
+        put("magnetometer", sensorJson(motion.magnetometer))
+    })
+    put("sync", motion.sync.wire)
+    put("rateScale", rounded(motion.rateScale.takeIf { it.isFinite() } ?: 1.0, 6))
+    put("largestGyroGapUs", motion.largestGyroGapUs.coerceAtLeast(0L))
+    put("camm", buildJsonObject {
+        put("present", motion.cammPresent)
+        put("packets", motion.cammPackets)
+        put("binUs", motion.cammBinUs?.let(::JsonPrimitive) ?: JsonNull)
+    })
+    put("log", motion.logName?.let(::JsonPrimitive) ?: JsonNull)
+}
 
 /** Builds the JSON of a take's clip sidecar; a null result (or a throw) means the take publishes without one. */
 fun interface ClipSidecarProvider {
@@ -372,14 +453,15 @@ private fun mediaJson(facts: ClipTakeFacts, context: ClipSidecarPrepareContext):
     put("displayName", context.videoName)
     facts.durationMs?.let { put("durationMs", it) }
     facts.encodedFrames?.let { put("encodedFrames", it) }
-    put("sidecars", JsonArray((listOfNotNull(context.metadataName) + facts.audioFiles.filter { it.endsWith(".json") }).map(::JsonPrimitive)))
+    val sidecars = listOfNotNull(context.metadataName) + facts.audioFiles.filter { it.endsWith(".json") } + listOfNotNull(context.motion?.logName)
+    put("sidecars", JsonArray(sidecars.map(::JsonPrimitive)))
     put("audioFiles", JsonArray(facts.audioFiles.filterNot { it.endsWith(".json") }.map(::JsonPrimitive)))
 }
 
 /** The clip sidecar of one take as the typed [ClipSidecarDocument]; pure, so every branch is host-testable. */
 internal fun buildClipSidecar(facts: ClipTakeFacts, context: ClipSidecarPrepareContext): ClipSidecarDocument =
     ClipSidecarDocument(
-        schemaVersion = "1.1.0",
+        schemaVersion = "1.2.0",
         recordingId = context.recordingId,
         createdAt = facts.startedAt.toString(),
         intent = intentJson(facts.intent),
@@ -390,6 +472,7 @@ internal fun buildClipSidecar(facts: ClipTakeFacts, context: ClipSidecarPrepareC
         takeStatus = context.incompleteReasons?.let { IncompleteTake.STATUS_INCOMPLETE },
         failureReasons = context.incompleteReasons?.distinct(),
         continuation = facts.continuation?.let(::continuationJson),
+        motion = context.motion?.let(::motionJson),
     )
 
 /**

@@ -16,6 +16,7 @@ enum class OcrawChunkId(val wireId: Int) {
     PERIODIC_INDEX(0x0030),
     FINAL_INDEX(0x0031),
     FRAME_METADATA(0x0040),
+    IMU_SAMPLES(0x0050),
     END(0x00ff),
 }
 

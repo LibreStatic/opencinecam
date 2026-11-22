@@ -206,11 +206,24 @@ class WebDavArtifactHasherTest {
         for ((role, name, mime) in listOf(Triple(WebDavArtifactRole.VIDEO, "a.mp4", "video/mp4"),
             Triple(WebDavArtifactRole.AUDIO, "a.wav", "audio/x-wav"), Triple(WebDavArtifactRole.AUDIO, "a.flac", "audio/flac"),
             Triple(WebDavArtifactRole.VIDEO_METADATA, "a.json", "application/json"), Triple(WebDavArtifactRole.AUDIO_METADATA, "a.json", "application/json"),
-            Triple(WebDavArtifactRole.CLIP_METADATA, "a.clip.json", "application/json"))) {
+            Triple(WebDavArtifactRole.CLIP_METADATA, "a.clip.json", "application/json"),
+            Triple(WebDavArtifactRole.MOTION_LOG, "a.gcsv", "text/csv"), Triple(WebDavArtifactRole.MOTION_LOG, "a.gcsv", "application/octet-stream"))) {
             val spec = spec().copy(role = role, sourceName = name)
             val source = Source(snapshot().copy(displayName = name, mimeType = mime))
             assertTrue(hash(source, scope, WebDavOutboxArtifact(spec, modifiedSeconds = 7)) is WebDavHashResult.Hashed)
         }
+    }
+
+    @Test fun aGyroflowLogUnderAnotherNameOrTypeIsAChangedSourceLikeAnyOtherArtifact() = owner { _, scope ->
+        // The same failure a clip sidecar meets: SOURCE_UNAVAILABLE on that artifact alone, never a thrown error.
+        for ((name, mime) in listOf("a.gcsv.csv" to "text/csv", "a.gcsv" to "application/json", "a.csv" to "text/csv")) {
+            val spec = spec().copy(role = WebDavArtifactRole.MOTION_LOG, sourceName = name)
+            val source = Source(snapshot().copy(displayName = name, mimeType = mime))
+            assertFailure(WebDavSourceFailureReason.CONTENT_CHANGED, hash(source, scope, WebDavOutboxArtifact(spec, modifiedSeconds = 7)))
+        }
+        assertFailure(WebDavSourceFailureReason.MISSING, hash(Source(snapshot().copy(displayName = "take.gcsv", mimeType = "text/csv"),
+            openFailure = java.io.FileNotFoundException()), scope,
+            WebDavOutboxArtifact(spec().copy(role = WebDavArtifactRole.MOTION_LOG, sourceName = "take.gcsv"), modifiedSeconds = 7)))
     }
 
     private class Source(

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.1.0",
+  "schemaVersion": "1.2.0",
   "recordingId": "123e4567-e89b-42d3-a456-426614174001",
   "createdAt": "2026-08-20T00:00:00Z",
   "intent": {
@@ -58,5 +58,36 @@
     }
   },
   "events": [],
-  "validation": []
+  "validation": [],
+  "motion": {
+    "sensors": {
+      "gyroscope": {
+        "present": true,
+        "nominalMaxHz": 500.0,
+        "measuredHz": 498.2,
+        "samples": 41352
+      },
+      "accelerometer": {
+        "present": true,
+        "nominalMaxHz": 500.0,
+        "measuredHz": 498.1,
+        "samples": 41340
+      },
+      "magnetometer": {
+        "present": true,
+        "nominalMaxHz": 100.0,
+        "measuredHz": 99.8,
+        "samples": 8283
+      }
+    },
+    "sync": "measured",
+    "rateScale": 1.0,
+    "largestGyroGapUs": 4180,
+    "camm": {
+      "present": true,
+      "packets": 49800,
+      "binUs": 2000
+    },
+    "log": "OCC_TAKE_A001_S12_T03.gcsv"
+  }
 }

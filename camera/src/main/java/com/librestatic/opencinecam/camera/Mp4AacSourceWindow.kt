@@ -68,8 +68,8 @@ fun finalizeAacSourceWindow(file: ProjectMp4File, window: AacSourceWindow): AacS
     val offsetTicks = Math.multiplyExact(window.presentationOffsetUs, newScale / 1_000_000)
     val audioTrackDuration = Math.addExact(offsetTicks, audioDuration)
     val tracks = movie.filter { it.type == "trak" }
-    require(tracks.isNotEmpty() && tracks.size <= 2)
     var audioCount = 0
+    var videoCount = 0
     var encodedFrames = 0L
     var movieDuration = 0L
     val replacements = tracks.associateWith { track ->
@@ -80,8 +80,9 @@ fun finalizeAacSourceWindow(file: ProjectMp4File, window: AacSourceWindow): AacS
         val handler = media.single { it.type == "hdlr" }.payload
         require(handler.size >= 12)
         val kind = String(handler, 8, 4, Charsets.US_ASCII)
-        require(kind == "soun" || kind == "vide")
-        if (kind == "vide") {
+        if (kind == "vide") videoCount++
+        // Other tracks (CAMM motion metadata) keep their media; like the video, only their movie-clock fields follow the new timescale.
+        if (kind != "soun") {
             val duration = scaleExact(headerDuration(tkhd), oldScale, newScale)
             movieDuration = maxOf(movieDuration, duration)
             WindowBox.container("trak", parts.map {
@@ -158,7 +159,7 @@ fun finalizeAacSourceWindow(file: ProjectMp4File, window: AacSourceWindow): AacS
             } + edts)
         }
     }
-    require(audioCount == 1)
+    require(audioCount == 1 && videoCount <= 1)
     val replacement = WindowBox.container("moov", movie.map {
         when {
             it === mvhd -> wideHeader(it, movieDuration, newScale)

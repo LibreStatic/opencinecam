@@ -194,6 +194,30 @@ class MediaSharePlanTest {
         rejected { mediaSharePlan(collision, MediaSharingSettings()) }
         assertEquals(listOf(lutName), mediaSharePlan(collision, MediaSharingSettings(includeReferencedLut = false)).originals)
     }
+    @Test fun theGyroflowLogTravelsWithTheOriginalsButNotTheClipSidecar() {
+        val gcsv = LocalMediaArtifact("content://media/external_primary/downloads/16", "Exact original.gcsv", GyroflowLog.MIME_TYPE, 4096, 100)
+        val clip = LocalMediaArtifact("content://media/external_primary/downloads/17", "Exact original$CLIP_SIDECAR_SUFFIX", "application/json", 512, 100)
+        val base = snapshot()
+        val take = requireNotNull(catalogTake(namespace, listOf(CatalogRow(video, 12, LocalMediaKind.VIDEO, namespace)), base.documents,
+            attachments = listOf(gcsv, clip)))
+        val input = MediaShareSnapshot(take, base.documents)
+        for (content in MediaShareContent.entries) {
+            val plan = mediaSharePlan(input, MediaSharingSettings(content))
+            val withOriginals = content != MediaShareContent.METADATA_ONLY
+            assertEquals(if (withOriginals) listOf(gcsv) else emptyList<LocalMediaArtifact>(), plan.motionLogs)
+            val logs = Json.parseToJsonElement(mediaShareManifest(plan, emptyList())).jsonObject.getValue("motionLogs").jsonArray
+            val entry = logs.single().jsonObject
+            assertEquals(gcsv.uri, entry.getValue("file").jsonObject.getValue("uri").jsonPrimitive.content)
+            assertEquals(MediaShareRole.MOTION_LOG.name, entry.getValue("role").jsonPrimitive.content)
+            assertEquals(withOriginals, entry.getValue("included").jsonPrimitive.boolean)
+        }
+        // A take without a log shares as before.
+        assertTrue(mediaSharePlan(base, MediaSharingSettings()).motionLogs.isEmpty())
+        // A delivered log name must not alias another delivered file.
+        val alias = gcsv.copy(uri = "content://media/external_primary/downloads/18", name = "EXACT ORIGINAL.GCSV")
+        rejected { mediaSharePlan(MediaShareSnapshot(take.copy(attachments = listOf(gcsv, alias)), base.documents),
+            MediaSharingSettings(content = MediaShareContent.ORIGINALS_ONLY)) }
+    }
     @Test fun exportNamesRejectTraversalControlsAndPortableCaseOrUnicodeAliases() {
         listOf("", ".", "..", "../video.mp4", "folder/video.mp4", "folder\\video.mp4", "bad\nname.mp4", "bad\u0000name", "trailing.", "trailing ")
             .forEach { rejected { requirePortableShareNames(listOf(it)) } }

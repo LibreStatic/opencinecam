@@ -13,13 +13,15 @@ import android.content.Context
 import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
-import java.io.File
 import com.librestatic.opencinecam.camera.EncodedSampleListener
 import com.librestatic.opencinecam.camera.RecordingGeometry
 import com.librestatic.opencinecam.media.storage.ClipFinalizationResult
 import com.librestatic.opencinecam.media.storage.ClipRecoveryDecision
 import com.librestatic.opencinecam.media.storage.decideClipRecovery
 import com.librestatic.opencinecam.media.storage.finalizeClip
+import com.librestatic.opencinecam.motion.MotionTakeRecorder
+import com.librestatic.opencinecam.motion.MotionTakeSummary
+import com.librestatic.opencinecam.motion.MotionTakeTiming
 
 class VideoOutput private constructor(
     private val context: Context,
@@ -35,9 +37,12 @@ class VideoOutput private constructor(
     private var clipSidecarUri: Uri? = null
     private var writtenClipSidecarJson: String? = null
     private var geometryFailure: String? = null
-    private var motionRecorder: MotionLogRecorder? = null
-    private var motionLog: File? = null
+    private var motionRecorder: MotionTakeRecorder? = null
+    private var motionSealed = false
+    private var motionGcsv: java.io.File? = null
+    private var motionSummary: MotionTakeSummary? = null
     private var motionLogUri: Uri? = null
+    private var motionLogName: String? = null
     private var preparedOutput: PreparedVideoOutput? = null
     private var descriptorRetired = false
     private var incompleteReasons: List<String>? = null
@@ -78,29 +83,55 @@ class VideoOutput private constructor(
         }.also { takeIndex = it }
     }
 
-    /** The optional Gyroflow log of this take. Best effort: it never fails or delays the take. */
+    /** The optional motion data of this take. Best effort: it never fails or delays the take. */
     @Synchronized
-    internal fun attachMotionRecorder(recorder: MotionLogRecorder) { motionRecorder = recorder }
+    internal fun attachMotionRecorder(recorder: MotionTakeRecorder) { motionRecorder = recorder }
 
     @Synchronized
-    internal fun motionRecorder(): MotionLogRecorder? = motionRecorder
+    internal fun motionRecorder(): MotionTakeRecorder? = motionRecorder
 
-    /** Stops the sensors and closes the local file; [keep] false (or an empty log) drops it. Idempotent. */
+    /** True while the take has motion data [sealMotion] has not sealed yet. */
     @Synchronized
-    internal fun sealMotionLog(keep: Boolean) {
+    internal fun motionPending(): Boolean = !motionSealed && motionRecorder != null
+
+    /** What the take's motion data came to; null without motion data or before [sealMotion] rendered it. */
+    @Synchronized
+    internal fun motionSummary(): MotionTakeSummary? = motionSummary
+
+    /**
+     * Stops the sensors and renders the motion data against [timing] (null drops it), adding a CAMM track to the file
+     * when [appendCamm]. Must run while the descriptor is open and no writer is live. Only the first call counts; a CAMM
+     * failure costs only the track.
+     */
+    @Synchronized
+    internal fun sealMotion(timing: MotionTakeTiming?, appendCamm: Boolean) {
+        if (motionSealed) return
+        motionSealed = true
         val recorder = motionRecorder ?: return
-        motionRecorder = null
-        motionLog = try { recorder.finish(keep) } catch (problem: Exception) {
-            android.util.Log.w("VideoOutput", "Gyroflow log could not be closed", problem)
-            null
+        val outputs = timing?.let { recorder.render(it, withCamm = appendCamm) }
+        recorder.stop()
+        // Only the log file is kept: the CAMM series can be tens of megabytes and is not needed after the append.
+        motionGcsv = outputs?.gcsv
+        if (outputs == null) return
+        var packets = 0
+        outputs.camm?.takeIf { appendCamm && !descriptorRetired }?.let { camm ->
+            packets = try {
+                appendCammTrack(descriptor.fileDescriptor, camm)
+            } catch (problem: Exception) {
+                android.util.Log.w("VideoOutput", "CAMM track not added; the take keeps its Gyroflow log", problem)
+                0
+            }
         }
+        motionSummary = MotionTakeSummary(recorder.info, outputs.result, outputs.synced, outputs.estimated,
+            cammAppended = packets > 0, cammPackets = packets, cammBinUs = outputs.cammBinUs)
     }
 
     @Synchronized
     private fun discardMotionLog() {
-        sealMotionLog(false)
-        motionLog?.delete()
-        motionLog = null
+        sealMotion(null, appendCamm = false)
+        motionGcsv = null
+        motionRecorder?.discard()
+        motionRecorder = null
     }
 
     /** Freeze all owned identities after closing/writing; every row remains pending. */
@@ -200,7 +231,8 @@ class VideoOutput private constructor(
         incomplete: List<String>? = null,
         clipSidecar: ClipSidecarProvider? = null,
     ) {
-        sealMotionLog(true)
+        // A take the stop did not seal (an early failure) keeps no motion data.
+        sealMotion(null, appendCamm = false)
         var fileVerified = ClipStepStatus.NOT_RUN
         var fileVerifiedDetail: String? = geometryFailure?.also { fileVerified = ClipStepStatus.FAIL }
         expectedGeometry?.takeIf { incomplete == null }?.let { expected ->
@@ -221,8 +253,9 @@ class VideoOutput private constructor(
         } ?: sidecarJson
         val published = if (incomplete != null) IncompleteTake.mark(metadata, incomplete) else metadata
         published?.let { writePendingSidecar(it, timingSidecar || sidecarJson == null, videoName) }
-        writePendingClipSidecar(clipSidecar, videoName, sidecarUri?.let(::ownedDisplayName), fileVerified, fileVerifiedDetail, incomplete)
+        // Before the clip sidecar, so its motion block knows whether the log was attached.
         attachMotionLogRow(videoName)
+        writePendingClipSidecar(clipSidecar, videoName, sidecarUri?.let(::ownedDisplayName), fileVerified, fileVerifiedDetail, incomplete)
         val artifacts = mutableListOf(PreparedCaptureArtifact(CaptureArtifactRole.VIDEO, uri.toString(), videoName))
         sidecarUri?.let { sidecar ->
             artifacts += PreparedCaptureArtifact(CaptureArtifactRole.VIDEO_METADATA, sidecar.toString(), ownedDisplayName(sidecar))
@@ -232,21 +265,30 @@ class VideoOutput private constructor(
         }
         check(descriptorRetired)
         recoveryMember.prepared(artifacts)
+        // The log goes to the publication observers only (the WebDAV upload); under the name Gyroflow pairs, or not at all.
+        val logName = motionLogName
+        motionLogUri?.takeIf { logName != null && logName.endsWith(".${GyroflowLog.EXTENSION}", ignoreCase = true) }?.let { log ->
+            artifacts += PreparedCaptureArtifact(CaptureArtifactRole.MOTION_LOG, log.toString(), requireNotNull(logName))
+        }
         preparedOutput = PreparedVideoOutput(uri, java.util.Collections.unmodifiableList(artifacts.toList()))
     }
 
     /** The log is an attachment, not a prepared artifact: a provider refusing it costs only the log. */
     private fun attachMotionLogRow(videoName: String) {
-        val file = motionLog ?: return
-        motionLog = null
+        val recorder = motionRecorder ?: return
+        val gcsv = motionGcsv
+        motionRecorder = null
+        motionGcsv = null
         try {
+            val file = gcsv ?: return
             if (!file.isFile || file.length() == 0L) return
-            val uri = recoveryMember.insertAuxiliary(videoName.removeSuffix(".mp4") + "." + GyroflowLog.EXTENSION, GyroflowLog.MIME_TYPE)
+            val logName = motionLogName(videoName)
+            val uri = recoveryMember.insertAuxiliary(logName, GyroflowLog.MIME_TYPE)
             try {
-                requireNotNull(context.contentResolver.openOutputStream(uri, "w")).use { out ->
-                    file.inputStream().use { it.copyTo(out) }
-                }
+                writeMotionLogRow(context.contentResolver, uri, file)
                 motionLogUri = uri
+                motionLogName = runCatching { ownedDisplayName(uri) }.getOrNull() ?: logName
+                motionSummary = motionSummary?.copy(gcsvAttached = true)
             } catch (failure: Throwable) {
                 recoveryMember.removeAuxiliary()
                 throw failure
@@ -254,7 +296,9 @@ class VideoOutput private constructor(
         } catch (failure: Exception) {
             android.util.Log.w("VideoOutput", "Gyroflow log skipped", failure)
         } finally {
-            file.delete()
+            // The take's files now hold everything the motion data could give: the spool is not needed again.
+            recorder.discard()
+            motionSummary?.let { android.util.Log.i("VideoOutput", it.logLine()) }
         }
     }
 
@@ -305,16 +349,24 @@ class VideoOutput private constructor(
 
     private fun deleteOwned() {
         check(descriptorRetired) { "Video descriptor retirement is incomplete" }
-        discardMotionLog()
+        // The sensors stop whatever happens to the output; its motion files go only with it.
+        synchronized(this) { motionRecorder?.stop() }
         // ADR-0011: only a zero-length file is deleted. A file with bytes stays pending, owned by the
         // recovery journal, which publishes it as incomplete if the process dies before a retry.
         if (!neverRecorded && (retainedBytes || context.contentResolver.ownedRowBytes(uri) != 0L)) {
             android.util.Log.w("VideoOutput", "Keeping $displayName: it holds bytes")
             recoveryMember.keepBytes()
+            // The spool, its description and any rendered log stay: a salvage in this process attaches the log, and
+            // after a process death the journal's recovery renders the spool for the kept take.
             return
         }
-        // The group waits for the separate native engine guard and any audio worker.
-        recoveryMember.abort()
+        try {
+            // The group waits for the separate native engine guard and any audio worker.
+            recoveryMember.abort()
+        } finally {
+            // A deleted (or never recorded) output has no use for its motion data.
+            discardMotionLog()
+        }
     }
 
     /**
@@ -334,6 +386,7 @@ class VideoOutput private constructor(
             val json = provider.build(ClipSidecarPrepareContext(
                 recordingId = recoveryGroup.id, videoName = videoName, metadataName = metadataName,
                 fileVerified = fileVerified, fileVerifiedDetail = fileVerifiedDetail, incompleteReasons = incomplete,
+                motion = motionSummary?.let { clipMotion(it, motionLogName) },
             )) ?: return
             val clip = clipSidecarUri ?: recoveryMember.insertClipSidecar(clipSidecarName(videoName))
             clipSidecarUri = clip

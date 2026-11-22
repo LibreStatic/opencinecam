@@ -3,6 +3,8 @@
 
 package com.librestatic.opencinecam.storage
 
+import com.librestatic.opencinecam.media.mux.Mp4Bytes
+import com.librestatic.opencinecam.media.mux.Mp4CammAppender
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.ByteBuffer
@@ -351,6 +353,35 @@ class Mp4MoovRebuilderTest {
         val s = synthetic(tornTail())
         val (access, _) = rebuild(s, indexFor(s))
         val done = access.data.copyOf()
+        assertEquals(Mp4RebuildResult.NotNeeded, Mp4MoovRebuilder.rebuildMoov(access, indexFor(s)))
+        assertArrayEquals(done, access.data)
+    }
+
+    @Test fun aFinishedTakeWithACammTrackIsLeftAlone() {
+        val s = synthetic(ByteArray(0))
+        val (access, _) = rebuild(s, indexFor(s))
+        // The CAMM track is only appended to a finished take; a later recovery pass must see a complete movie.
+        val bytes = object : Mp4Bytes {
+            override fun size(): Long = access.size
+            override fun readFully(position: Long, buffer: ByteBuffer) {
+                val n = access.read(position, buffer.array(), buffer.arrayOffset() + buffer.position(), buffer.remaining())
+                if (n < buffer.remaining()) throw java.io.EOFException("Read past ${access.size}")
+                buffer.position(buffer.position() + n)
+            }
+            override fun writeFully(position: Long, buffer: ByteBuffer) {
+                val data = ByteArray(buffer.remaining()).also { buffer.get(it) }
+                access.write(position, data)
+            }
+            override fun sync() {}
+        }
+        Mp4CammAppender.begin(bytes).use { appender ->
+            repeat(50) { appender.writePacket(it * 5_000L, 2, 0.1f, 0.2f, 0.3f) }
+            appender.finish()
+        }
+        val done = access.data.copyOf()
+        val moov = top(done).single { it.type == "moov" }
+        assertTrue(trak(moov, "meta") != null && trak(moov, "vide") != null && trak(moov, "soun") != null)
+
         assertEquals(Mp4RebuildResult.NotNeeded, Mp4MoovRebuilder.rebuildMoov(access, indexFor(s)))
         assertArrayEquals(done, access.data)
     }

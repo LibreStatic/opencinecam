@@ -14,8 +14,16 @@ import org.w3c.dom.Element
 class SecurityAuditManifestTest {
     private val androidNs = "http://schemas.android.com/apk/res/android"
 
-    /** The opt-in features the app declares: WebDAV (OCC-PLAN-067), geotagging (OCC-PLAN-066) and recording to a USB drive (OCC-PLAN-072). */
-    private val appOptInFeatures = setOf(OptInFeature.WEBDAV_TRANSFER, OptInFeature.GEOTAGGING, OptInFeature.USB_DRIVE_RECORDING)
+    /**
+     * The opt-in features the app declares: WebDAV (OCC-PLAN-067), geotagging (OCC-PLAN-066),
+     * recording to a USB drive (OCC-PLAN-072) and motion data at the sensors' full rate.
+     */
+    private val appOptInFeatures = setOf(
+        OptInFeature.WEBDAV_TRANSFER,
+        OptInFeature.GEOTAGGING,
+        OptInFeature.USB_DRIVE_RECORDING,
+        OptInFeature.MOTION_DATA,
+    )
 
     private fun manifestFile(): File {
         var dir: File? = File(System.getProperty("user.dir")).absoluteFile
@@ -98,6 +106,18 @@ class SecurityAuditManifestTest {
             input.copy(declaredOptInFeatures = appOptInFeatures - OptInFeature.WEBDAV_TRANSFER),
         )
         assertFalse(report.findings.first { it.findingId == "SEC-PERMISSIONS" }.passed)
+    }
+
+    @Test
+    fun realManifestFailsIfTheHighSamplingRatePermissionHasNoMotionDataOptIn() {
+        val input = manifestInput()
+        assertTrue(input.permissions.contains("android.permission.HIGH_SAMPLING_RATE_SENSORS"))
+        val report = SecurityPrivacyAccessibilityAuditor.audit(
+            input.copy(declaredOptInFeatures = appOptInFeatures - OptInFeature.MOTION_DATA),
+        )
+        assertFalse(report.passed)
+        assertFalse(report.findings.first { it.findingId == "SEC-PERMISSIONS" }.passed)
+        assertTrue(report.findings.first { it.findingId == "SEC-NETWORK" }.passed)
     }
 
     @Test

@@ -14,8 +14,13 @@ import com.librestatic.opencinecam.camera.RecordingGeometry
 import com.librestatic.opencinecam.settings.CaptureNameSnapshot
 import com.librestatic.opencinecam.settings.ProductionSlateSettings
 import com.librestatic.opencinecam.settings.afterSavedProductionSlate
-import com.librestatic.opencinecam.storage.MotionLogRecorder
-import com.librestatic.opencinecam.storage.MotionLogTarget
+import com.librestatic.opencinecam.motion.MotionTakeInfo
+import com.librestatic.opencinecam.motion.MotionTakeRecorder
+import com.librestatic.opencinecam.motion.MotionTakeRoute
+import com.librestatic.opencinecam.motion.MotionTakeTiming
+import com.librestatic.opencinecam.rawvideo.RawAudioClock
+import com.librestatic.opencinecam.storage.GyroflowLog
+import com.librestatic.opencinecam.storage.readTakeVideoTiming
 import com.librestatic.opencinecam.storage.VideoOutput
 import com.librestatic.opencinecam.storage.RecordingDestination
 import com.librestatic.opencinecam.storage.RecordingDestinationStore
@@ -110,33 +115,105 @@ internal fun CaptureService.releaseFailedTakeStart(receipt: CompletableFuture<Un
 }
 
 /**
- * Opt-in motion log for plain video, LOG and HLG takes (never high speed, slow motion or time-lapse).
- * Silent by design: no gyroscope or no sensor access just means no log.
+ * Opt-in motion data for every video route: the GPU pipeline (plain, LOG, HLG, off-speed, time lapse) spools each
+ * encoded frame, MediaRecorder (constrained high speed) is placed from its frame anchors at the stop. Silent by design:
+ * no gyroscope or no sensor access just means no motion data. [captureFps] is the camera's capture rate.
  */
-internal fun CaptureService.attachMotionLog(output: VideoOutput, wanted: Boolean, descriptor: Camera2CameraDescriptor?, geometry: RecordingGeometry?) {
+internal fun CaptureService.attachMotionLog(
+    output: VideoOutput,
+    wanted: Boolean,
+    descriptor: Camera2CameraDescriptor?,
+    geometry: RecordingGeometry?,
+    route: MotionTakeRoute,
+    captureFps: Double,
+) {
     if (!wanted || descriptor == null || geometry == null) return
-    MotionLogRecorder.start(this, MotionLogTarget(
+    val frontFacing = descriptor.lensFacing == android.hardware.camera2.CameraCharacteristics.LENS_FACING_FRONT
+    val realtime = descriptor.timestampSourceRealtime
+    val version = runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull()
+    val info = MotionTakeInfo(
+        takeId = output.recoveryGroup.id,
         videoFileName = output.displayName,
+        orientation = GyroflowLog.orientation(descriptor.sensorOrientation, frontFacing, geometry.pixelRotationDegrees),
+        readoutDirection = GyroflowLog.readoutDirection(geometry.pixelRotationDegrees),
+        frontFacing = frontFacing,
         sensorOrientationDegrees = descriptor.sensorOrientation,
-        frontFacing = descriptor.lensFacing == android.hardware.camera2.CameraCharacteristics.LENS_FACING_FRONT,
-        storedPixelRotationDegrees = geometry.pixelRotationDegrees,
-        timestampsSynced = descriptor.timestampSourceRealtime,
-        rollingShutterSkewNs = latestRollingShutterSkewNs,
-    ))?.let(output::attachMotionRecorder)
+        storedRotationDegrees = geometry.pixelRotationDegrees,
+        cameraClockRealtime = realtime,
+        // An UNKNOWN timestamp source is CLOCK_MONOTONIC in practice; SensorEvent times are boot time.
+        clockOffsetNs = if (realtime) 0L else RawAudioClock.measure(false).boottimeMinusMonotonicNs,
+        startedAtUnixMs = System.currentTimeMillis(),
+        firmware = "OpenCineCam ${version ?: ""}".trim(),
+        route = route,
+        captureFps = captureFps,
+    )
+    MotionTakeRecorder.start(this, info)?.let { recorder ->
+        output.attachMotionRecorder(recorder)
+        activeMotionRecorder = recorder
+    }
+}
+
+/**
+ * How the take's motion data meets its file, or null when it has none left to seal or it cannot be placed. The GPU
+ * route needs only the muxer's offset; a take kept incomplete needs two spooled frames. A null [videoMuxOffsetUs] (no
+ * capture epoch report) is 0: exact for a complete take, which reports one whenever the muxer adds an offset, but only
+ * assumed for an incomplete one, whose alignment is then estimated. The MediaRecorder route reads
+ * the finished file's video track, so the descriptor must still be open.
+ */
+internal fun motionTakeTiming(
+    output: VideoOutput,
+    direct: com.librestatic.opencinecam.camera.DirectRecorderTiming?,
+    videoMuxOffsetUs: Long?,
+    complete: Boolean,
+): MotionTakeTiming? {
+    if (!output.motionPending()) return null
+    val recorder = output.motionRecorder() ?: return null
+    return when (recorder.info.route) {
+        MotionTakeRoute.GPU -> MotionTakeTiming.EncodedFrames(videoMuxOffsetUs ?: 0L, minFrames = if (complete) 1 else 2,
+            offsetKnown = videoMuxOffsetUs != null || complete)
+        MotionTakeRoute.MEDIA_RECORDER -> {
+            val anchors = direct ?: return null
+            val video = try {
+                readTakeVideoTiming(output.descriptor.fileDescriptor)
+            } catch (problem: Exception) {
+                android.util.Log.w("MotionData", "The take's video timing could not be read; no motion data", problem)
+                return null
+            }
+            MotionTakeTiming.RecorderAnchors(
+                firstFrameSensorNs = anchors.firstFrameSensorNs,
+                lastFrameSensorNs = anchors.lastFrameSensorNs,
+                frames = anchors.frames,
+                drained = anchors.drained,
+                recorderStartElapsedNs = anchors.recorderStartElapsedNs,
+                fileSamples = video.sampleCount,
+                lastSampleTimeUs = video.lastSampleTimeUs,
+            )
+        }
+    }
 }
 
 /** Engine callbacks and main detach the take-owned outputs exactly once; the caller finishes them. */
-internal fun CaptureService.detachTake(): DetachedTake = synchronized(takeOwnershipLock) {
-    // Read before clearTakeDestination() below forgets it.
-    DetachedTake(videoOutput, audioSidecarRecorder, activeTransferPublication, audioStartFailure, activeRecordingGeometry,
-        takeContinuation?.link).also {
-        videoOutput = null
-        audioSidecarRecorder = null
-        activeTransferPublication = null
-        audioStartFailure = null
-        activeRecordingGeometry = null
-        clearTakeDestination()
+internal fun CaptureService.detachTake(): DetachedTake {
+    var motion: MotionTakeRecorder? = null
+    val take = synchronized(takeOwnershipLock) {
+        // Read before clearTakeDestination() below forgets it.
+        motion = activeMotionRecorder
+        DetachedTake(videoOutput, audioSidecarRecorder, activeTransferPublication, audioStartFailure, activeRecordingGeometry,
+            takeContinuation?.link).also {
+            // Every frame reached the encoder before the stop detaches the take; later callbacks belong to no take.
+            activeMotionRecorder = null
+            videoOutput = null
+            audioSidecarRecorder = null
+            activeTransferPublication = null
+            audioStartFailure = null
+            activeRecordingGeometry = null
+            clearTakeDestination()
+        }
     }
+    // The sensors stop with the take, whether or not its native writer retires; the spool stays for the seal or a
+    // later salvage. Never blocks: the spool is closed on the sensor thread.
+    listOfNotNull(take.video?.motionRecorder(), motion).distinct().forEach { it.stopAcquisition() }
+    return take
 }
 
 /** Stable failure codes pass through as incomplete reasons; anything else is an encoder failure. */
@@ -289,7 +366,10 @@ internal fun CaptureService.salvageInterruptedTake(take: DetachedTake, retiremen
                 reasons = reasons,
                 prepareAudio = audio?.let { sidecar -> { r -> sidecar.prepareIncompleteCompletion(r) } },
                 prepareVideo = { r ->
-                    output?.sealMotionLog(keep = false)
+                    // No muxer offset survives an interruption: 0 is exact without embedded audio, a few frames off with
+                    // it, so the log says its sync is estimated.
+                    output?.sealMotion(MotionTakeTiming.EncodedFrames(fileOffsetUs = 0L, minFrames = 2, offsetKnown = false)
+                        .takeIf { output.motionRecorder()?.info?.route == MotionTakeRoute.GPU }, appendCamm = false)
                     output?.prepareIncomplete(r, null, false, false, encodedFrames, clipSidecar)
                 },
             ),
@@ -403,10 +483,11 @@ internal fun CaptureService.runStillRecoveryPass(requests: List<StillRecoveryReq
 
 /**
  * Queues a pass over the journal of interrupted takes unless one is already waiting; takes on a drive that is not
- * mounted are kept for a later one. [startup] is the service start's pass. Any thread.
+ * mounted are kept for a later one. [startup] is the service start's pass; [announce] false keeps the pass from
+ * saying what it recovered ([CaptureService.JournalRecoveryRequest]). Any thread.
  */
-internal fun CaptureService.queueRecordingRecovery(cause: String, startup: Boolean = false) {
-    if (!journalRecoveryPass.request(JournalRecoveryRequest(cause, startup))) {
+internal fun CaptureService.queueRecordingRecovery(cause: String, startup: Boolean = false, announce: Boolean = true) {
+    if (!journalRecoveryPass.request(JournalRecoveryRequest(cause, startup, announce))) {
         android.util.Log.w("RecordingRecovery", "Recovery after $cause not queued; the drive's next mount or the service's next start retries it")
     }
 }
@@ -414,7 +495,7 @@ internal fun CaptureService.queueRecordingRecovery(cause: String, startup: Boole
 /** Recovery thread: one journal pass for every request drained, merged into the state's report. */
 internal fun CaptureService.runRecordingRecoveryPass(requests: List<JournalRecoveryRequest>) {
     val startup = requests.any { it.startup }
-    val causes = requests.filterNot { it.startup }
+    val causes = requests.filter { !it.startup && it.announce }
     val cause = requests.map { it.cause }.distinct().joinToString(", ")
     // A take running now is in the live-group registry, so recovery leaves it alone. RAW takes (PLAN-072
     // Delivery 3) are repaired in place, then published with their frames or discarded when they hold none.

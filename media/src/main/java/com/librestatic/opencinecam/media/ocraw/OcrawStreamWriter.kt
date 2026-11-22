@@ -233,6 +233,13 @@ class OcrawStreamWriter(
         return writeChunk(OcrawChunkId.FRAME_METADATA.wireId, timestampTicks, payload)
     }
 
+    /**
+     * Appends an `IMU_SAMPLES` chunk (a payload from [OcrawImuSamples.encode]) and returns its
+     * sequence. [firstSampleTicks] is the batch's first sample time, already on the frames' clock.
+     */
+    fun writeImuSamples(firstSampleTicks: Long, payload: ByteBuffer): Long =
+        writeChunk(OcrawChunkId.IMU_SAMPLES.wireId, firstSampleTicks, payload)
+
     /** Appends an opaque chunk; indexes and END are reserved to the writer. */
     fun writeChunk(wireId: Int, timestampTicks: Long, payload: ByteBuffer): Long {
         checkOpen()

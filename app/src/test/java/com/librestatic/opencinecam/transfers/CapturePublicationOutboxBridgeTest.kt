@@ -323,14 +323,59 @@ class CapturePublicationOutboxBridgeTest {
             PreparedCaptureArtifact(CaptureArtifactRole.AUDIO, "content://media/external/audio/media/3", "take.wav"),
             PreparedCaptureArtifact(CaptureArtifactRole.AUDIO_METADATA, "content://media/external/downloads/4", "take.wav.json"),
             PreparedCaptureArtifact(CaptureArtifactRole.CLIP_METADATA, "content://media/external/downloads/5", "take.clip.json"),
+            PreparedCaptureArtifact(CaptureArtifactRole.MOTION_LOG, "content://media/external/downloads/6", "take.gcsv"),
         )
         f.bridge.onPrepared(complete)
-        assertEquals(5, f.store.value?.artifacts?.size)
+        assertEquals(6, f.store.value?.artifacts?.size)
         assertFalse(requireNotNull(f.store.value).sealed)
         f.bridge.onPublished(complete.reversed())
         assertTrue(requireNotNull(f.store.value).sealed)
         assertEquals(WebDavArtifactRole.entries.toSet(), requireNotNull(f.store.value).artifacts.map { it.spec.role }.toSet())
-        assertEquals(10, f.probeCalls)
+        assertEquals(12, f.probeCalls)
+    }
+
+    @Test fun aTakeWithoutAGyroflowLogStagesExactlyAsBefore() {
+        val f = Fixture()
+        f.bridge.onPrepared(f.artifacts); f.bridge.onPublished(f.artifacts)
+        val sealed = requireNotNull(f.store.value)
+        assertTrue(sealed.sealed)
+        assertEquals(setOf(WebDavArtifactRole.VIDEO, WebDavArtifactRole.VIDEO_METADATA), sealed.artifacts.map { it.spec.role }.toSet())
+        assertTrue(sealed.artifacts.all { it.spec.remoteName == it.spec.sourceName })
+    }
+
+    @Test fun theGyroflowLogIsUploadedBesideItsVideoUnderTheVideosStem() {
+        val f = Fixture()
+        // The provider deduplicated the log row's name; the upload still pairs it with the video by stem.
+        val log = PreparedCaptureArtifact(CaptureArtifactRole.MOTION_LOG, "content://media/external/downloads/6", "take (1).gcsv")
+        val withLog = f.artifacts + log
+        f.bridge.onPrepared(withLog); f.bridge.onPublished(withLog.reversed())
+        val sealed = requireNotNull(f.store.value)
+        assertTrue(sealed.sealed)
+        assertEquals(CaptureOutboxRegistrationStatus.REGISTERED, f.bridge.lastRegistration?.status)
+        val spec = sealed.artifacts.single { it.spec.role == WebDavArtifactRole.MOTION_LOG }.spec
+        assertEquals(CapturePublicationOutboxBridge.artifactId(id(1), CaptureArtifactRole.MOTION_LOG), spec.id)
+        assertEquals("take (1).gcsv", spec.sourceName)
+        assertEquals("take.gcsv", spec.remoteName)
+        assertEquals("take.mp4", sealed.artifacts.single { it.spec.role == WebDavArtifactRole.VIDEO }.spec.remoteName)
+        // The committed receipt keeps the log, so a reopened bridge rebuilds the same plan.
+        assertEquals(CaptureOutboxRegistrationStatus.ALREADY_REGISTERED, f.reopen().registerCommitted().status)
+        assertEquals("A 001.gcsv", CapturePublicationOutboxBridge.remoteName(log, listOf(
+            PreparedCaptureArtifact(CaptureArtifactRole.VIDEO, "content://media/external/video/media/1", "A 001.mp4"), log)))
+    }
+
+    @Test fun anUnreadableGyroflowLogBlocksRegistrationExactlyAsAnUnreadableClipSidecarDoes() {
+        for (role in listOf(CaptureArtifactRole.CLIP_METADATA, CaptureArtifactRole.MOTION_LOG)) {
+            val f = Fixture()
+            val withAuxiliaries = f.artifacts + listOf(
+                PreparedCaptureArtifact(CaptureArtifactRole.CLIP_METADATA, "content://media/external/downloads/5", "take.clip.json"),
+                PreparedCaptureArtifact(CaptureArtifactRole.MOTION_LOG, "content://media/external/downloads/6", "take.gcsv"))
+            f.failProbeRole = role
+            assertThrows(CapturePublicationOutboxFailure::class.java) { f.bridge.onPrepared(withAuxiliaries) }
+            assertEquals(role.name, 0, f.store.stageCalls)
+            // Bookkeeping only: the capture's own journal still records the take.
+            assertEquals(role.name, CapturePublicationState.PREPARED, f.journal.value?.state)
+            assertEquals(role.name, CaptureOutboxRegistrationStatus.BLOCKED, f.bridge.lastRegistration?.status)
+        }
     }
 
     @Test fun enrollmentForDifferentBundleCannotEnrollCurrentCapture() {

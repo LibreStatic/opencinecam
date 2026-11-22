@@ -82,6 +82,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.unit.dp
 import com.librestatic.opencinecam.settings.AboutScreen
 import com.librestatic.opencinecam.diagnostics.CameraCapabilitiesScreen
+import com.librestatic.opencinecam.diagnostics.MotionSensorFact
+import com.librestatic.opencinecam.diagnostics.MotionSensorKind
 import com.librestatic.opencinecam.diagnostics.StorageBenchmarkContent
 import com.librestatic.opencinecam.calibration.LensCalibrationContent
 import com.librestatic.opencinecam.calibration.LensCalibrationFailure
@@ -375,6 +377,16 @@ fun CaptureGraphFallback() = CaptureChrome(
     driverCaptureState(CaptureMode.RAW_PHOTO).copy(previewGraphLoss = com.librestatic.opencinecam.camera.PreviewGraphLoss(analysis = true, raw = true)),
 )
 
+/**
+ * Video with motion data on while the camera reports the lens' optical stabilisation on: the "OIS on" notice
+ * (`motion-ois-notice`) under the zoom.
+ */
+@Composable
+fun CaptureMotionOis() = CaptureChrome(
+    driverCaptureState(CaptureMode.VIDEO).copy(reportedOpticalStabilization = 1),
+    settings = CameraSettings(histogramEnabled = true, gyroflowLogEnabled = true),
+)
+
 /** A take that asked for HEVC records H.264: the fallback is the recording warning. */
 @Composable
 fun CaptureCodecFallback() = CaptureChrome(
@@ -429,6 +441,24 @@ fun CaptureDestinationContinued() = CaptureChrome(
     driverCaptureState(CaptureMode.VIDEO, CameraUiPhase.RECORDING).copy(recordingElapsedMs = 4_000L,
         recordingDestination = com.librestatic.opencinecam.RecordingDestinationStatus(configuredDrive = true, driveLabel = "WD Elements",
             continuedOnPhone = true)),
+)
+
+/**
+ * A time-lapse take on air, which can be paused: the round pause key (`recording-pause`) beside the record button, in the
+ * gallery's place on a phone.
+ */
+@Composable
+fun CaptureTimeLapseRecording() = TimeLapseTake(paused = false)
+
+/** The same take paused: the amber resume key, and "Paused" in the status. */
+@Composable
+fun CaptureTimeLapsePaused() = TimeLapseTake(paused = true)
+
+@Composable
+private fun TimeLapseTake(paused: Boolean) = CaptureChrome(
+    driverCaptureState(CaptureMode.TIME_LAPSE, CameraUiPhase.RECORDING).copy(recordingElapsedMs = 83_000L,
+        recordingPauseStatus = com.librestatic.opencinecam.camera.TimelapsePauseStatus(1, paused = paused, finished = false,
+            observedAtMs = 0, activeElapsedMs = 83_000L, pausedElapsedMs = 0, events = emptyList())),
 )
 
 /** Capture chrome while a video take is recording at 01:23. */
@@ -1392,6 +1422,19 @@ fun CapabilitiesDeviceProfile() = DriverTheme {
     val quirks = com.librestatic.opencinecam.diagnostics.BundledDeviceQuirks.fromDocuments(documents, "blanc", "motorola/blanc_g/blanc:16/NEXT.1/1:user/release-keys")
     CameraCapabilitiesScreen(listOf(DriverCamera), "0", onBack = {}, loadInventory = { FakeInventory }, loadCodecAudio = { _, _ -> null },
         loadMain10Check = { null }, loadDeviceProfile = { _, cameraId -> quirks.resolve(cameraId) })
+}
+
+/** Capabilities with the motion sensors card: gyroscope and accelerometer at 500 Hz, magnetometer at 100 Hz. */
+@Composable
+fun CapabilitiesMotionSensors() = DriverTheme {
+    val sensors = listOf(
+        MotionSensorFact(MotionSensorKind.GYROSCOPE, true, "LSM6DSO Gyroscope", "STMicro", 2000, 500.0, 0.0012217305f, 34.906586f, 3000, false),
+        MotionSensorFact(MotionSensorKind.ACCELEROMETER, true, "LSM6DSO Accelerometer", "STMicro", 2000, 500.0, 0.0023956299f, 78.4532f, 3000, false),
+        MotionSensorFact(MotionSensorKind.MAGNETOMETER, true, "MMC5603 Magnetometer", "MEMSIC", 10_000, 100.0, 0.0625f, 3000f, 0, false),
+    )
+    CameraCapabilitiesScreen(listOf(DriverCamera), "0", onBack = {}, loadInventory = { FakeInventory }, loadCodecAudio = { _, _ -> null },
+        loadMain10Check = { null }, loadDeviceProfile = { _, _ -> com.librestatic.opencinecam.core.model.QuirkResolution.NONE },
+        loadMotionSensors = { sensors })
 }
 
 /** The storage benchmark page with a finished, qualified result (three windows). */
