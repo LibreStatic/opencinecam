@@ -5,6 +5,7 @@ import android.content.Context
 import android.util.Log
 import java.io.BufferedWriter
 import java.io.File
+import java.io.IOException
 import java.io.FileOutputStream
 import java.io.OutputStream
 import java.io.OutputStreamWriter
@@ -46,11 +47,13 @@ internal class MotionTakeRecorder internal constructor(
 
     /**
      * On the sensor thread. A failed write or flush ends the take's motion data: it is rethrown so that
-     * MotionSampleSource stops the sensors and hands nothing more over; the video never depends on it.
+     * MotionSampleSource stops the sensors and hands nothing more over; the video never depends on it. So does a
+     * spool that already lost a record (a full frame queue): nothing will render it, so the sensors stop too.
      */
     internal val consumer = MotionSampleConsumer { kind, timestampNs, x, y, z ->
         if (failed) return@MotionSampleConsumer
         try {
+            if (writer.failed) throw IOException("motion spool incomplete")
             writer.sample(kind, timestampNs, x, y, z)
             // About once a second, without fsync: a crash then loses at most the last second and its page cache.
             if (lastFlushNs == Long.MIN_VALUE) lastFlushNs = timestampNs
@@ -110,8 +113,13 @@ internal class MotionTakeRecorder internal constructor(
         stopped = true
         acquisitionStopped = true
         // Also after stopAcquisition: waits for the sensor thread to hand over the samples it still held, so the
-        // spool's tail is whole before it is read.
-        runCatching { source?.stop() }
+        // spool's tail is whole before it is read. A thread that outlasts the wait (a stalled storage write) may
+        // still hold samples the close below would shut out, so the spool then counts as incomplete.
+        val acquisition = source
+        if (acquisition != null && !runCatching { acquisition.stop() }.getOrDefault(false)) {
+            failed = true
+            Log.w(TAG, "Motion sensor thread did not stop in time; motion data incomplete")
+        }
         closeWriter()
     }
 

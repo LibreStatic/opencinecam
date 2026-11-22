@@ -227,17 +227,23 @@ class MotionSpoolFormatTest {
         val perBuffer = MotionSpoolFormat.BUFFER_BYTES / MotionSpoolFormat.RECORD_BYTES
         // The sensor thread fills the buffer, and its drain stalls in the write.
         val sensor = Thread { for (i in 0..perBuffer) writer.sample(MotionSpoolFormat.KIND_GYRO, i + 1L, 0f, 0f, 1f) }
-        sensor.start()
-        assertTrue(entered.await(5, java.util.concurrent.TimeUnit.SECONDS))
         val frames = Thread {
             for (i in 0 until 100) writer.frame(i.toLong(), i.toLong())
             writer.exposure(1L, 10_000_000, 0)
         }
-        frames.start()
-        frames.join(2_000)
-        val returned = !frames.isAlive
-        release.countDown()
-        sensor.join(5_000)
+        var returned = false
+        sensor.start()
+        try {
+            assertTrue(entered.await(5, java.util.concurrent.TimeUnit.SECONDS))
+            frames.start()
+            frames.join(2_000)
+            returned = !frames.isAlive
+        } finally {
+            // Also when an assertion fails: never leave the sensor thread parked in the stalled write.
+            release.countDown()
+            sensor.join(5_000)
+            if (frames.isAlive) frames.join(5_000)
+        }
         assertTrue("frame() waited for the stalled write", returned)
         assertEquals(100L, writer.frameCount)
         assertEquals(false, writer.failed)

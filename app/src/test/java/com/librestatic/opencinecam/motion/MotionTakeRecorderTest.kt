@@ -48,9 +48,11 @@ class MotionTakeRecorderTest {
     private class FakeAcquisition : MotionAcquisition {
         override val sensors = MotionSensorSet(200.0, false, null, false, null)
         var stops = 0
+        var ends = true
         var pending: (() -> Unit)? = null
-        override fun stop() {
+        override fun stop(): Boolean {
             stops++
+            return ends
         }
         override fun stopThen(after: () -> Unit) {
             pending = after
@@ -123,6 +125,26 @@ class MotionTakeRecorderTest {
         assertEquals(500, rendered!!.result.gyroSamples)
         // The sensor thread's close comes later and is harmless.
         acquisition.pending!!.invoke()
+    }
+
+    @Test fun aSensorThreadThatOutlastsTheStopLeavesNoMotionData() {
+        val (recorder, acquisition) = recorder()
+        record(recorder)
+        // The thread is stalled in storage: samples it accepted may never reach the spool.
+        acquisition.ends = false
+        assertNull(recorder.render(MotionTakeTiming.EncodedFrames(0L), withCamm = false))
+    }
+
+    @Test fun aFullFrameQueueStopsTheSensorsAtTheNextSample() {
+        val (recorder, _) = recorder()
+        // No sample drains the queue, so one frame more than it holds is lost.
+        for (i in 0..MotionSpoolFormat.QUEUE_RECORDS) recorder.onFrame(startNs + i * frameNs, i * frameNs)
+        assertThrows(IOException::class.java) {
+            recorder.consumer.onSample(MotionSpoolFormat.KIND_GYRO, startNs + 1_000_000L, 0f, 0f, 1f)
+        }
+        // Delivery has stopped: later samples are passed over without another failure.
+        recorder.consumer.onSample(MotionSpoolFormat.KIND_GYRO, startNs + 6_000_000L, 0f, 0f, 1f)
+        assertNull(recorder.render(MotionTakeTiming.EncodedFrames(0L), withCamm = false))
     }
 
     @Test fun aWriterThatCannotStartClosesItsStream() {

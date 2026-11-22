@@ -32,8 +32,12 @@ internal class MotionSensorSet(
 internal interface MotionAcquisition {
     val sensors: MotionSensorSet
 
-    /** Stops delivery and waits for the sensor thread to end, also when [stopThen] already stopped it. Idempotent. */
-    fun stop()
+    /**
+     * Stops delivery and waits for the sensor thread to end, also when [stopThen] already stopped it. Idempotent.
+     * False when the thread was still running after the wait: it may yet hold samples it accepted, so what the
+     * consumer has is not known to be whole.
+     */
+    fun stop(): Boolean
 
     /**
      * Stops delivery without waiting: unregisters the sensors, then runs [after] on the sensor thread once the samples
@@ -81,18 +85,21 @@ internal class MotionSampleSource private constructor(
         override fun onAccuracyChanged(sensor: Sensor, accuracy: Int) = Unit
     }
 
-    /** Unregisters the sensors and ends the thread; no sample reaches the consumer afterwards. Idempotent. */
+    /**
+     * Unregisters the sensors and ends the thread, waiting up to a second for it. True when it ended, so no sample
+     * reaches the consumer afterwards; false when it is still running (a consumer stalled in storage). Idempotent.
+     */
     @Synchronized
-    override fun stop() {
-        if (stopped) {
-            // After stopThen: its thread is still handing over the samples queued before the stop.
-            if (Thread.currentThread() !== thread) runCatching { thread.join(1_000) }
-            return
+    override fun stop(): Boolean {
+        if (!stopped) {
+            stopped = true
+            runCatching { manager.unregisterListener(listener) }
+            thread.quitSafely()
         }
-        stopped = true
-        runCatching { manager.unregisterListener(listener) }
-        thread.quitSafely()
-        runCatching { thread.join(1_000) }
+        // Also after stopThen: its thread is still handing over the samples queued before the stop.
+        if (Thread.currentThread() === thread) return true
+        runCatching { thread.join(STOP_WAIT_MS) }
+        return !thread.isAlive
     }
 
     override fun stopThen(after: () -> Unit) {
@@ -128,6 +135,7 @@ internal class MotionSampleSource private constructor(
     companion object {
         private const val TAG = "MotionData"
         private const val FALLBACK_PERIOD_US = 5_000
+        private const val STOP_WAIT_MS = 1_000L
 
         /** Null when the device has no gyroscope or it cannot be read. Never throws. */
         fun start(context: Context, consumer: MotionSampleConsumer): MotionSampleSource? {
