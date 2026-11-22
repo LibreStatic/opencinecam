@@ -148,6 +148,10 @@ class CameraRootStateTest {
         assertEquals(settings.copy(timelapseWidth = 1920, timelapseHeight = 1080), updated)
     }
 
+    @Test fun aLensCalibrationsOwnRateIsNotKept() {
+        assertSame(settings, settings.followingCameraSelection(state(CaptureMode.VIDEO).copy(lensCalibrationRunning = true)))
+    }
+
     @Test fun nothingFollowsWhileRecordingOrInOtherModes() {
         assertSame(settings, settings.followingCameraSelection(state(CaptureMode.VIDEO, CameraUiPhase.RECORDING)))
         assertSame(settings, settings.followingCameraSelection(state(CaptureMode.LOG, CameraUiPhase.RECORDING)))

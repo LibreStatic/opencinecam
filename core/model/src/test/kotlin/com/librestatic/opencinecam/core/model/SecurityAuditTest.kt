@@ -90,6 +90,39 @@ class SecurityAuditTest {
     }
 
     @Test
+    fun highSamplingRateSensorsPassOnlyWithTheMotionDataOptIn() {
+        val withSensors = safeInput.permissions + "android.permission.HIGH_SAMPLING_RATE_SENSORS"
+        val allowed = SecurityPrivacyAccessibilityAuditor.audit(
+            safeInput.copy(permissions = withSensors, declaredOptInFeatures = setOf(OptInFeature.MOTION_DATA)),
+        )
+        assertTrue(allowed.passed)
+
+        val otherFeatures = setOf(OptInFeature.WEBDAV_TRANSFER, OptInFeature.GEOTAGGING, OptInFeature.USB_DRIVE_RECORDING)
+        val noMotionData = SecurityPrivacyAccessibilityAuditor.audit(
+            safeInput.copy(permissions = withSensors, declaredOptInFeatures = otherFeatures),
+        )
+        assertEquals(listOf("SEC-PERMISSIONS"), noMotionData.findings.filterNot { it.passed }.map { it.findingId })
+    }
+
+    @Test
+    fun motionDataJustifiesNoNetworkLocationOrBodySensorPermission() {
+        listOf(
+            "android.permission.INTERNET",
+            "android.permission.ACCESS_FINE_LOCATION",
+            "android.permission.BODY_SENSORS",
+        ).forEach { permission ->
+            val report = SecurityPrivacyAccessibilityAuditor.audit(
+                safeInput.copy(
+                    permissions = safeInput.permissions + permission,
+                    declaredOptInFeatures = setOf(OptInFeature.MOTION_DATA),
+                ),
+            )
+            assertFalse(permission, report.passed)
+            assertFalse(permission, report.findings.first { it.findingId == "SEC-PERMISSIONS" }.passed)
+        }
+    }
+
+    @Test
     fun optInFeaturesDoNotJustifyOtherNetworkLocationOrSensitivePermissions() {
         val allFeatures = setOf(OptInFeature.WEBDAV_TRANSFER, OptInFeature.GEOTAGGING)
         listOf(

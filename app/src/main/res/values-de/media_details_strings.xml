@@ -7,6 +7,7 @@
     <string name="media_detail_group_colour">Farbe</string>
     <string name="media_detail_group_audio">Audio</string>
     <string name="media_detail_group_camera">Kamera und Belichtung</string>
+    <string name="media_detail_group_motion">Bewegungsdaten</string>
     <string name="media_detail_group_raw">RAW</string>
     <string name="media_detail_group_recording">Aufnahme</string>
     <string name="media_detail_loading">Dateidetails werden gelesen…</string>
@@ -117,6 +118,17 @@
     <string name="media_detail_audio_separate_wav">Eigene Datei (WAV)</string>
     <string name="media_detail_audio_separate_flac">Eigene Datei (FLAC)</string>
     <string name="media_detail_eis_preview">Vorschau-Stabilisierung</string>
+    <string name="media_detail_gyroscope">Gyroskop</string>
+    <string name="media_detail_accelerometer">Beschleunigungssensor</string>
+    <string name="media_detail_magnetometer">Magnetometer</string>
+    <string name="media_detail_motion_no_samples">Keine Messwerte</string>
+    <string name="media_detail_motion_sync">Synchronisation</string>
+    <string name="media_detail_motion_sync_measured">Gemessen</string>
+    <string name="media_detail_motion_sync_clock">Geschätzt: Kamerauhr</string>
+    <string name="media_detail_motion_sync_frames">Geschätzt: Recorder-Timing</string>
+    <string name="media_detail_motion_track">Eingebettete Spur (CAMM)</string>
+    <string name="media_detail_motion_track_packets">Ja, %1$d Pakete</string>
+    <string name="media_detail_motion_log">Gyroflow-Protokoll</string>
     <!-- PLAN-076: a RAW take's window in its RAW output, when smaller. -->
     <string name="media_detail_crop">Ausschnitt</string>
     <string name="media_detail_crop_value">%1$d × %2$d bei +%3$d +%4$d von %5$d × %6$d</string>

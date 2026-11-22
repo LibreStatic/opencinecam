@@ -47,6 +47,13 @@ class SettingsCatalogTest {
         val label = { id: Int -> if (id == R.string.input_eq_title) "Input equaliser" else "" }
         assertEquals(setOf(AUDIO_EQ_SETTING_ID), SettingsCatalog.titleMatches("equaliser", label))
     }
+    @Test fun motionDataIsSearchableByItsSensorsAndOutputs() {
+        for (query in listOf("gyroflow", "giroscopio", "magnetometer", "magnetómetro", "magnétomètre", "CAMM", "imu", "gcsv", "stabilisation", "estabilización", "Bewegungsdaten", "motion data"))
+            assertTrue(query, "gyroflow-log" in SettingsCatalog.search(query, null) { "" })
+        assertTrue("gyroflow-log" in SettingsCatalog.search("", SettingsCategory.RECORDING) { "" })
+        val label = { id: Int -> if (id == R.string.gyroflow_log_title) "Motion data" else "" }
+        assertEquals(setOf("gyroflow-log"), SettingsCatalog.titleMatches("motion data", label))
+    }
     @Test fun categoryFiltersAndUnknownSearchIsEmpty() {
         assertFalse("torch" in SettingsCatalog.search("", SettingsCategory.AUDIO) { "" })
         assertTrue(SettingsCatalog.search("no-such-setting", null) { "" }.isEmpty())

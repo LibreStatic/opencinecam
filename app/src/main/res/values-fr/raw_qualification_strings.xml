@@ -123,7 +123,7 @@
     <string name="raw_qualification_option_predict_body">Plus rapide. Une configuration que le stockage ne peut pas tenir est marquée risquée d’après le test du stockage, sans l’enregistrer.</string>
     <string name="raw_qualification_option_camera_only">Test de la caméra seulement</string>
     <string name="raw_qualification_option_camera_only_body">Saute le test du stockage. Chaque configuration que la caméra fournit est marquée risquée : vous pouvez la choisir à la main, Automatique ne la choisit jamais.</string>
-    <string name="raw_qualification_reuse">Les vérifications de la caméra de la dernière qualification sont réutilisées</string>
+    <string name="raw_qualification_reuse">Les mesures de la caméra de la dernière qualification sont réutilisées</string>
     <string name="raw_qualification_item_untested">stockage non testé</string>
     <string name="raw_qualification_risky_body_untested">Vous pouvez les choisir à la main, mais le stockage n’a pas été testé à leur débit : une prise peut saccader, prendre du retard ou finir corrompue. Automatique ne les choisit jamais.</string>
     <string name="raw_qualification_risky_body_mixed">Vous pouvez les choisir, mais le stockage est trop lent pour leur débit ou n’a pas été testé : une prise peut saccader, prendre du retard ou finir corrompue.</string>

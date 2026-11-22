@@ -25,6 +25,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <!-- Opt-in WebDAV auto-upload of new takes (WorkManager) and the operator-started network drive: visible dataSync services. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- Opt-in motion data (gyroscope, accelerometer, magnetometer) at the sensors' full rate, read only while a take records. -->
+    <uses-permission android:name="android.permission.HIGH_SAMPLING_RATE_SENSORS" />
     <!-- The recording folder picker resolves the system DocumentsUI by package (RecordingFolderPicker). -->
     <queries>
         <intent>

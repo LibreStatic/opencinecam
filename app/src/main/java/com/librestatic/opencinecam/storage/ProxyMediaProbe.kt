@@ -19,14 +19,22 @@ internal data class ProxyTrack(
 internal data class ProxyMediaProbe(val video: ProxyTrack, val audio: ProxyTrack?, val geometry: VideoDisplayGeometry,
     val visibleRaster: VideoDisplayGeometry = geometry)
 
+/** The one video track and the optional audio track among the extractor's track [mimes]. Tracks that are neither, such as
+ * the CAMM motion metadata a take carries (reported with another MIME type, or not at all), are left out of a proxy. */
+internal fun proxyTrackIndices(mimes: List<String?>): Pair<Int, Int?> {
+    val video = mimes.indices.filter { mimes[it]?.startsWith("video/") == true }
+    val audio = mimes.indices.filter { mimes[it]?.startsWith("audio/") == true }
+    require(video.size == 1 && audio.size <= 1) { "Proxy requires one video and at most one audio track" }
+    return video.single() to audio.singleOrNull()
+}
+
 internal suspend fun probeProxyMedia(context: Context, uri: Uri): ProxyMediaProbe {
     val extractor = MediaExtractor()
     try {
         extractor.setDataSource(context, uri, null)
         val formats = (0 until extractor.trackCount).map(extractor::getTrackFormat)
-        val videoIndex = formats.indices.single { formats[it].getString(MediaFormat.KEY_MIME)?.startsWith("video/") == true }
-        val audioIndices = formats.indices.filter { formats[it].getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true }
-        require(audioIndices.size <= 1 && formats.size == 1 + audioIndices.size) { "Proxy requires one video and at most one audio track; extra tracks need an explicit mapping" }
+        val (videoIndex, audioIndex) = proxyTrackIndices(formats.map { it.getString(MediaFormat.KEY_MIME) })
+        val audioIndices = listOfNotNull(audioIndex)
         val f = formats[videoIndex]
         fun int(key: String, default: Int) = if (f.containsKey(key)) f.getInteger(key) else default
         val width = f.getInteger(MediaFormat.KEY_WIDTH); val height = f.getInteger(MediaFormat.KEY_HEIGHT)

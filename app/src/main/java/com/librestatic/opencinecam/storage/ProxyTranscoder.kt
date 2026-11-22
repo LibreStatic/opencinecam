@@ -140,12 +140,8 @@ internal class ProxyTranscoder(context: Context) {
         try {
             extractor.setDataSource(context, source, null)
             val formats = (0 until extractor.trackCount).map(extractor::getTrackFormat)
-            val video = formats.filter { it.getString(MediaFormat.KEY_MIME)?.startsWith("video/") == true }
-            val audio = formats.filter { it.getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true }
-            require(video.size == 1 && audio.size <= 1 && video.size + audio.size == formats.size) {
-                "Proxy requires one video and at most one audio track; other tracks would be lost"
-            }
-            val track = video.single()
+            val (videoIndex, audioIndex) = proxyTrackIndices(formats.map { it.getString(MediaFormat.KEY_MIME) })
+            val track = formats[videoIndex]
             val transfer = if (track.containsKey(MediaFormat.KEY_COLOR_TRANSFER)) track.getInteger(MediaFormat.KEY_COLOR_TRANSFER) else null
             require(transfer !in setOf(MediaFormat.COLOR_TRANSFER_HLG, MediaFormat.COLOR_TRANSFER_ST2084) &&
                 !track.containsKey(MediaFormat.KEY_HDR_STATIC_INFO)) { "HDR proxy conversion is not supported" }
@@ -155,7 +151,7 @@ internal class ProxyTranscoder(context: Context) {
             require(track.containsKey(MediaFormat.KEY_DURATION)) { "Proxy source video duration is unknown" }
             val durationUs = if (sidecar) probeProxyVideoEndUs(context, source) else track.getLong(MediaFormat.KEY_DURATION)
             require(durationUs > 0) { "Proxy source video duration must be positive" }
-            extractor.selectTrack(formats.indexOf(track))
+            extractor.selectTrack(videoIndex)
             var samples = 0
             var maxPtsUs = -1L
             while (extractor.sampleTime >= 0) {
@@ -166,7 +162,7 @@ internal class ProxyTranscoder(context: Context) {
                 if (!extractor.advance()) break
             }
             require(samples > 0 && maxPtsUs < durationUs) { "Proxy source duration must include every video sample" }
-            return SourceInfo(audio.singleOrNull()?.getString(MediaFormat.KEY_MIME), durationUs)
+            return SourceInfo(audioIndex?.let { formats[it].getString(MediaFormat.KEY_MIME) }, durationUs)
         } finally { extractor.release() }
     }
 

@@ -1108,5 +1108,202 @@ class OcrawWavExportTest(unittest.TestCase):
             to_dng.main([str(path)])
 
 
+def imu_payload(records: list[tuple[int, int, float, float, float]], version: int = 1) -> bytes:
+    """An IMU_SAMPLES payload of `(kind, timeNs, x, y, z)` records (docs/formats/opencine-raw-v1.md)."""
+    return struct.pack("<BBHI", version, 0, 0, len(records)) + b"".join(
+        struct.pack("<Bqfff", *record) for record in records)
+
+
+def build_imu_take(imu: list[tuple[int, bytes]], frame_ticks: list[int], extra: dict[str, str] | None = None,
+                   static: dict[str, str] | None = None) -> bytes:
+    """A take with RAW frames at [frame_ticks] (ns) and IMU_SAMPLES chunks interleaved after the first frame."""
+    writer = TakeWriter()
+    values = dict(STATIC if static is None else static)
+    values.update(extra or {})
+    writer.append(ocraw.METADATA, cbor_text_map(values), ticks=frame_ticks[0])
+    for index, ticks in enumerate(frame_ticks):
+        writer.append(ocraw.RAW_FRAME, frame_payload(frame_pixels(index, WIDTH * HEIGHT), WIDTH, HEIGHT, index), ticks)
+        if index == 0:
+            for chunk_ticks, payload in imu:
+                writer.append(ocraw.IMU_SAMPLES, payload, chunk_ticks)
+    writer.append(ocraw.END, b"")
+    return bytes(writer.data)
+
+
+GYRO, ACCEL, MAG = 1, 2, 3
+IMU_KEYS = {
+    "imuOrientation": "yxz",
+    "imuReadoutDirection": "1",
+    "rollingShutterSkewNs": "12345678",
+    "imuClock": "shared",
+    "takeStartUnixMs": "1763700000123",
+}
+FRAME_TICKS = [1_000_000_000, 1_041_666_667]  # 24 fps: the log ends at 1_083_333_333.67 ns
+
+
+class OcrawGcsvExportTest(unittest.TestCase):
+    """`--gcsv`: the IMU_SAMPLES chunks of a RAW take as a Gyroflow motion log."""
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.tmp = Path(self.directory.name)
+
+    def tearDown(self):
+        self.directory.cleanup()
+
+    def write(self, data: bytes, name: str = "take.ocraw") -> Path:
+        path = self.tmp / name
+        path.write_bytes(data)
+        return path
+
+    def full_take(self) -> bytes:
+        first = imu_payload([
+            (GYRO, 990_000_000, 9.0, 9.0, 9.0),  # before the first frame: dropped
+            (GYRO, 1_000_001_500, 0.5, -0.25, 0.125),  # 1.5 us: t = 1 (integer division)
+            (GYRO, 1_004_500_000, 0.0, 0.0, 0.0),  # midway between both accelerometer samples: the later one
+            (ACCEL, 999_000_000, 0.0, 0.0, 9.80665),
+            (ACCEL, 1_010_000_000, 4.903325, 0.0, 0.0),
+            (MAG, 1_000_000_000, 50.0, -25.0, 10.0),
+            (9, 1_002_000_000, 1.0, 1.0, 1.0),  # unknown kind: skipped
+        ])
+        second = imu_payload([
+            (GYRO, 1_020_000_000, 1.0, 0.0, -1.0),
+            (GYRO, 1_083_333_333, 0.125, 0.125, 0.125),  # inside the last frame interval
+            (GYRO, 1_083_333_334, 7.0, 7.0, 7.0),  # after it: dropped
+        ])
+        future = imu_payload([(GYRO, 1_030_000_000, 5.0, 5.0, 5.0)], version=2)
+        return build_imu_take([(990_000_000, first), (1_020_000_000, second), (1_030_000_000, future)],
+                              FRAME_TICKS, IMU_KEYS)
+
+    def test_gcsv_text_matches_the_gyroflow_log_exactly(self):
+        path = self.write(self.full_take())
+        target = self.tmp / "motion.gcsv"
+        code, summary = run_cli([str(path), "--gcsv", str(target)])
+        self.assertEqual(0, code, summary)
+        self.assertEqual(
+            "GYROFLOW IMU LOG\n"
+            "version,1.3\n"
+            "id,opencinecam\n"
+            "orientation,yxz\n"
+            "note,t=0 at first recorded frame\n"
+            "fwversion,1.0.0\n"
+            "timestamp,1763700000\n"
+            "vendor,OpenCineCam\n"
+            "videofilename,take.ocraw\n"
+            "frame_readout_time,12.3457\n"
+            "frame_readout_direction,1\n"
+            "tscale,0.000001\n"
+            "gscale,0.00001\n"
+            "ascale,0.00001\n"
+            "mscale,0.00001\n"
+            "t,gx,gy,gz,ax,ay,az,mx,my,mz\n"
+            "1,50000,-25000,12500,0,0,100000,50000,-25000,10000\n"
+            "4500,0,0,0,50000,0,0,50000,-25000,10000\n"
+            "20000,100000,0,-100000,50000,0,0,50000,-25000,10000\n"
+            "83333,12500,12500,12500,50000,0,0,50000,-25000,10000\n",
+            target.read_bytes().decode("utf-8"))
+        self.assertIn("4 rows; gyroscope, accelerometer, magnetometer; synced clock", summary)
+        self.assertIn("dropped 2 gyroscope samples", summary)
+        # Only the log: no DNG folder without -o.
+        self.assertEqual(["motion.gcsv", "take.ocraw"], sorted(p.name for p in self.tmp.iterdir()))
+
+    def test_output_folder_gets_the_log_by_default(self):
+        path = self.write(self.full_take())
+        out = self.tmp / "dng"
+        code, summary = run_cli([str(path), "-o", str(out), "--pure"])
+        self.assertEqual(0, code, summary)
+        self.assertEqual(["dng.gcsv", "take_000000.dng", "take_000001.dng"], sorted(p.name for p in out.iterdir()))
+        self.assertTrue((out / "dng.gcsv").read_text().startswith("GYROFLOW IMU LOG\nversion,1.3\n"))
+
+        code, summary = run_cli([str(path), "--cinemadng", str(self.tmp / "clips"), "--pure"])
+        self.assertEqual(0, code, summary)
+        folder = self.tmp / "clips" / "take"
+        self.assertEqual(["take.gcsv", "take_000000.dng", "take_000001.dng"], sorted(p.name for p in folder.iterdir()))
+        self.assertEqual((out / "dng.gcsv").read_text(), (folder / "take.gcsv").read_text())
+
+        quiet = self.tmp / "quiet"
+        code, summary = run_cli([str(path), "-o", str(quiet), "--no-gcsv", "--pure"])
+        self.assertEqual(0, code, summary)
+        self.assertEqual([], list(quiet.glob("*.gcsv")))
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            to_dng.main([str(path), "--gcsv", str(self.tmp / "x.gcsv"), "--no-gcsv"])
+
+    def test_output_folder_given_as_dot_or_dot_dot_names_the_log_after_the_folder(self):
+        path = self.write(self.full_take())
+        here = self.tmp / "here"
+        here.mkdir()
+        up = self.tmp / "up"
+        (up / "inner").mkdir(parents=True)
+        previous = os.getcwd()
+        try:
+            os.chdir(here)
+            code, summary = run_cli([str(path), "-o", ".", "--pure"])
+            self.assertEqual(0, code, summary)
+            os.chdir(up / "inner")
+            code, summary = run_cli([str(path), "-o", "..", "--pure"])
+            self.assertEqual(0, code, summary)
+        finally:
+            os.chdir(previous)
+        self.assertEqual(["here.gcsv", "take_000000.dng", "take_000001.dng"], sorted(p.name for p in here.iterdir()))
+        self.assertEqual(["take_000000.dng", "take_000001.dng", "up.gcsv"],
+                         sorted(p.name for p in up.iterdir() if p.is_file()))
+
+    def test_a_take_without_imu_chunks_writes_no_log(self):
+        path = self.write(build_take(frames=2)[0])
+        out = self.tmp / "dng"
+        code, summary = run_cli([str(path), "-o", str(out), "--pure"])
+        self.assertEqual(0, code, summary)
+        self.assertIn("motion log: none", summary)
+        self.assertEqual([], list(out.glob("*.gcsv")))
+        # Asked for explicitly, it is an error, as --wav is for a take without sound.
+        target = self.tmp / "x.gcsv"
+        code, _ = run_cli([str(path), "--gcsv", str(target)])
+        self.assertEqual(2, code)
+        self.assertFalse(target.exists())
+        with self.assertRaisesRegex(ValueError, "no IMU gyroscope samples"):
+            to_dng.export_gcsv(path, target)
+
+    def test_unknown_payload_versions_are_skipped(self):
+        only_future = imu_payload([(GYRO, 1_010_000_000, 1.0, 1.0, 1.0)], version=2)
+        path = self.write(build_imu_take([(1_010_000_000, only_future)], FRAME_TICKS, IMU_KEYS))
+        self.assertFalse(to_dng.take_has_imu(path))
+        out = self.tmp / "dng"
+        code, summary = run_cli([str(path), "-o", str(out), "--pure"])
+        self.assertEqual(0, code, summary)
+        self.assertEqual([], list(out.glob("*.gcsv")))
+        self.assertIsNone(ocraw.decode_imu_samples(only_future))
+        self.assertIsNone(ocraw.decode_imu_samples(imu_payload([(GYRO, 1, 0.0, 0.0, 0.0)])[:-1]))
+        self.assertEqual([(GYRO, 1, 0.5, 0.0, 0.0)],
+                         ocraw.decode_imu_samples(imu_payload([(GYRO, 1, 0.5, 0.0, 0.0), (7, 2, 0.0, 0.0, 0.0)])))
+
+    def test_magnetometer_without_accelerometer_is_left_out(self):
+        static = {key: value for key, value in STATIC.items() if key != "appVersion"}
+        imu = imu_payload([(GYRO, 1_000_002_000, -0.5, 0.0, 0.0), (MAG, 1_000_000_000, 50.0, 0.0, 0.0)])
+        path = self.write(build_imu_take([(1_000_000_000, imu)], FRAME_TICKS, {"imuClock": "estimated"}, static))
+        target = self.tmp / "m.gcsv"
+        code, summary = run_cli([str(path), "--gcsv", str(target)])
+        self.assertEqual(0, code, summary)
+        self.assertIn("magnetometer samples without accelerometer samples were left out", summary)
+        self.assertEqual(
+            "GYROFLOW IMU LOG\n"
+            "version,1.3\n"
+            "id,opencinecam\n"
+            "note,sync estimated: camera clock is not the sensor clock\n"
+            "vendor,OpenCineCam\n"
+            "videofilename,take.ocraw\n"
+            "tscale,0.000001\n"
+            "gscale,0.00001\n"
+            "t,gx,gy,gz\n"
+            "2,-50000,0,0\n",
+            target.read_text())
+
+    def test_java_rounding_and_formatting(self):
+        self.assertEqual([3, -2, 0, 1, -1, 0], [to_dng.java_round(v) for v in (2.5, -2.5, 0.49999999999999994,
+                                                                             0.5, -0.5000000000000001, -0.0)])
+        # Java's %.4f rounds the shortest decimal half up; Python's format would give 0.0312.
+        self.assertEqual("0.0313", to_dng._java_fixed4(31250 / 1e6))
+        self.assertEqual("a b", to_dng._gcsv_clean(" a,\r\nb\t"))
+
+
 if __name__ == "__main__":
     unittest.main()

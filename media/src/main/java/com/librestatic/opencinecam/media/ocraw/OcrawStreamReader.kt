@@ -91,6 +91,8 @@ data class OcrawFrameIndex(
     val errors: List<String>,
     /** Every `AUDIO_PCM16` chunk in file order, payloads unread and unchecked. */
     val audio: List<OcrawAudioChunk> = emptyList(),
+    /** Every `IMU_SAMPLES` chunk in file order, payloads unread and unchecked. */
+    val imu: List<OcrawImuChunk> = emptyList(),
 ) {
     /** The take's `orientation` key, parsed with [OcrawOrientation.degrees]. */
     val orientationDegrees: Int get() = OcrawOrientation.degrees(metadata)
@@ -366,7 +368,8 @@ class OcrawStreamReader(
      * frame header, then the walk seeks past the payload. Metadata chunks are
      * read, CRC-checked and merged as [scan] does, metadata that follows later
      * frames included. `AUDIO_PCM16` chunks are listed in [OcrawFrameIndex.audio]
-     * with their payloads skipped. Other chunks are skipped unchecked. Stops at the first
+     * and `IMU_SAMPLES` chunks in [OcrawFrameIndex.imu], with their payloads
+     * skipped. Other chunks are skipped unchecked. Stops at the first
      * torn or invalid chunk header, or a metadata chunk failing its CRC.
      *
      * With [maxFrames], the walk also stops at the `RAW_FRAME` after the first [maxFrames],
@@ -385,6 +388,7 @@ class OcrawStreamReader(
         }
         val frames = ArrayList<OcrawStreamFrame>()
         val audio = ArrayList<OcrawAudioChunk>()
+        val imu = ArrayList<OcrawImuChunk>()
         val metadata = LinkedHashMap<String, String>()
         val frameMetadata = LinkedHashMap<Long, Map<String, String>>()
         val errors = ArrayList<String>()
@@ -442,6 +446,8 @@ class OcrawStreamReader(
                 }
                 OcrawChunkId.AUDIO_PCM16.wireId ->
                     audio += OcrawAudioChunk(chunk.sequence, offset, chunk.timestampTicks, chunk.payloadLength)
+                OcrawChunkId.IMU_SAMPLES.wireId ->
+                    imu += OcrawImuChunk(chunk.sequence, offset, chunk.timestampTicks, chunk.payloadLength)
                 OcrawChunkId.END.wireId -> hasEnd = true
             }
             offset = payloadOffset + chunk.payloadLength
@@ -458,6 +464,7 @@ class OcrawStreamReader(
             hasEnd = hasEnd,
             errors = errors.toList(),
             audio = audio.toList(),
+            imu = imu.toList(),
         )
     }
 
@@ -466,9 +473,33 @@ class OcrawStreamReader(
      * payload length, which it returns. Throws [IOException] for a truncated or corrupt chunk and
      * [IllegalArgumentException] when the chunk is not audio or [dst] is too small.
      */
-    fun readAudioChunk(chunkOffset: Long, dst: ByteBuffer): Int {
+    fun readAudioChunk(chunkOffset: Long, dst: ByteBuffer): Int =
+        readCheckedPayload(chunkOffset, dst, OcrawChunkId.AUDIO_PCM16, "audio")
+
+    /**
+     * Reads the `IMU_SAMPLES` chunk at [chunkOffset] into `dst.position()`, advancing it by the
+     * payload length, which it returns; decode it with [OcrawImuSamples.decode]. Throws as
+     * [readAudioChunk] does.
+     */
+    fun readImuChunk(chunkOffset: Long, dst: ByteBuffer): Int =
+        readCheckedPayload(chunkOffset, dst, OcrawChunkId.IMU_SAMPLES, "IMU")
+
+    /**
+     * The decoded `IMU_SAMPLES` chunk at [chunkOffset], or null when its payload version is
+     * unknown or it is malformed. Throws [IOException] for a truncated or corrupt chunk.
+     */
+    fun readImu(chunkOffset: Long): OcrawImuSamplesData? {
         val chunk = readChunkHeader(chunkOffset, channel.size()) ?: throw IOException("invalid chunk at $chunkOffset")
-        require(chunk.wireId == OcrawChunkId.AUDIO_PCM16.wireId) { "chunk at $chunkOffset is not audio" }
+        require(chunk.wireId == OcrawChunkId.IMU_SAMPLES.wireId) { "chunk at $chunkOffset is not IMU" }
+        val payload = ByteBuffer.allocate(chunk.payloadLength)
+        readImuChunk(chunkOffset, payload)
+        payload.flip()
+        return OcrawImuSamples.decode(payload)
+    }
+
+    private fun readCheckedPayload(chunkOffset: Long, dst: ByteBuffer, id: OcrawChunkId, what: String): Int {
+        val chunk = readChunkHeader(chunkOffset, channel.size()) ?: throw IOException("invalid chunk at $chunkOffset")
+        require(chunk.wireId == id.wireId) { "chunk at $chunkOffset is not $what" }
         val length = chunk.payloadLength
         require(dst.remaining() >= length) { "destination holds ${dst.remaining()} of $length bytes" }
         val start = dst.position()
@@ -477,7 +508,7 @@ class OcrawStreamReader(
         readFully(window, chunkOffset + OcrawCodec.CHUNK_HEADER_BYTES)
         crc.reset()
         crc.update(dst, start, length)
-        if (crc.value() != chunk.crc) throw IOException("audio CRC32C mismatch at $chunkOffset")
+        if (crc.value() != chunk.crc) throw IOException("$what CRC32C mismatch at $chunkOffset")
         dst.position(start + length)
         return length
     }

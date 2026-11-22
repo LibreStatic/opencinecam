@@ -12,7 +12,7 @@ interface ProjectMp4File {
 }
 
 /**
- * Finalize a single silent, nonfragmented, no-B-frame project track at exact rational cadence.
+ * Finalize a single silent, nonfragmented, no-B-frame project video track at exact rational cadence.
  * MediaMuxer may smooth near-equal sample durations; input PTS alone do not prove file cadence.
  * Preflight every box before writing. Failure leaves the unfinalized take eligible for deletion.
  * No box moves or changes size; encoded sample bytes, sample counts and offsets stay untouched.
@@ -56,7 +56,14 @@ fun finalizeProjectMp4Timing(file: ProjectMp4File, rate: CaptureFrameRate, expec
     require(top.none { it.type == "moof" } && top.any { it.type == "mdat" })
     val moov = one(top, "moov"); val movie = inside(moov)
     require(movie.none { it.type == "mvex" })
-    val mvhd = one(movie, "mvhd"); val trak = one(movie, "trak"); val track = inside(trak)
+    fun handler(trak: Box): String {
+        val hdlr = one(inside(one(inside(trak), "mdia")), "hdlr"); within(hdlr, hdlr.data + 8, 4)
+        return String(bytes(hdlr.data + 8, 4), Charsets.US_ASCII)
+    }
+    // Tracks that are neither video nor sound (CAMM motion metadata) keep their own timing; the take stays silent.
+    val handlers = movie.filter { it.type == "trak" }.map { it to handler(it) }
+    require(handlers.none { it.second == "soun" })
+    val mvhd = one(movie, "mvhd"); val trak = handlers.single { it.second == "vide" }.first; val track = inside(trak)
     val mdia = one(track, "mdia"); val media = inside(mdia); val mdhd = one(media, "mdhd")
     val hdlr = one(media, "hdlr"); within(hdlr, hdlr.data + 8, 4)
     require(String(bytes(hdlr.data + 8, 4), Charsets.US_ASCII) == "vide")

@@ -8,6 +8,11 @@ enum class CaptureArtifactRole {
     VIDEO, VIDEO_METADATA, AUDIO, AUDIO_METADATA,
     /** The canonical `<videoStem>.clip.json` sidecar (ClipSidecarDocument); a video take may or may not have one. */
     CLIP_METADATA,
+    /**
+     * The take's Gyroflow `<videoStem>.gcsv` log. Only [PreparedVideoOutput.artifacts] carries it, for the publication
+     * observers (the WebDAV outbox); the recording journal keeps it as the take's auxiliary row, never as a prepared one.
+     */
+    MOTION_LOG,
 }
 
 data class PreparedCaptureArtifact(

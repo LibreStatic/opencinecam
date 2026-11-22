@@ -9,7 +9,11 @@ import com.librestatic.opencinecam.media.ocraw.OcrawFrameHeader
 import com.librestatic.opencinecam.media.ocraw.OcrawFrameIndex
 import com.librestatic.opencinecam.media.ocraw.OcrawStreamReader
 import com.librestatic.opencinecam.media.ocraw.OcrawWavWriter
+import com.librestatic.opencinecam.storage.GyroflowLog
+import java.io.BufferedWriter
 import java.io.IOException
+import java.nio.ByteBuffer
+import java.nio.channels.Channels
 import java.nio.channels.FileChannel
 import java.nio.channels.WritableByteChannel
 import kotlin.math.ceil
@@ -120,6 +124,8 @@ internal sealed interface CinemaDngExportOutcome {
         val bytes: Long,
         /** False when the destination refused the `.nomedia`. */
         val noMedia: Boolean,
+        /** True when the folder holds the take's Gyroflow log, `<take>.gcsv`. */
+        val motionLog: Boolean = false,
     ) : CinemaDngExportOutcome
 
     data class Refused(val reason: CinemaDngRefusal, val neededBytes: Long = 0, val freeBytes: Long? = null) : CinemaDngExportOutcome
@@ -135,8 +141,9 @@ internal sealed interface CinemaDngExportOutcome {
 
 /**
  * Exports one indexed `.ocraw` take as a CinemaDNG folder: `<take>_000000.dng`… (numbered by the
- * frame's place in the file, so skipped frames leave gaps, as the desktop converter does) and
- * `<take>.wav` when the take has sound. The bytes come from [CinemaDngWriter] and [OcrawWavWriter]
+ * frame's place in the file, so skipped frames leave gaps, as the desktop converter does),
+ * `<take>.wav` when the take has sound, and `<take>.gcsv` ([OcrawGyroflowLog]) when it has gyroscope
+ * samples; a motion log that cannot be written is left out and the export goes on. The bytes come from [CinemaDngWriter] and [OcrawWavWriter]
  * unchanged. Pure JVM: the destination, the cancel signal and the capture state are passed in.
  *
  * - A frame that is not convertible, or proves damaged while it is read, is skipped and counted.
@@ -154,6 +161,8 @@ internal class CinemaDngExporter(
     private val decoderThreads: Int = 1,
     /** The writer's frame decoder; null for the native codec (see [CinemaDngWriter]). */
     private val decoderFactory: (() -> CinemaDngWriter.BlockPackDecoder)? = null,
+    /** The take's file name, the motion log's `videofilename` (as the desktop converter writes it). */
+    private val sourceFileName: String = "$takeName.ocraw",
 ) {
     private val index: OcrawFrameIndex by lazy { OcrawStreamReader(channel, scratchBytes = OcrawFrameHeader.BYTES).indexFrames() }
 
@@ -266,10 +275,56 @@ internal class CinemaDngExporter(
                 }
             }
             interruption()?.let { return stop(it) }
+            // The log is optional: it gets only what the DNGs and the WAV left above the reserve, now and as planned.
+            val fresh = try { destination.freeBytes() } catch (_: Exception) { null }
+            val motionBudget = listOfNotNull(free?.let { it - bytes }, fresh)
+                .minOrNull()?.let { it - CinemaDngExportPlan.SPACE_RESERVE_BYTES }
+            var motionStop: CinemaDngStopReason? = null
+            val motionLog = writeMotionLog(target, motionBudget) { interruption()?.also { motionStop = it } != null }
+                ?.also { bytes += it } != null
+            motionStop?.let { return stop(it) }
+            interruption()?.let { return stop(it) }
             target.publish()
-            return CinemaDngExportOutcome.Exported(target.location, written, skipped, audio, audioOmitted, bytes, noMedia)
+            return CinemaDngExportOutcome.Exported(target.location, written, skipped, audio, audioOmitted, bytes, noMedia, motionLog)
         } catch (failure: Exception) {
             return stop(CinemaDngStopReason.FAILED, failure.describe())
+        }
+    }
+
+    /**
+     * Writes `<take>.gcsv` beside the DNGs when the take has gyroscope samples in its frames' span, and returns its
+     * bytes; null when the take has none, the log would need more than [budget] bytes (null: no limit), [isInterrupted]
+     * answered true (asked between sample chunks), or the log could not be written. Each costs only the log: the target
+     * removes the partial file.
+     */
+    private fun writeMotionLog(target: CinemaDngTarget, budget: Long?, isInterrupted: () -> Boolean): Long? {
+        if (index.imu.isEmpty() || index.frames.isEmpty()) return null
+        if (budget != null && budget <= 0) return null
+        return try {
+            val reader = OcrawStreamReader(channel, scratchBytes = OcrawFrameHeader.BYTES)
+            val sensors = OcrawGyroflowLog.sensors(reader, index, isInterrupted)
+            if (!sensors.gyroscope) return null
+            var written = 0L
+            target.write("$takeName.${GyroflowLog.EXTENSION}", GCSV_MIME_TYPE) { out ->
+                val counting = object : WritableByteChannel by out {
+                    override fun write(src: ByteBuffer): Int {
+                        if (budget != null && written + src.remaining() > budget) throw IOException("the motion log would use the space reserve")
+                        return out.write(src).also { written += it }
+                    }
+                }
+                val writer = BufferedWriter(java.io.OutputStreamWriter(Channels.newOutputStream(counting), Charsets.UTF_8), GCSV_BUFFER_CHARS)
+                val report = checkNotNull(OcrawGyroflowLog.render(writer, reader, index, sourceFileName, sensors, isInterrupted)) { "no gyroscope rows" }
+                // Every gyroscope sample before the first frame or after the last: a header alone is no log.
+                check(report.rows > 0) { "no gyroscope rows in the frames' span" }
+                writer.flush()
+            }
+            written
+        } catch (_: OcrawGyroflowLog.Interrupted) {
+            null
+        } catch (failure: Exception) {
+            // Guarded so the class stays usable on a plain JVM, where android.util.Log is not implemented.
+            runCatching { android.util.Log.w(LOG_TAG, "The motion log of $takeName could not be written; the export goes on without it", failure) }
+            null
         }
     }
 
@@ -278,6 +333,14 @@ internal class CinemaDngExporter(
         const val WAV_MIME_TYPE = "audio/x-wav"
         const val NOMEDIA_MIME_TYPE = "application/octet-stream"
         const val NOMEDIA = ".nomedia"
+
+        /**
+         * The Gyroflow log's MIME type here: MediaStore and document providers append the extension of a known type
+         * (`text/csv` would make `.gcsv.csv`), which the targets refuse; an opaque type keeps the name.
+         */
+        const val GCSV_MIME_TYPE = "application/octet-stream"
+        private const val GCSV_BUFFER_CHARS = 64 * 1024
+        private const val LOG_TAG = "CinemaDngExport"
 
         /** The take name a `.ocraw` file exports under: its stem. */
         fun takeName(fileName: String): String {

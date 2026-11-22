@@ -80,6 +80,31 @@ class SafPreparedArtifactProbeTest {
         assertEquals("application/json", observe(sidecar, pending = false).mimeType)
     }
 
+    @Test @Config(shadows = [ShadowDocumentsProviderQuery::class, ShadowFstatProbe::class])
+    fun aDriveTakesGyroflowLogIsObservedAndReadInItsTakeFolder() {
+        ShadowFstatProbe.passThrough = true
+        try { readTheDriveLog() } finally { ShadowFstatProbe.passThrough = false }
+    }
+
+    private fun readTheDriveLog() {
+        // The drive's provider knows no .gcsv, so it lists the log as an opaque file (11 bytes, as the fstat shadow answers).
+        drive.file("Takes/OpenCineCam/A001/A001.gcsv").writeText(LOG_TEXT)
+        val log = PreparedCaptureArtifact(CaptureArtifactRole.MOTION_LOG, docUri("OpenCineCam/A001/A001.gcsv"), "A001.gcsv")
+        val observed = observe(log, pending = false)
+        assertEquals(11, observed.sizeBytes)
+        assertEquals("application/octet-stream", observed.mimeType)
+        val spec = WebDavArtifactSpec("00000000-0000-0000-0000-000000000005", WebDavArtifactRole.MOTION_LOG, log.uri, "A001.gcsv", 11)
+        val source = WebDavMediaStoreArtifactSource(context.contentResolver).source(spec)
+        assertEquals(LOG_TEXT, source.open().use { it.readBytes().decodeToString() })
+        // Read under the drive's descriptor rules: registered only while open.
+        assertEquals(0, DriveDescriptors.registered(FakeExternalStorageProvider.VOLUME))
+        // Under a name Gyroflow would not pair (a provider's appended extension) it is refused, like any mismatched role.
+        drive.file("Takes/OpenCineCam/A001/A001.gcsv.csv").writeText("x")
+        assertThrows(IllegalStateException::class.java) {
+            observe(log.copy(uri = docUri("OpenCineCam/A001/A001.gcsv.csv"), displayName = "A001.gcsv.csv"), pending = false)
+        }
+    }
+
     @Test fun aMissingDocumentIsMissingButAnUnpluggedDriveIsTransient() {
         check(drive.file("Takes/OpenCineCam/A001/A001.mp4").delete())
         val missing = runCatching { observe(pending = false) }.exceptionOrNull()
@@ -233,6 +258,8 @@ class SafPreparedArtifactProbeTest {
         assertThrows(IllegalArgumentException::class.java) { video.copy(sourceUri = video.sourceUri.replace("A001%2FA001.mp4", "A001%2F.%2FA001.mp4")) }
         assertThrows(IllegalArgumentException::class.java) { video.copy(sourceUri = video.sourceUri.replace("tree/FFF1-7571%3ATakes", "tree/FFF1-7571%3AOther")) }
     }
+
+    private companion object { const val LOG_TEXT = "t,gx,gy,gz\n" }
 }
 
 /** Runs [onFstat] on each `Os.fstat` and then fails it (while [passThrough] is set it answers as the test's video file instead), so a test sees the state while the probe holds its descriptor. */

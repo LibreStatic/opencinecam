@@ -148,7 +148,10 @@ class RawVideoQualificationOutcome(
  *    when the camera held the rate from the RAM ring, the drop was the storage's
  *    ([RawQualificationStaging.storageLoadCodes]) and the run is risky rather than failed. A long run
  *    (a compressed twin's too) whose ring overflows can no longer pass, so its measured window ends
- *    there (`stoppedEarly: ring-overflow`, `measuredSeconds`) and every check reads the window it
+ *    there: the reader freezes the measurement at the first frame with no free slot (its frame
+ *    counters, timestamps and wall clock, `framesAfterOverflow` counting the rest), and that boundary
+ *    gives the window and `measuredSeconds` ([RawQualificationStaging.measuredWindowMs]), not the run
+ *    thread's next poll (`stoppedEarly: ring-overflow`), and every check reads the window it
  *    actually measured ([RawQualificationStaging.earlyStopQualification] drops the too-short window
  *    reason); a run that overflowed, lost frames or whose writer failed is not read back
  *    ([RawQualificationStaging.skipReadBack], `scan.skipped`), which adds no scan reason.
@@ -160,7 +163,8 @@ class RawVideoQualificationOutcome(
  *    results marked `supersededByVerdict`, its record is dropped, and the extrapolated verdict's
  *    record and row (with the info code `compressed-heat-fallback` and a `heatFallback` summary of
  *    the run) replace them. A twin whose run would start at MODERATE or hotter
- *    ([RawQualificationStaging.compressedHeatSkip], read once just before it) gets no run at all and
+ *    ([RawQualificationStaging.compressedHeatSkip], read once just before it, after the cool-down
+ *    between sessions, so the status judged is the one the session would start at) gets no run at all and
  *    takes the extrapolated verdict directly, with the same info code and a `heatFallback` that says
  *    `skipped: true`.
  * 8. The verdicts: a configuration with a long run takes that run's; any other its camera check's,
@@ -176,14 +180,22 @@ class RawVideoQualificationOutcome(
  * would, and it is no step (no time, no cool-down, not counted). Every new conclusive session is kept as soon as it
  * ends. A reused step does not count as a camera session for step 4, so a run that reuses every one rests no storage:
  * the rest only lets the storage recover from the heat of the sessions just run, and the sweep's own rest rule
- * ([RawStorageRest]) still catches a cache flushing from earlier writes.
+ * ([RawStorageRest]) still catches a cache flushing from earlier writes. A reused benchmark still decides whether the
+ * encoder keeps up and which compressed twins get a long run, and in what order, but its compression ratio proves no
+ * storage: it was measured on an earlier scene. A compressed twin with no long run of its own whose benchmark was reused
+ * is judged at ratio 1.0 ([RawQualificationStaging.storageJudgingBench], [RawQualificationStaging.extrapolatedStorageRatio]),
+ * for its cover, its sweep reasons and a camera-only record's required median, and its row and proof say
+ * `ratioBound: "uncompressed"`.
  *
  * Options ([RawQualificationOptions]): with [RawQualificationPlan.skipPredictedLongRuns], a configuration whose stream
  * exceeds the sustained rate past the cliff the sweep measured gets no long run in step 6 or 7
  * ([RawQualificationStaging.predictedLongRunSkip]), as one the sweep rules out; its verdict row and evidence say
- * `predicted: true`. A [RawQualificationPlan.cameraOnly] run stops after step 3 (no rest, sweep or long run) and judges
- * every configuration from its camera evidence alone ([RawQualificationStaging.cameraOnlyVerdict]); its records join the
- * store only where no storage-tested record stands ([RawQualificationRecords.cameraOnlyMerge]).
+ * `predicted: true`. The prediction needs the configuration's camera check (a twin's: its twin's) to have passed: a
+ * failed, inconclusive or missing check leaves the descent as without the option. A [RawQualificationPlan.cameraOnly]
+ * run stops after step 3 (no rest, sweep or long run) and judges every configuration from its camera evidence alone
+ * ([RawQualificationStaging.cameraOnlyVerdict]); its records join the store only where no storage-tested record stands,
+ * or where an earlier camera-only record (by its method) does, or where the camera or encoder failed conclusively
+ * ([RawQualificationRecords.cameraOnlyMerge], [RawQualificationRecords.conclusiveCameraFailure]).
  *
  * The graph of every run is the app's RAW_VIDEO session (`Camera2PreviewEngine.configureGpuPreviewSession`):
  * the RAW10 reader at the largest RAW10 size beside one viewfinder stream, a [SurfaceTexture] at the
@@ -203,7 +215,7 @@ class RawVideoQualificationOutcome(
  * for the thermal status to drop below SEVERE and is skipped (`thermal-skip`) if it does not; reaching
  * SEVERE during one fails it (`thermal-limit`). Encode benchmarks and the uncompressed long runs, the
  * heaviest sessions, first cool down: they wait up to [COOL_WAIT_MS] for the status to drop below
- * MODERATE, or until the phone stops cooling ([RawThermalTrend]), then run anyway under the same rule
+ * MODERATE, or until the phone stops cooling while below SEVERE ([RawThermalTrend.endsWait]), then run anyway under the same rule
  * (a heavier session before them may have left the phone hot, and a run the heat spoils proves less).
  * A compressed twin's long run never waits for the heat: it starts only below MODERATE, so its cool
  * wait normally returns at once. The first long run, right after the sweep, does not cool down: it keeps the
@@ -499,7 +511,21 @@ class RawVideoQualifier(
         val storageRates = mutableMapOf<RawVideoConfig, Pair<Long, Double>>()
         val rowsByConfig = mutableMapOf<RawVideoConfig, JSONObject>()
 
-        /** One camera session of [kind]; never throws but on cancellation. */
+        /**
+         * The cool-down before the next session of [kind]; true when it ran. None before the first session, nor between
+         * the sweep and the first long run.
+         */
+        fun sessionCoolDown(kind: SessionKind): Boolean {
+            val afterSweep = kind == SessionKind.LONG && firstAfterSweep
+            if (steps.index == 0 || afterSweep) return false
+            coolDown(steps.index, steps.count)
+            return true
+        }
+
+        /**
+         * One camera session of [kind]; never throws but on cancellation. [coolDownDone]: the caller already decided the
+         * cool-down before it ([sessionCoolDown]).
+         */
         fun session(
             camera: CameraInfo,
             run: RawQualificationRun,
@@ -507,14 +533,14 @@ class RawVideoQualifier(
             bench: EncodeSession? = null,
             expectedFps: Double? = null,
             evidenceKey: String? = null,
+            coolDownDone: Boolean = false,
         ): JSONObject {
             // A rate the camera cannot be asked for is judged without a session, so it needs no cool-down and leaves
             // the first long run after the sweep to the next one.
             val unrequestable = unrequestableRateRow(camera, run, kind)
             val afterSweep = kind == SessionKind.LONG && firstAfterSweep && unrequestable == null
+            if (!coolDownDone && unrequestable == null) sessionCoolDown(kind)
             if (kind == SessionKind.LONG && unrequestable == null) firstAfterSweep = false
-            // No cool-down before the first session, nor between the sweep and the first long run.
-            if (steps.index > 0 && !afterSweep && unrequestable == null) coolDown(steps.index, steps.count)
             steps.index++
             val plannedMs = if (kind == SessionKind.LONG && !run.config.isCompressed && run.config !in plannedLong) 0L else kind.plannedMs(run.config)
             meter.startStep(kind.stepKind, plannedMs, run.spec)
@@ -644,6 +670,8 @@ class RawVideoQualifier(
                                 .also { bench?.let { closeAfterConsumer(it.encoder) } }
                         }
                         benchJson.put(json)
+                        // A reused session's ratio was measured on another scene: it never judges a twin's storage.
+                        if (reused != null) pass.reusedBenches += Triple(encoding, benchRun.config, threads)
                         entries += benchFigures(json, benchRun.config, encoding, threads)
                         json.optJSONObject("evidence")?.let { pass.benchEvidence[Triple(encoding, benchRun.config, threads)] = it }
                     }
@@ -740,13 +768,15 @@ class RawVideoQualifier(
             if (RawQualificationStage.LONG in stages) {
                 val fullOrder = RawQualificationStaging.longRunOrder(pass.uncompressed)
                 // A run the camera check skips stays in the order, where the skip below counts it out; its check judges it.
-                // With skipPredictedLongRuns, past a measured cliff, one whose stream exceeds the sustained rate is decided
-                // the same way ([RawQualificationStaging.predictedLongRunSkip]): its run could at best be risky.
+                // With skipPredictedLongRuns, past a measured cliff, one whose camera check passed and whose stream exceeds
+                // the sustained rate is decided the same way ([RawQualificationStaging.predictedLongRunSkip]): its run
+                // could at best be risky.
                 val ruledOut = sweep?.let { measured ->
                     fullOrder.filterNot { RawQualificationStaging.skipLongRun(cameraChecks[it.config]) }
                         .associate { run ->
                             run.config to RawQualificationStaging.sweepRuledOut(run.config, measured).ifEmpty {
-                                RawQualificationStaging.predictedLongRunSkip(pass.skipPredicted, run.config, measured.sustained, achieved[run.config])
+                                RawQualificationStaging.predictedLongRunSkip(pass.skipPredicted, cameraChecks[run.config], run.config,
+                                    measured.sustained, achieved[run.config])
                                     .also { if (it.isNotEmpty()) pass.predicted += run.config }
                             }
                         }
@@ -817,13 +847,17 @@ class RawVideoQualifier(
                 }
                 for (config in order) {
                     val run = pass.compressedRuns.first { it.config == config }
-                    // Read once: a phone already at MODERATE would wait for the heat, then most likely fail the run for
-                    // the heat alone, which the extrapolation judges anyway. So it takes the extrapolation directly.
+                    // The inter-session cool-down first (the phone may warm up during it), then the status, read once just
+                    // before the run would start: a phone already at MODERATE would wait for the heat, then most likely
+                    // fail the run for the heat alone, which the extrapolation judges anyway. So it takes the
+                    // extrapolation directly, with no thermal wait.
+                    val cooledDown = sessionCoolDown(SessionKind.LONG)
                     val thermalNow = runCatching { thermalStatus() }.getOrDefault(PowerManager.THERMAL_STATUS_NONE)
                     if (RawQualificationStaging.compressedHeatSkip(thermalNow)) {
                         steps.count--
                         meter.shrink(RawQualificationStepKind.LONG_RUN, timing.runMs(config, plannedStorage))
-                        meter.shrink(RawQualificationStepKind.COOL_DOWN, RawQualificationTiming.COOL_DOWN_MS)
+                        // The cool-down ran (its time is spent); the long run did not.
+                        if (!cooledDown) meter.shrink(RawQualificationStepKind.COOL_DOWN, RawQualificationTiming.COOL_DOWN_MS)
                         heatFallbacks[config] = JSONObject()
                             .put("reasonCode", RawQualificationStaging.REASON_COMPRESSED_HEAT_FALLBACK)
                             .put("skipped", true)
@@ -833,7 +867,7 @@ class RawVideoQualifier(
                     }
                     val twin = config.copy(encoding = RawVideoConfig.ENCODING_RAW10)
                     val bench = encodeSession(config.encoding, RawFrameEncoders.defaultThreads(config.encoding), plan.encodeStrips, slotBytes)
-                    val json = session(camera, run, SessionKind.LONG, bench)
+                    val json = session(camera, run, SessionKind.LONG, bench, coolDownDone = true)
                     bench?.let { closeAfterConsumer(it.encoder) }
                     val longRecord = lastRecord
                     var result = stageResult(json)
@@ -897,9 +931,14 @@ class RawVideoQualifier(
                 val twin = run.config.copy(encoding = RawVideoConfig.ENCODING_RAW10)
                 val camEvidence = RawQualificationStaging.cameraEvidence(twin, longRuns, cameraChecks)
                 val bench = pass.judgesByEncoding[run.config.encoding]?.get(twin)
+                // A reused benchmark's ratio comes from another scene: with no long run of its own the twin's storage is
+                // judged as if uncompressed ([RawQualificationStaging.storageJudgingBench]).
+                val benchReused = pass.benchReused(bench)
+                val storageBench = RawQualificationStaging.storageJudgingBench(bench, benchReused)
+                val ratio = RawQualificationStaging.extrapolatedStorageRatio(bench, benchReused)
                 // The configurations the sweep decided count as storage failures (never as covers) for an uncovered twin.
-                val verdict = RawQualificationStaging.compressedFinalVerdict(compressedLong[run.config], twin, camEvidence, bench,
-                    longRuns + pass.sweepDecided, pass.sweepRuledOut(run.config, sweep))
+                val verdict = RawQualificationStaging.compressedFinalVerdict(compressedLong[run.config], twin, camEvidence, storageBench,
+                    longRuns + pass.sweepDecided, pass.sweepRuledOut(run.config, sweep, ratio))
                 val heatFallback = heatFallbacks[run.config]
                 // Its long run was left out for the predicted sustained rate alone: the twin's camera delivered, the
                 // encoder keeps up and the sweep's own reasons allow it.
@@ -911,7 +950,7 @@ class RawVideoQualifier(
                     .put("bench", bench?.let { pass.benchEvidence[Triple(it.encoding, it.config, it.threads)] } ?: JSONObject.NULL)
                 heatFallback?.let { proof.put("heatFallback", it) }
                 if (predicted) proof.put("predicted", true)
-                val ratio = bench?.conservativeRatio ?: 1.0
+                if (benchReused) proof.put("ratioBound", RawQualificationStaging.RATIO_BOUND_UNCOMPRESSED)
                 val record = verdictRecord(run.config, ring, requireNotNull(sweep), verdict, ratio, pass.specOf, proof, measuredAt, achieved[twin])
                 record?.let(records::add)
                 storageRates[run.config] = RawStorageCliff.compressedBytesPerSecond(
@@ -920,6 +959,7 @@ class RawVideoQualifier(
                     heatFallback?.let {
                         row.put("infoCodes", JSONArray(listOf(RawQualificationStaging.REASON_COMPRESSED_HEAT_FALLBACK))).put("heatFallback", it)
                     }
+                    if (benchReused) row.put("ratioBound", RawQualificationStaging.RATIO_BOUND_UNCOMPRESSED)
                     rowsByConfig[run.config] = row; results.put(row); emit(row)
                 }
             }
@@ -1060,25 +1100,34 @@ class RawVideoQualifier(
             json.optDouble("achievedFps").takeIf { !it.isNaN() }?.let { achieved[config] = it }
         }
 
+        /** The benchmark sessions reused from an earlier run, by codec, configuration and thread count. */
+        val reusedBenches = mutableSetOf<Triple<String, RawVideoConfig, Int>>()
+
+        /** [bench] (the figures judging a compressed twin) came from a session an earlier run measured. */
+        fun benchReused(bench: RawEncodeBenchFigures?): Boolean =
+            bench != null && Triple(bench.encoding, bench.config, bench.threads) in reusedBenches
+
         /**
-         * Why [sweep] rules the compressed [config] out at the conservative ratio of the benchmark judging it
-         * ([RawQualificationStaging.sweepRuledOut]); empty with no sweep or no benchmark.
+         * Why [sweep] rules the compressed [config] out at the conservative ratio of the benchmark judging it, or at
+         * [ratio] when given ([RawQualificationStaging.sweepRuledOut]); empty with no sweep or no benchmark.
          */
-        fun sweepRuledOut(config: RawVideoConfig, sweep: RawStorageSweep?): List<String> {
+        fun sweepRuledOut(config: RawVideoConfig, sweep: RawStorageSweep?, ratio: Double? = null): List<String> {
             val bench = judgesByEncoding[config.encoding]?.get(config.copy(encoding = RawVideoConfig.ENCODING_RAW10)) ?: return emptyList()
-            return sweep?.let { RawQualificationStaging.sweepRuledOut(config, it, bench.conservativeRatio) }.orEmpty()
-                .ifEmpty { predictedSkip(config, sweep) }
+            return sweep?.let { RawQualificationStaging.sweepRuledOut(config, it, ratio ?: bench.conservativeRatio) }.orEmpty()
+                .ifEmpty { predictedSkip(config, sweep, ratio) }
         }
 
         /**
-         * Why [RawQualificationStaging.predictedLongRunSkip] leaves the compressed [config] without a long run: its stream at
-         * its twin's achieved rate, at the conservative ratio of the benchmark judging it, exceeds the sustained rate past
-         * the cliff [sweep] measured. Empty when [skipPredicted] is off, with no cliff, sweep or benchmark.
+         * Why [RawQualificationStaging.predictedLongRunSkip] leaves the compressed [config] without a long run: its twin's
+         * camera check passed and its stream at the twin's achieved rate, at the conservative ratio of the benchmark judging
+         * it (or [ratio] when given), exceeds the sustained rate past the cliff [sweep] measured. Empty when [skipPredicted]
+         * is off, with no passing check, no cliff, sweep or benchmark.
          */
-        fun predictedSkip(config: RawVideoConfig, sweep: RawStorageSweep?): List<String> {
+        fun predictedSkip(config: RawVideoConfig, sweep: RawStorageSweep?, ratio: Double? = null): List<String> {
             val twin = config.copy(encoding = RawVideoConfig.ENCODING_RAW10)
             val bench = judgesByEncoding[config.encoding]?.get(twin) ?: return emptyList()
-            return RawQualificationStaging.predictedLongRunSkip(skipPredicted, config, sweep?.sustained, achieved[twin], bench.conservativeRatio)
+            return RawQualificationStaging.predictedLongRunSkip(skipPredicted, cameraChecks[twin], config, sweep?.sustained, achieved[twin],
+                ratio ?: bench.conservativeRatio)
         }
 
         /** What an encode benchmark of [config] asks the camera to hold: its reduced rate when it has one, else the target. */
@@ -1289,13 +1338,19 @@ class RawVideoQualifier(
             val twin = run.config.copy(encoding = RawVideoConfig.ENCODING_RAW10)
             val bench = pass.judgesByEncoding[run.config.encoding]?.get(twin)
             val verdict = RawQualificationStaging.cameraOnlyCompressedVerdict(twin, pass.cameraChecks[twin], bench)
+            // A reused benchmark's ratio comes from another scene: the required median is the uncompressed one.
+            val benchReused = pass.benchReused(bench)
             val proof = JSONObject()
                 .put("camera", pass.evidence[twin] ?: JSONObject.NULL)
                 .put("bench", bench?.let { pass.benchEvidence[Triple(it.encoding, it.config, it.threads)] } ?: JSONObject.NULL)
+            if (benchReused) proof.put("ratioBound", RawQualificationStaging.RATIO_BOUND_UNCOMPRESSED)
             val record = RawQualificationRecords.cameraOnly(Build.FINGERPRINT, destinationId, run.config, ring.slotCount.toLong() * run.config.bytesPerFrame,
-                verdict, measuredAt, bench?.conservativeRatio ?: 1.0, proof.toString(), pass.achieved[twin])
+                verdict, measuredAt, RawQualificationStaging.extrapolatedStorageRatio(bench, benchReused), proof.toString(), pass.achieved[twin])
             record?.let(records::add)
-            verdictRow(run, verdict, pass.specOf, 0L, record).also { results.put(it); emit(it) }
+            verdictRow(run, verdict, pass.specOf, 0L, record).also {
+                if (benchReused) it.put("ratioBound", RawQualificationStaging.RATIO_BOUND_UNCOMPRESSED)
+                results.put(it); emit(it)
+            }
         }
     }
 
@@ -1761,10 +1816,13 @@ class RawVideoQualifier(
         reader.setOnImageAvailableListener({ source ->
             val image = try { source.acquireNextImage() } catch (_: IllegalStateException) { state.acquireFailures++; null }
                 ?: return@setOnImageAvailableListener
+            var frozeNow = false
             try {
                 val frameIndex = state.imageIndex++
                 if (state.producerStop) { state.producerDone = true; return@setOnImageAvailableListener }
                 if (!state.measuring) { state.warmupFrames++; return@setOnImageAvailableListener }
+                // A long run's measured window ended at its first overflow: later frames are released uncounted.
+                if (state.frozen) { state.framesAfterFreeze++; return@setOnImageAvailableListener }
                 val timestamp = image.timestamp
                 if (state.startTs < 0) {
                     state.startTs = timestamp
@@ -1776,6 +1834,13 @@ class RawVideoQualifier(
                 if (handled < state.imageTs.length()) state.imageTs.set(handled, timestamp) else state.timestampOverflow = true
                 val slot = ring.tryAcquire()
                 if (slot == null) {
+                    if (state.freezeOnOverflow && !state.overflow) {
+                        // The window ends at this frame (its timestamp is endTs): when it overflowed, not when the run
+                        // thread's poll notices.
+                        state.frozenAtWallMs = SystemClock.elapsedRealtime()
+                        state.frozen = true
+                        frozeNow = true
+                    }
                     state.overflow = true
                     state.lostFrames++
                     return@setOnImageAvailableListener
@@ -1805,7 +1870,7 @@ class RawVideoQualifier(
                 }
             } finally {
                 image.close()
-                if (state.readerCpuStartNs >= 0 && state.measuring && !state.producerStop) {
+                if (state.readerCpuStartNs >= 0 && state.measuring && !state.producerStop && (!state.frozen || frozeNow)) {
                     state.readerCpuEndNs = android.os.Debug.threadCpuTimeNanos()
                     state.readerWallEndNs = SystemClock.elapsedRealtimeNanos()
                 }
@@ -1920,6 +1985,7 @@ class RawVideoQualifier(
                     if (state.measuring && !state.producerStop) {
                         val m = state.measuredCaptures.getAndIncrement()
                         if (m < state.captureExposureNs.length()) {
+                            state.captureMeasuredTs.set(m, ts)
                             state.captureExposureNs.set(m, result.get(CaptureResult.SENSOR_EXPOSURE_TIME) ?: 0L)
                             state.captureSensitivity.set(m, (result.get(CaptureResult.SENSOR_SENSITIVITY) ?: 0).toLong())
                             state.captureFrameDurationNs.set(m, result.get(CaptureResult.SENSOR_FRAME_DURATION) ?: 0L)
@@ -1944,25 +2010,32 @@ class RawVideoQualifier(
             val wallStartMs = SystemClock.elapsedRealtime()
             var stoppedEarly: String? = null
             if (!endedEarly) {
-                state.measuring = true
                 // A long run whose ring overflowed can no longer pass (rule v2: ring-overflow), so its window ends there:
-                // the rest would only add heat and wear. Camera checks and encode benchmarks always run their window.
+                // the reader freezes the measurement at the first overflow (no frame after it is counted or published,
+                // the writer drains what is queued), and the run stops as soon as its poll sees it, since the rest
+                // would only add heat and wear. Camera checks and encode benchmarks always run their window.
+                state.freezeOnOverflow = kind == SessionKind.LONG
+                state.measuring = true
                 val stopOnOverflow: (() -> Boolean)? = if (kind == SessionKind.LONG) ({ state.overflow }) else null
                 if (sleepCancellable(liveSeconds * 1_000L + RawQualificationTiming.MEASURE_SLACK_MS, kind.phase, index, runCount, run.spec, stopOnOverflow)) {
                     stoppedEarly = RawQualificationStaging.STOPPED_EARLY_RING_OVERFLOW
                     Log.i(TAG, "${kind.stage} ring overflow camera=${camera.id} spec=${run.spec}: measured window ended " +
-                        "after ${SystemClock.elapsedRealtime() - wallStartMs} ms")
+                        "after ${RawQualificationStaging.measuredWindowMs(wallStartMs, state.frozenAtWallMs, SystemClock.elapsedRealtime())} ms")
                 }
             }
             state.producerStop = true
             // Whole-process CPU over the measured window: camera callbacks, copies, writer and encoder pool.
             val wallMs = SystemClock.elapsedRealtime() - wallStartMs
+            // The window measured: up to the first overflow when the reader froze it, else the whole wait.
+            val measuredMs = RawQualificationStaging.measuredWindowMs(wallStartMs, state.frozenAtWallMs, wallStartMs + wallMs)
             state.processCpuCores = if (wallMs > 0) (android.os.Process.getElapsedCpuTime() - cpuStartMs).toDouble() / wallMs else 0.0
             val stoppedAt = SystemClock.elapsedRealtime()
             runCatching { activeSession.stopRepeating() }
             // Let in-flight results land, then make sure the reader thread is past its last publish.
             sleepCancellable(1_000L, kind.phase, index, runCount, run.spec)
             awaitIdle(readerHandler, TIMEOUT_SECONDS * 1_000L)
+            // An overflow in the window's last poll interval froze it too, though the wait had already ended.
+            if (stoppedEarly == null && state.frozen) stoppedEarly = RawQualificationStaging.STOPPED_EARLY_RING_OVERFLOW
             state.queuedAtStop = ring.queuedSlots
             state.writerStop = true
             // A slow storage drains for a while: the time left keeps counting down meanwhile.
@@ -1974,7 +2047,7 @@ class RawVideoQualifier(
             thermalPeak = maxOf(thermalPeak, thermalAfter)
             val probe = SessionProbe(run, kind, liveSeconds, aeRange, qtiFrameRateOverride, thermalBefore, thermalWaitMs, thermalWait.ended,
                 thermalAfter, thermalPeak, declaredMinFrameDurationNs, endedEarly, writerAlive, drainMs, expectedFps ?: config.fps.toDouble(),
-                stoppedEarly, wallMs)
+                stoppedEarly, measuredMs)
             return when (kind) {
                 SessionKind.LONG -> {
                     // Read the file back, unless the run already failed: then the scan of the whole row only adds wear.
@@ -2030,6 +2103,18 @@ class RawVideoQualifier(
         @Volatile var endTs = -1L
         @Volatile var timestampOverflow = false
 
+        /** Set by the run thread before [measuring]: a long run's window ends at its first overflow ([frozen]). */
+        @Volatile var freezeOnOverflow = false
+
+        /**
+         * Written by the reader thread at a long run's first overflow: from then on no frame is counted, timestamped or
+         * published ([endTs] stays the overflowing frame's), and [frozenAtWallMs] is when it happened
+         * (`SystemClock.elapsedRealtime`), -1 until then. The run thread reads both, after the reader is idle.
+         */
+        @Volatile var frozen = false
+        @Volatile var frozenAtWallMs = -1L
+        @Volatile var framesAfterFreeze = 0L
+
         // Reader thread only (read by the run thread after the reader is idle).
         @Volatile var imageIndex = 0
         @Volatile var warmupFrames = 0
@@ -2057,6 +2142,8 @@ class RawVideoQualifier(
 
         // Camera thread.
         val captureTs = AtomicLongArray(timestampCapacity)
+        /** The sensor timestamp of each capture result of the measured window, so a frozen window leaves out the later ones. */
+        val captureMeasuredTs = AtomicLongArray(timestampCapacity)
         /** Exposure, sensitivity and frame duration of each capture result of the measured window (0 when not reported). */
         val captureExposureNs = AtomicLongArray(timestampCapacity)
         val captureSensitivity = AtomicLongArray(timestampCapacity)
@@ -2501,6 +2588,7 @@ class RawVideoQualifier(
             .put("burstSeconds", stored.burstSeconds ?: JSONObject.NULL)
             .put("effectiveBurstSeconds", RawQualificationRisk.effectiveBurstSeconds(stored) ?: JSONObject.NULL)
             .put("framesWritten", framesWritten)
+            .put("framesAfterOverflow", state.framesAfterFreeze)
             .put("highWaterReached", state.highWaterReached)
             .put("copyMaxMs", round2(state.copyMaxNs / 1e6))
             .put("copyMeanMs", if (state.copies > 0) round2(state.copyTotalNs / 1e6 / state.copies) else JSONObject.NULL)
@@ -2560,7 +2648,10 @@ class RawVideoQualifier(
     /** The run's [RawFrameDiagnostics] (evidence only), from the reader and camera threads' arrays; both are idle by now. */
     private fun frameDiagnosticsJson(fps: Int, handled: Int, state: LiveState): JSONObject {
         fun AtomicLongArray.toArray(count: Int) = LongArray(count.coerceIn(0, length())) { get(it) }
-        val captures = minOf(state.measuredCaptures.get(), state.captureExposureNs.length())
+        val measured = minOf(state.measuredCaptures.get(), state.captureExposureNs.length())
+        // A frozen window ends at the overflowing frame: capture results arrive in frame order, so the later ones are a tail.
+        val captures = if (!state.frozen) measured
+        else (0 until measured).firstOrNull { state.captureMeasuredTs.get(it) > state.endTs } ?: measured
         val copies = minOf(state.copies, state.copyNs.length().toLong()).toInt()
         val cpuStart = state.readerCpuStartNs
         val cpuEnd = state.readerCpuEndNs
@@ -2858,8 +2949,9 @@ class RawVideoQualifier(
     /**
      * Waits up to [maxWaitMs] for the thermal status to drop below [below], showing
      * [RawQualificationPhase.THERMAL_WAIT] meanwhile; returns the last status, the time waited and why it ended. With
-     * [trend] it also ends once the phone has stopped cooling ([RawThermalTrend.stoppedCooling]): each poll samples the
-     * thermal headroom and the battery temperature. Without a usable signal it waits as before.
+     * [trend] it also ends once the phone has stopped cooling ([RawThermalTrend.endsWait]): each poll samples the
+     * thermal headroom and the battery temperature. Never at SEVERE or hotter, where the session could not start and the
+     * wait goes on to a permitted status or the timeout. Without a usable signal it waits as before.
      */
     private fun waitForThermalHeadroom(index: Int, runCount: Int, spec: String, below: Int, maxWaitMs: Long, trend: Boolean = false): ThermalWait {
         val start = SystemClock.elapsedRealtime()
@@ -2880,7 +2972,7 @@ class RawVideoQualifier(
             while (status >= below) {
                 val now = SystemClock.elapsedRealtime()
                 if (now >= deadline) { ended = RawThermalTrend.ENDED_TIMEOUT; break }
-                if (trend && RawThermalTrend.stoppedCooling(headroom, battery, now - start)) {
+                if (trend && RawThermalTrend.endsWait(status, headroom, battery, now - start)) {
                     ended = RawThermalTrend.ENDED_NOT_COOLING
                     Log.i(TAG, "thermal status $status, no longer cooling after ${now - start} ms " +
                         "(headroom ${headroom.lastOrNull()?.value}, battery ${battery.lastOrNull()?.value} °C): running")

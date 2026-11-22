@@ -46,6 +46,48 @@ class MediaRenamePlanTest {
         assertTrue(names.getValue(gcsv.uri).endsWith(".gcsv"))
         assertNotEquals(names.getValue(clip.uri), names.getValue(gcsv.uri))
     }
+    private val recording = MediaNamespace(id, true)
+    private fun video(n: Long, name: String) = LocalMediaArtifact("content://media/external_primary/video/media/$n", name, "video/mp4", 12, 100 + n)
+    private fun log(n: Long, name: String) = LocalMediaArtifact("content://media/external_primary/downloads/$n", name, GyroflowLog.MIME_TYPE, 10, 100)
+    private fun recordingNames(videos: List<LocalMediaArtifact>, attachments: List<LocalMediaArtifact>, stem: String = "Scene_12"): Map<String, String> {
+        val take = requireNotNull(catalogTake(recording, videos.map { CatalogRow(it, requireNotNull(mediaDeleteIdentity(it.uri)).id, LocalMediaKind.VIDEO, recording) },
+            emptyList(), attachments = attachments))
+        return mediaRenamePreview(take, stem).files.associate { it.artifact.uri to it.newName }
+    }
+    @Test fun motionLogTakesTheRenamedVideoStemSoGyroflowPairsThem() {
+        val mp4 = video(1, "original.mp4"); val gcsv = log(6, "original.gcsv")
+        val names = recordingNames(listOf(mp4), listOf(gcsv))
+        assertEquals("Scene_12.mp4", names.getValue(mp4.uri))
+        assertEquals("Scene_12.gcsv", names.getValue(gcsv.uri))
+    }
+    @Test fun takeWithoutMotionLogKeepsItsNames() {
+        val mp4 = video(1, "original.mp4")
+        val clip = LocalMediaArtifact("content://media/external_primary/downloads/5", "original.clip.json", "application/json", 10, 100)
+        assertEquals(mapOf(mp4.uri to "Scene_12.mp4", clip.uri to "Scene_12.clip.json"), recordingNames(listOf(mp4), listOf(clip)))
+    }
+    @Test fun eachMotionLogFollowsTheVideoItBelongedToIncludingItsIndexSuffix() {
+        val first = video(1, "take.mp4"); val second = video(2, "take_cont1.mp4")
+        val firstLog = log(6, "take.gcsv"); val secondLog = log(7, "take_cont1.gcsv")
+        val names = recordingNames(listOf(first, second), listOf(secondLog, firstLog))
+        val secondVideo = names.getValue(second.uri)
+        assertNotEquals("Scene_12.mp4", secondVideo)
+        assertEquals(names.getValue(first.uri).removeSuffix(".mp4") + ".gcsv", names.getValue(firstLog.uri))
+        assertEquals(secondVideo.removeSuffix(".mp4") + ".gcsv", names.getValue(secondLog.uri))
+    }
+    @Test fun unpairableMotionLogsAmongSeveralVideosKeepTheNumberedFallback() {
+        val first = video(1, "take.mp4"); val second = video(2, "take_cont1.mp4")
+        val stray = log(6, "Scene_12-motion-01.gcsv"); val paired = log(7, "take_cont1.gcsv")
+        val names = recordingNames(listOf(first, second), listOf(stray, paired))
+        assertEquals("Scene_12-motion-01.gcsv", names.getValue(stray.uri))
+        assertEquals(names.getValue(second.uri).removeSuffix(".mp4") + ".gcsv", names.getValue(paired.uri))
+        assertEquals(names.size, names.values.toSet().size)
+    }
+    @Test fun oldMotionPatternLogPairsAgainWhenTheTakeHasOneVideoAndOneLog() {
+        val mp4 = video(1, "Old.mp4"); val gcsv = log(6, "Old-motion-01.gcsv")
+        val names = recordingNames(listOf(mp4), listOf(gcsv), stem = "New")
+        assertEquals("New.mp4", names.getValue(mp4.uri))
+        assertEquals("New.gcsv", names.getValue(gcsv.uri))
+    }
 
     private fun plan(f: Fixture, stem: String = "Scene_12") = mediaRenamePlan(f.take, mediaRenamePreview(f.take, stem), f.rows, f.documents)
     private fun rejected(block: () -> Unit) { assertTrue(runCatching(block).isFailure) }

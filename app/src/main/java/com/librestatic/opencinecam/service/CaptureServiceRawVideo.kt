@@ -816,6 +816,12 @@ internal fun CaptureService.toggleRawTake(audioForThisTake: Boolean? = null): Bo
         AudioRecordRawAudioSource(this, takeInput.settings, current.descriptor?.timestampSourceRealtime == true,
             takeInput.guard, newAudioLevelConsumer(), newAudioListeningSink())
     } else null
+    // Opt-in motion data, as for an encoded take (attachMotionLog): no gyroscope just means none.
+    val motion = current.descriptor?.takeIf { settings.gyroflowLogEnabled }?.let { descriptor ->
+        com.librestatic.opencinecam.rawvideo.SensorRawMotionSource.create(this, descriptor.sensorOrientation,
+            descriptor.lensFacing == android.hardware.camera2.CameraCharacteristics.LENS_FACING_FRONT,
+            descriptor.timestampSourceRealtime)
+    }
     when (val start = foreground.start(audioRequested)) {
         is ForegroundRecordingStart.Rejected -> {
             cameraState.update { it.copy(message = start.failure.userMessage, errorCode = "recording-foreground-failed", messageTransient = false) }
@@ -832,12 +838,17 @@ internal fun CaptureService.toggleRawTake(audioForThisTake: Boolean? = null): Bo
     pendingStopReason = null
     cameraState.update { it.copy(phase = CameraUiPhase.CAPTURING, message = null, errorCode = null) }
     submitCaptureState(stateCommands.takeDispatched())
-    if (!rawControlExecute { startRawTakeOnControl(session, captureNames, audio) }) rawTakeRefused(session, RawVideoServiceReasons.START_FAILED)
+    if (!rawControlExecute { startRawTakeOnControl(session, captureNames, audio, motion) }) rawTakeRefused(session, RawVideoServiceReasons.START_FAILED)
     return true
 }
 
 /** Control thread: recovery pass, output, recorder (and its audio), then the engine (PLAN-071 order). */
-internal fun CaptureService.startRawTakeOnControl(session: RawTakeSession, captureNames: CaptureNameSnapshot, audio: RawAudioSource?) {
+internal fun CaptureService.startRawTakeOnControl(
+    session: RawTakeSession,
+    captureNames: CaptureNameSnapshot,
+    audio: RawAudioSource?,
+    motion: com.librestatic.opencinecam.rawvideo.RawMotionSource? = null,
+) {
     fun refuse(reason: String) = mainHandler.post { if (!serviceDestroyed) rawTakeRefused(session, reason) }
     val recovered = recoverRawTakes()
     // Interrupted takes on a drive wait in the take journal for its next mount or the service's next start: scanning
@@ -864,7 +875,7 @@ internal fun CaptureService.startRawTakeOnControl(session: RawTakeSession, captu
         // PLAN-072 Delivery 4: a continuation's `.ocraw` names the drive take it continues in static metadata keys.
         val link = session.continuation?.link?.let { mapOf("continuationOf" to it.of, "continuationPreviousName" to it.previousName,
             "continuationIndex" to it.index.toString(), "continuationReason" to it.reason) }.orEmpty()
-        rawRecorder.start(output, RawTakeInfo(session.takeId, Build.MODEL, appVersion, mapOf("fingerprint" to Build.FINGERPRINT) + link), audio) { reason ->
+        rawRecorder.start(output, RawTakeInfo(session.takeId, Build.MODEL, appVersion, mapOf("fingerprint" to Build.FINGERPRINT) + link), audio, motion) { reason ->
             // The recorder cannot keep up or failed: end the take; its reason comes back from stop().
             android.util.Log.w("CaptureService", "RAW take must end: $reason")
             // A write that failed on a drive (ENODEV can come before any volume event) is the drive going: Stop and save.

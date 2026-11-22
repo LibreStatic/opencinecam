@@ -186,6 +186,7 @@ class WebDavMediaStoreArtifactSourceDeviceTest {
         val (collection, extension, mime) = when (role) {
             WebDavArtifactRole.VIDEO -> Triple(MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), "mp4", "video/mp4")
             WebDavArtifactRole.AUDIO -> Triple(MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), "wav", "audio/wav")
+            WebDavArtifactRole.MOTION_LOG -> Triple(MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), "gcsv", "text/csv")
             else -> Triple(MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), "json", "application/json")
         }
         val uri = requireNotNull(resolver.insert(collection, ContentValues().apply {

@@ -4,6 +4,7 @@ package com.librestatic.opencinecam.transfers
 import com.librestatic.opencinecam.storage.CaptureArtifactRole
 import com.librestatic.opencinecam.storage.CapturePublicationObserver
 import com.librestatic.opencinecam.storage.PreparedCaptureArtifact
+import com.librestatic.opencinecam.storage.motionLogName
 import java.util.UUID
 
 enum class CaptureOutboxRegistrationStatus { STAGED, REGISTERED, ALREADY_REGISTERED, NOT_ENROLLED, BLOCKED }
@@ -164,7 +165,7 @@ class CapturePublicationOutboxBridge(
     private fun plan(enrollment: CaptureTransferEnrollment, artifacts: List<PreparedCaptureArtifact>, facts: List<WebDavClipSnapshot>) =
         WebDavBundlePlan(bundleId, enrollment.endpointId, enrollment.endpointRevision, artifacts.zip(facts).map { (artifact, source) ->
             WebDavArtifactSpec(artifactId(bundleId, artifact.role), WebDavArtifactRole.valueOf(artifact.role.name),
-                artifact.uri, artifact.displayName, source.sizeBytes)
+                artifact.uri, artifact.displayName, source.sizeBytes, remoteName(artifact, artifacts))
         })
 
     private fun register(artifacts: List<PreparedCaptureArtifact>, enrollment: CaptureTransferEnrollment, allowCreate: Boolean): CaptureOutboxRegistration {
@@ -240,5 +241,13 @@ class CapturePublicationOutboxBridge(
             requirePublicationUuid(bundleId)
             return UUID.nameUUIDFromBytes("opencinecam.webdav.artifact.v1/$bundleId/${role.name}".toByteArray(Charsets.UTF_8)).toString()
         }
+
+        /**
+         * The name [artifact] is uploaded under: its own, except the Gyroflow log, which takes the uploaded video's stem
+         * so Gyroflow pairs the two on the server even when the provider gave the local log row another name.
+         */
+        internal fun remoteName(artifact: PreparedCaptureArtifact, artifacts: List<PreparedCaptureArtifact>): String =
+            if (artifact.role != CaptureArtifactRole.MOTION_LOG) artifact.displayName
+            else motionLogName(artifacts.single { it.role == CaptureArtifactRole.VIDEO }.displayName)
     }
 }

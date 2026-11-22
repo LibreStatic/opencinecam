@@ -92,6 +92,11 @@ data class CaptureEpochReport(
      * microseconds; positive placed it later. [audioFrameZeroNs] stays the measured anchor.
      */
     val audioSyncOffsetUs: Long = 0,
+    /**
+     * The constant the muxer added to every video time after rebasing it to the first frame's, microseconds: a frame's
+     * file time is its encoder presentation time minus the first frame's, plus this. 0 when the take has no embedded audio.
+     */
+    val videoMuxOffsetUs: Long = 0,
 )
 
 /**

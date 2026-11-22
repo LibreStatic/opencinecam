@@ -95,6 +95,7 @@ import com.librestatic.opencinecam.camera.RawVideoQualificationSet
 import com.librestatic.opencinecam.rawvideo.RawVideoRecorder
 import com.librestatic.opencinecam.storage.RawVideoQualificationStore
 import com.librestatic.opencinecam.storage.VideoOutput
+import com.librestatic.opencinecam.motion.MotionTakeRoute
 import com.librestatic.opencinecam.storage.RecordingDestination
 import com.librestatic.opencinecam.storage.RecordingVolumeEvent
 import com.librestatic.opencinecam.storage.RecordingVolumeMonitor
@@ -192,7 +193,9 @@ class CaptureService : Service() {
     internal val stillSaver by lazy { StillImageSaver(this) }
     // Take-owned fields are written on main before dispatch and detached by engine callbacks.
     @Volatile internal var videoOutput: VideoOutput? = null
-    @Volatile internal var latestRollingShutterSkewNs: Long? = null
+    // The recording take's motion data, fed from engine callbacks without the ownership lock: the recorder ignores
+    // calls after its stop, so a late frame or metadata callback is harmless.
+    @Volatile internal var activeMotionRecorder: com.librestatic.opencinecam.motion.MotionTakeRecorder? = null
     internal val takeOwnershipLock = Any()
     internal val recordingRecoveryGuards = java.util.concurrent.ConcurrentHashMap<VideoOutput, AutoCloseable>()
 
@@ -392,10 +395,18 @@ class CaptureService : Service() {
     /** A drive take left pending was released only when its last native writer closed: queue the pass [relinquishTake] could not. */
     private val driveTakeReleased: () -> Unit = { if (!serviceDestroyed) queueRecordingRecovery("a drive take was left pending") }
 
+    /** A take started before an interrupted phone take's motion log was rendered: the pass that renders it, unannounced. */
+    private val motionRenderDue: () -> Unit = {
+        if (!serviceDestroyed) queueRecordingRecovery("an interrupted take's motion log awaits its render", announce = false)
+    }
+
     /** What a still recovery pass was asked for: the startup report published, or a mounted drive's scratch purged. */
     internal data class StillRecoveryRequest(val publishReport: Boolean = false, val scratchVolume: String? = null)
-    /** What a journal pass was asked for: [cause] for the log; [startup] also runs the phone's RAW recovery and always publishes. */
-    internal data class JournalRecoveryRequest(val cause: String, val startup: Boolean = false)
+    /**
+     * What a journal pass was asked for: [cause] for the log; [startup] also runs the phone's RAW recovery and always
+     * publishes. Without [announce] the pass does not say what it recovered (its takes are not the drive's).
+     */
+    internal data class JournalRecoveryRequest(val cause: String, val startup: Boolean = false, val announce: Boolean = true)
 
     /*
      * PLAN-072: [recoveryExecutor] runs one thread over a short queue, and a RAW repair can hold it for minutes, so its
@@ -532,6 +543,7 @@ class CaptureService : Service() {
         super.onCreate()
         com.librestatic.opencinecam.storage.RecordingCaptureRecovery.onRawRepairDue = rawRepairDue
         com.librestatic.opencinecam.storage.RecordingCaptureRecovery.onDriveTakeReleased = driveTakeReleased
+        com.librestatic.opencinecam.storage.RecordingCaptureRecovery.onMotionRenderDue = motionRenderDue
         audioInputMonitor = AudioInputMonitor(this, ::onAudioInputsChanged).also { it.register() }
         mainHandler.postDelayed(previewStartWatchdog, PREVIEW_WATCHDOG_INTERVAL_MS)
         audioListeningController = AudioListeningController(this, onStatus = { status ->
@@ -688,7 +700,10 @@ class CaptureService : Service() {
 
     // ---- Lens calibration run (PLAN-070) ----
 
-    internal class CalibrationRestore(val cameraId: String, val mode: CaptureMode, val zoom: Float)
+    internal class CalibrationRestore(val cameraId: String, val mode: CaptureMode, val zoom: Float) {
+        /** The high-speed size and rate (width, height, fps) the run moved the session off; null when it kept them. */
+        var highSpeedTarget: Triple<Int, Int, Int>? = null
+    }
 
     /** One run, from the binder call to its end. Fields are written by main and by the worker thread. */
     internal class CalibrationRun(val restore: CalibrationRestore) {
@@ -711,6 +726,8 @@ class CaptureService : Service() {
     @Volatile internal var savedCalibration: com.librestatic.opencinecam.core.model.CalibrationSet? = null
     @Volatile internal var liveRedBlueRatio: Float? = null
     internal val openingCount = AtomicInteger()
+    /** selectMode's deferred high-speed start while it waits on the main handler. Main thread only. */
+    internal var pendingModeStart: Runnable? = null
 
     internal val calibrationPrepareTimeoutMs = 15_000L
     internal val calibrationCaptureTimeoutMs = 10_000L
@@ -1113,12 +1130,29 @@ class CaptureService : Service() {
                 return
             }
             val relocked = wasLensLocked
-            if (relocked) attachedPreviewSurface?.takeIf { it.isValid }?.let { attachPreview(it, attachedPreviewRotationDegrees) }
+            // A constrained high-speed session (slow motion) gives the run no stable samples: it measures on a
+            // standard-rate profile, and finishCalibration puts the size and rate back.
+            val highSpeed = cameraState.value.activeVideoProfile?.takeIf { mode in CameraUiState.videoProfileModes && it.constrainedHighSpeed }
+            val standard = highSpeed?.let { profile ->
+                com.librestatic.opencinecam.capture.calibrationVideoProfile(
+                    current.descriptor?.videoProfiles.orEmpty().filter { !it.constrainedHighSpeed }.map { it.toSpec() },
+                    profile.size.width, profile.size.height,
+                )
+            }
+            if (highSpeed != null && standard != null) {
+                run.restore.highSpeedTarget = Triple(highSpeed.size.width, highSpeed.size.height, highSpeed.fps)
+                cameraState.update {
+                    it.copy(targetVideoWidth = standard.width, targetVideoHeight = standard.height, targetFps = standard.fps, effectiveFps = null)
+                }
+            }
+            // A start selectMode deferred reads the new size and rate when it runs; otherwise the session restarts here.
+            val restarted = relocked || (standard != null && pendingModeStart == null)
+            if (restarted) attachedPreviewSurface?.takeIf { it.isValid }?.let { attachPreview(it, attachedPreviewRotationDegrees) }
             // While locked the state holds the locked lens' range; the run sweeps the logical one.
             val zoomRange = current.descriptor?.effectiveZoomRange?.takeIf { wasLensLocked } ?: (current.zoomMinRatio..current.zoomMaxRatio)
             cameraState.update { it.copy(lensCalibrationRunning = true) }
             run.thread = Thread({
-                runCalibration(run, lenses, mode, zoomRange, openedBefore, switched || relocked)
+                runCalibration(run, lenses, mode, zoomRange, openedBefore, switched || restarted)
             }, "lens-calibration").also { it.isDaemon = true; it.start() }
         }
 
@@ -1597,7 +1631,7 @@ class CaptureService : Service() {
             val selectedLogProfile = descriptor?.let {
                 normalizedLogProfile(it, mode, geometrySeeds.logWidth, geometrySeeds.logHeight, geometrySeeds.logFps)
             }.takeIf { mode.usesLogGraph }
-            val changedSignalPath =
+            val changedGraph =
                 desiredGpuViewfinder(current.selectedMode) != desiredGpuViewfinder(mode) ||
                 selectedStillPhotoFormat(current.selectedMode) != selectedStillPhotoFormat(mode) ||
                 nightExtensionActive(current.selectedMode) != nightExtensionActive(mode) ||
@@ -1611,6 +1645,11 @@ class CaptureService : Service() {
             val selectedVideoProfile = descriptor?.let {
                 normalizedVideoProfile(it, geometrySeeds.width(mode), geometrySeeds.height(mode), geometrySeeds.fps(mode))
             }.takeIf { mode in CameraUiState.videoProfileModes }
+            // Video and time lapse keep their own size and rate on the same graph: a session configured for one profile
+            // cannot record the other's (slow motion after a time lapse found no high-speed session).
+            val changedSignalPath = changedGraph ||
+                (current.selectedMode in CameraUiState.videoProfileModes && mode in CameraUiState.videoProfileModes &&
+                    current.activeVideoProfile != selectedVideoProfile)
             val selectedWidth = selectedLogProfile?.size?.width ?: selectedVideoProfile?.size?.width
                 ?: geometrySeeds.width(mode)
             val selectedHeight = selectedLogProfile?.size?.height ?: selectedVideoProfile?.size?.height
@@ -1647,9 +1686,17 @@ class CaptureService : Service() {
                 val surface = attachedPreviewSurface
                 if (descriptor != null && surface?.isValid == true) {
                     cameraState.value = cameraState.value.copy(phase = CameraUiPhase.OPENING)
+                    pendingModeStart?.let(mainHandler::removeCallbacks)
+                    pendingModeStart = null
                     val start = Runnable {
-                    // A later mode change supersedes this deferred start.
-                    if (cameraState.value.selectedMode != mode || !surface.isValid) return@Runnable
+                    pendingModeStart = null
+                    // A later mode change, a camera switch, a take admitted meanwhile or the RAW qualification's hold on
+                    // the preview supersedes this deferred start. A lens calibration does not: it switches the mode and
+                    // then locks the controls, and its run waits for this very reopen.
+                    val now = cameraState.value
+                    if (now.selectedMode != mode || !surface.isValid || rawQualificationPreviewHeld ||
+                        now.copy(lensCalibrationRunning = false).structuralSettingsFrozen ||
+                        now.descriptor?.cameraId != descriptor.cameraId) return@Runnable
                     previewEngine.startPreview(
                         descriptor,
                         surface,
@@ -1676,6 +1723,7 @@ class CaptureService : Service() {
                     // As in selectTargetFps: let the panel apply its high refresh-rate vote before a
                     // constrained high-speed stream starts.
                     if (cameraState.value.activeVideoProfile?.constrainedHighSpeed == true && mode in CameraUiState.videoProfileModes) {
+                        pendingModeStart = start
                         mainHandler.postDelayed(start, 350L)
                     } else start.run()
                 }
@@ -2885,8 +2933,8 @@ class CaptureService : Service() {
                         val projectFps = settings.videoProjectRate.let { rate ->
                             kotlin.math.round(rate.numerator.toDouble() / rate.denominator).toInt().coerceAtLeast(1)
                         }
-                        attachMotionLog(output, settings.gyroflowLogEnabled && !directHighSpeed && !settings.videoOffSpeed &&
-                            current.activeVideoProfile?.constrainedHighSpeed != true, descriptor, takeGeometry)
+                        attachMotionLog(output, settings.gyroflowLogEnabled, descriptor, takeGeometry,
+                            if (directHighSpeed) MotionTakeRoute.MEDIA_RECORDER else MotionTakeRoute.GPU, current.targetFps.toDouble())
                         previewEngine.startVideo(
                             output.descriptor,
                             embeddedAudio,
@@ -3035,8 +3083,8 @@ class CaptureService : Service() {
                         ) }
                         dispatchTransferCapture()
                         reserveRecordingRecoveryGuard(output)
-                        attachMotionLog(output, settings.gyroflowLogEnabled && current.activeVideoProfile?.constrainedHighSpeed != true,
-                            descriptor, geometry)
+                        attachMotionLog(output, settings.gyroflowLogEnabled, descriptor, geometry, MotionTakeRoute.GPU,
+                            current.targetFps.toDouble())
                         previewEngine.startOpenCineLogVideo(
                             output.descriptor,
                             recordingGeometry = geometry,
@@ -3116,6 +3164,7 @@ class CaptureService : Service() {
                         )
                         dispatchTransferCapture()
                         reserveRecordingRecoveryGuard(output)
+                        attachMotionLog(output, settings.gyroflowLogEnabled, descriptor, geometry, MotionTakeRoute.GPU, captureRate)
                         previewEngine.startVideo(
                             output.descriptor,
                             null,
@@ -3185,6 +3234,7 @@ class CaptureService : Service() {
         com.librestatic.opencinecam.storage.RecordingCaptureRecovery.run {
             if (onRawRepairDue === rawRepairDue) onRawRepairDue = null
             if (onDriveTakeReleased === driveTakeReleased) onDriveTakeReleased = null
+            if (onMotionRenderDue === motionRenderDue) onMotionRenderDue = null
         }
         // A drive take's continuation never outlives the service (PLAN-072 Delivery 4).
         driveContinuation.veto()

@@ -56,6 +56,7 @@ internal fun buildCapabilityReport(
     audio: JsonObject = unknownAudioReport(),
     apvReasons: List<String> = APV_UNPROBED_REASONS,
     deviceProfiles: Map<String, QuirkResolution> = emptyMap(),
+    motionSensors: List<MotionSensorFact>? = null,
     reportId: String = UUID.randomUUID().toString(),
     createdAt: String = Instant.now().toString(),
 ): CapabilityReportDocument = CapabilityReportDocument(
@@ -69,6 +70,8 @@ internal fun buildCapabilityReport(
         put("release", device.release)
         put("sdkInt", device.sdkInt)
         put("characteristicsDigest", characteristicsDigest(inventory))
+        // Device-wide, not per camera; additive, so absent until the sensors have been read.
+        motionSensors?.let { put("motionSensors", motionSensorsJson(it)) }
     },
     cameras = inventory.map { camera ->
         buildJsonObject {

@@ -41,15 +41,16 @@ the standard-library path. Both paths write byte-identical files.
 ```bash
 python3 desktop-tools/ocraw_to_dng.py clip.ocraw -o clip-dng \
   [--frames 0-99|5,7|10-] [--every N] [--no-crc] [--prefix name] [--pure] \
-  [--wav clip.wav [--wav-from-audio]]
-python3 desktop-tools/ocraw_to_dng.py clip.ocraw --cinemadng clips [--wav-from-audio] ...
+  [--wav clip.wav [--wav-from-audio]] [--gcsv clip.gcsv | --no-gcsv]
+python3 desktop-tools/ocraw_to_dng.py clip.ocraw --cinemadng clips [--wav-from-audio] [--no-gcsv] ...
 ```
 
 - Files are named `<prefix>_<index:06d>.dng`, the prefix defaulting to the
   input's stem and the index being the frame's 0-based position in file order
   (every `RAW_FRAME` chunk counts, so a skipped frame leaves a gap).
 - `--cinemadng DIR` writes one clip folder, `DIR/<take>/`, with the DNGs and,
-  when the take has sound, `<take>.wav` beside them (the `--wav` rules below).
+  when the take has sound, `<take>.wav` beside them (the `--wav` rules below),
+  and when it has motion data, `<take>.gcsv` (the `--gcsv` rules below).
   `<take>` is `--prefix` or the input's stem. It replaces `-o` and `--wav`.
 - `--frames` takes 0-based frame indices in file order (every `RAW_FRAME`
   chunk counts, valid or not); `--every N` then keeps every Nth selected frame,
@@ -77,6 +78,24 @@ python3 desktop-tools/ocraw_to_dng.py clip.ocraw --cinemadng clips [--wav-from-a
   placed by their timestamps: a gap of more than 1 ms, such as audio the
   recorder dropped (`audioDroppedSamples`), becomes silence, and overlapping
   samples are dropped. A take without audio exits with status 2.
+- `--gcsv out.gcsv` also writes the take's motion data (its `IMU_SAMPLES`
+  chunks) as a Gyroflow 1.3 `.gcsv` log, to stabilise the DNG sequence in
+  Gyroflow; given without `-o`, only the log is written. With an output folder
+  (`-o DIR` or `--cinemadng`) the log is written by default as
+  `DIR/<DIR name>.gcsv` when the take has gyroscope samples, and a take
+  without them writes none and is not an error; `--no-gcsv` turns it off. An
+  explicit `--gcsv` on a take without gyroscope samples exits with status 2.
+  `t` counts microseconds from the first RAW frame (DNG number 0); gyroscope
+  samples before it, or after the last frame plus one frame interval, are
+  dropped. Gyro rows are rad/s over `gscale` 0.00001; the accelerometer (in g)
+  and the magnetometer (in gauss, only with the accelerometer) come from the
+  sample of that sensor nearest in time. The header takes `orientation`,
+  `frame_readout_time` and `frame_readout_direction` from the take's
+  `imuOrientation`, `rollingShutterSkewNs` and `imuReadoutDirection`, the note
+  from `imuClock`, `fwversion` from `appVersion` and `timestamp` from
+  `takeStartUnixMs`, each line left out when its key is missing. The text is
+  the one `GyroflowLog.kt` writes for ordinary video (header order, Java
+  rounding).
 
 Each DNG is little-endian, DNG 1.4 (backward 1.1), with one image IFD holding
 the CFA mosaic, and an EXIF IFD. RAW10 and block-pack frames are stored as

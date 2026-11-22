@@ -59,6 +59,18 @@ class SchemaModelsTest {
         assertEquals(document, decoded)
         val plain = encodeCanonical(document.copy(media = null, takeStatus = null, failureReasons = null))
         assertTrue(!plain.contains("media") && !plain.contains("takeStatus") && !plain.contains("failureReasons"))
+        assertTrue(!plain.contains("motion"))
+    }
+
+    @Test
+    fun clipSidecarKeepsItsMotionBlock() {
+        val motion = buildJsonObject { put("sync", "measured"); put("log", "take.gcsv") }
+        val document = ClipSidecarDocument(
+            "1.2.0", "recording", "2026-08-20T00:00:00Z", objectValue, objectValue, emptyList(), emptyList(), motion = motion,
+        )
+        assertEquals(motion, decodeCanonical<ClipSidecarDocument>(encodeCanonical(document)).motion)
+        val example = Files.readString(repositoryRoot().resolve("docs/schemas/examples/clip-sidecar.example.json"))
+        assertEquals("measured", (decodeCanonical<ClipSidecarDocument>(example).motion!!["sync"] as kotlinx.serialization.json.JsonPrimitive).content)
     }
 
     @Test(expected = UnsupportedSchemaMajor::class)

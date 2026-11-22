@@ -118,6 +118,7 @@ internal fun CameraCapabilitiesScreen(
     loadCodecAudio: ((Context, List<CameraInventory>) -> CodecAudioMetadata?)? = null,
     loadMain10Check: ((Context) -> Main10FileCheck?)? = null,
     loadDeviceProfile: ((Context, String) -> QuirkResolution)? = null,
+    loadMotionSensors: ((Context) -> List<MotionSensorFact>)? = null,
 ) {
     val context = LocalContext.current
     val inventory by produceState<List<CameraInventory>?>(null, context) {
@@ -153,6 +154,12 @@ internal fun CameraCapabilitiesScreen(
             }
         }
     }
+    // Device-wide: the default gyroscope, accelerometer and magnetometer the motion data is recorded from.
+    val motionSensors by produceState<List<MotionSensorFact>?>(null, context) {
+        value = withContext(Dispatchers.IO) {
+            runCatching { loadMotionSensors?.invoke(context) ?: readMotionSensorFacts(context) }.getOrNull()
+        }
+    }
     var selectedId by rememberSaveable { mutableStateOf(activeCameraId) }
     var filter by rememberSaveable { mutableStateOf("") }
     val expanded = remember { mutableStateMapOf<String, Boolean>() }
@@ -173,7 +180,7 @@ internal fun CameraCapabilitiesScreen(
     var pendingSave by remember { mutableStateOf<Pair<ReportExportMode, Boolean>?>(null) }
     fun reportJson(list: List<CameraInventory>): JsonElement = capabilityReportJson(
         buildCapabilityReport(reportDeviceFacts(), list, cameras, liveState, apvReasons = apvReasons,
-            codecs = codecAudio?.let(CodecAudioReportJson::codecs).orEmpty(), deviceProfiles = deviceProfiles,
+            codecs = codecAudio?.let(CodecAudioReportJson::codecs).orEmpty(), deviceProfiles = deviceProfiles, motionSensors = motionSensors,
             audio = codecAudio?.let(CodecAudioReportJson::audio) ?: unknownAudioReport()),
     )
     val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
@@ -207,7 +214,7 @@ internal fun CameraCapabilitiesScreen(
             ReportExportAction.COPY -> {
                 // The plain-text report names the phone on its first line; the redacted copy hides it.
                 val text = capabilityReportText(if (mode == ReportExportMode.FULL) deviceLine() else JsonReportRedactor.REDACTED,
-                    list, cameras, context::getString, liveState, apvReasons, deviceProfiles)
+                    list, cameras, context::getString, liveState, apvReasons, deviceProfiles, motionSensors)
                 val ok = runCatching {
                     context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText(clipLabel, text))
                 }.isSuccess
@@ -253,6 +260,7 @@ internal fun CameraCapabilitiesScreen(
                 item(key = "profile-${selected.cameraId}") { DeviceProfileCard(deviceProfiles[selected.cameraId]) }
                 item(key = "app-${selected.cameraId}") { AppUsageCard(selected, findings) }
                 item(key = "codecs") { CodecAudioCard(codecAudio) }
+                item(key = "motion-sensors") { MotionSensorsCard(motionSensors) }
                 item(key = "main10-check") { Main10FileCheckCard(main10Check) }
                 // Live values only belong to the camera in use; Settings shows a one-line summary of them.
                 val live = liveState?.takeIf { it.selectedCameraId == selected.cameraId }
@@ -420,6 +428,47 @@ private fun CodecAudioCard(metadata: CodecAudioMetadata?) {
             }
         }
     }
+}
+
+/** The default motion sensors: absent, or the fastest rate each declares and its resolution. */
+@Composable
+private fun MotionSensorsCard(facts: List<MotionSensorFact>?) {
+    SettingsCard(Modifier.testTag("capabilities-motion-sensors")) {
+        if (facts == null) {
+            SettingsHeading(stringResource(R.string.caps_section_motion), icon = CineIcon.INFO)
+            Text(stringResource(R.string.caps_loading), color = SettingsMuted, fontSize = 13.sp)
+            return@SettingsCard
+        }
+        SettingsHeading(stringResource(R.string.caps_section_motion), stringResource(R.string.caps_motion_summary, facts.count { it.present }, facts.size), CineIcon.INFO)
+        facts.forEach { fact ->
+            Row(Modifier.fillMaxWidth().testTag("capabilities-motion-${fact.kind.id}"), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(stringResource(fact.kind.label()), color = SettingsMuted, fontSize = 13.sp, modifier = Modifier.weight(0.42f))
+                Column(Modifier.weight(0.58f)) {
+                    if (!fact.present) {
+                        Text(stringResource(R.string.caps_motion_not_available), color = SettingsMuted, fontSize = 13.sp)
+                        return@Column
+                    }
+                    Text(
+                        fact.maxRateHz?.let { stringResource(R.string.caps_motion_rate, formatRateHz(it)) } ?: stringResource(R.string.caps_motion_rate_unknown),
+                        color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp,
+                    )
+                    fact.resolution?.let {
+                        Text(stringResource(R.string.caps_motion_resolution, formatSensorValue(it, fact.kind.unit)), color = SettingsMuted, fontSize = 12.sp)
+                    }
+                    if (fact.highSamplingRateCapped == true) {
+                        Text(stringResource(R.string.caps_motion_capped, formatRateHz(HIGH_SAMPLING_RATE_CAP_HZ)), color = LocalCineColors.current.pending, fontSize = 12.sp)
+                    }
+                    fact.name?.let { Text(it, color = SettingsMuted, fontSize = 11.sp, fontFamily = FontFamily.Monospace) }
+                }
+            }
+        }
+    }
+}
+
+private fun MotionSensorKind.label(): Int = when (this) {
+    MotionSensorKind.GYROSCOPE -> R.string.caps_motion_gyroscope
+    MotionSensorKind.ACCELEROMETER -> R.string.caps_motion_accelerometer
+    MotionSensorKind.MAGNETOMETER -> R.string.caps_motion_magnetometer
 }
 
 /** The latest Main10 file check: signalling and effective precision are reported separately and never merged. */
@@ -607,9 +656,15 @@ internal fun capabilityReportText(
     live: CameraUiState? = null,
     apvReasons: List<String> = APV_UNPROBED_REASONS,
     deviceProfiles: Map<String, QuirkResolution> = emptyMap(),
+    motionSensors: List<MotionSensorFact>? = null,
 ): String = buildString {
     appendLine("OpenCineCam · ${label(R.string.caps_title)}")
     appendLine(device)
+    motionSensors?.let { facts ->
+        appendLine()
+        appendLine("-- ${label(R.string.caps_section_motion)} --")
+        facts.forEach { appendLine(motionSensorLine(it, label(R.string.caps_motion_not_available))) }
+    }
     inventory.forEach { camera ->
         appendLine()
         append("== camera ${camera.cameraId}")

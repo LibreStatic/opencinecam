@@ -121,7 +121,7 @@
     <string name="raw_qualification_option_predict_body">Schneller. Eine Konfiguration, die der Speicher nicht halten kann, wird nach dem Speichertest als riskant markiert, ohne sie aufzunehmen.</string>
     <string name="raw_qualification_option_camera_only">Nur Kameratest</string>
     <string name="raw_qualification_option_camera_only_body">Überspringt den Speichertest. Jede Konfiguration, die die Kamera liefert, wird als riskant markiert: Du kannst sie von Hand wählen, Automatisch wählt sie nie.</string>
-    <string name="raw_qualification_reuse">Kameraprüfungen der letzten Qualifizierung werden wiederverwendet</string>
+    <string name="raw_qualification_reuse">Kameramessungen der letzten Qualifizierung werden wiederverwendet</string>
     <string name="raw_qualification_item_untested">Speicher nicht getestet</string>
     <string name="raw_qualification_risky_body_untested">Du kannst sie von Hand wählen, aber der Speicher wurde bei ihrer Rate nicht getestet: Eine Aufnahme kann ruckeln, verzögern oder beschädigt werden. Automatisch wählt sie nie.</string>
     <string name="raw_qualification_risky_body_mixed">Du kannst sie wählen, aber der Speicher ist für ihre Rate zu langsam oder wurde nicht getestet: Eine Aufnahme kann ruckeln, verzögern oder beschädigt werden.</string>

@@ -37,6 +37,15 @@ class ModeSelectionTest {
         for (mode in listOf(CaptureMode.LOG, CaptureMode.TIME_LAPSE, CaptureMode.PHOTO)) assertNull(takeLengthLimitMs(mode, ten, highSpeed = true))
     }
 
+    @Test fun calibrationLeavesHighSpeedForAStandardRateAtTheSameSize() {
+        val standard = listOf(profile(3840, 2160, 60), profile(1920, 1080, 60), profile(1920, 1080, 30), profile(1920, 1080, 24))
+        assertEquals(profile(1920, 1080, 30), calibrationVideoProfile(standard, 1920, 1080))
+        assertEquals(profile(3840, 2160, 60), calibrationVideoProfile(standard, 3840, 2160))
+        // No standard profile at the high-speed size: the rate nearest 30 fps, then the nearest size.
+        assertEquals(profile(1920, 1080, 30), calibrationVideoProfile(standard + profile(3840, 2160, 30) - profile(3840, 2160, 60), 1280, 720))
+        assertNull(calibrationVideoProfile(emptyList(), 1920, 1080))
+    }
+
     @Test fun slowMotionNeedsAHighSpeedProfile() {
         assertTrue(supportsSlowMotion(sampleDevice))
         assertFalse(supportsSlowMotion(listOf(profile(1920, 1080, 30), profile(1920, 1080, 60))))

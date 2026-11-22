@@ -42,7 +42,7 @@ The [user guide](docs/user-guide.md) explains where each feature lives and how t
 - **Lens lock**: keeps a take on one physical lens while you zoom (zoom becomes digital), falling back to a digital crop where the lens cannot be opened directly. **Smooth lens switch** (opt-in) hides the framing jump at an automatic lens switch.
 - **Recording policy**: Strict (default on fresh installs) stops a take and says why when storage, heat or frame timing leave the safe range; Adaptive keeps recording, reduces monitoring work and warns.
 - Audio as an AAC MP4 track or as separate lossless WAV/FLAC sidecars, with live level meters; USB, Bluetooth and wired microphones with a chosen behaviour when the input disconnects.
-- Optional gyro log (`.gcsv`) next to each video, LOG or HLG take, for stabilization in Gyroflow.
+- Optional motion data (gyroscope, accelerometer, magnetometer) for every video take, as a Gyroflow `.gcsv` next to it and a CAMM track inside the MP4; RAW video keeps it inside the `.ocraw`.
 - Shared VIDEO/LOG pause, SMPTE timecode, production slate metadata and a canonical `<take>.clip.json` sidecar per video take.
 - A take interrupted by a failure is kept and labelled as incomplete, with its reasons, instead of being deleted.
 
@@ -89,6 +89,7 @@ See [security and privacy](docs/security-and-privacy.md) and the [privacy policy
 | `FOREGROUND_SERVICE_DATA_SYNC` | The opt-in automatic WebDAV upload only. It runs only while **Upload new takes automatically** is on. |
 | `INTERNET`, `ACCESS_NETWORK_STATE` | Opt-in WebDAV transfers only (PLAN-067 / ADR-0034). Off by default; presets never enable networking. Takes are sent by an explicit action unless automatic upload is turned on, and only to the destination you configure. |
 | `ACCESS_COARSE_LOCATION`, `ACCESS_FINE_LOCATION` | Opt-in geotagging only, requested at runtime while the camera screen is open. Off by default. |
+| `HIGH_SAMPLING_RATE_SENSORS` | Opt-in motion data only: the motion sensors at their full rate while a take records. Off by default; granted at install without a prompt. |
 
 No broad storage permission is requested: MediaStore and the Storage Access Framework own destinations. USB microphones need no extra permission or manifest entry; Android's audio input routing handles them.
 

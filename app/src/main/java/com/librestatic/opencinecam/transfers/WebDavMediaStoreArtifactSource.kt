@@ -45,6 +45,7 @@ internal class WebDavMediaStoreArtifactSource(
             WebDavArtifactRole.AUDIO -> CaptureArtifactRole.AUDIO
             WebDavArtifactRole.AUDIO_METADATA -> CaptureArtifactRole.AUDIO_METADATA
             WebDavArtifactRole.CLIP_METADATA -> CaptureArtifactRole.CLIP_METADATA
+            WebDavArtifactRole.MOTION_LOG -> CaptureArtifactRole.MOTION_LOG
         }
         private val probe = CaptureArtifactProbe(resolver)
         private val onDrive = isDriveUri(spec.sourceUri)

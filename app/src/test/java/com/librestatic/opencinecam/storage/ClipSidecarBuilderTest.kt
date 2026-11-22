@@ -54,7 +54,7 @@ class ClipSidecarBuilderTest {
 
     @Test fun completeTakeIsValidAndDescribesIntentAndGraph() {
         val document = assertValid(encoded(facts(), context()))
-        assertEquals("1.1.0", document.schemaVersion)
+        assertEquals("1.2.0", document.schemaVersion)
         assertEquals(id, document.recordingId)
         assertEquals("2026-10-22T10:15:30.250Z", document.createdAt)
         assertEquals("STRICT", document.intent.getValue("recordingPolicy").jsonObject.getValue("value").jsonPrimitive.content)
@@ -239,5 +239,96 @@ class ClipSidecarBuilderTest {
         assertFalse("equaliserProfileId" in plain)
         // Without evidence (a separate file, or an engine that did not report) the block is unchanged.
         assertFalse("inputPath" in assertValid(encoded(facts(), context())).resolvedGraph.getValue("audio").jsonObject)
+    }
+
+    private fun summary(realtime: Boolean = true, synced: Boolean = true, estimated: Boolean = false, camm: Boolean = true,
+        attached: Boolean = true, magnetometer: Boolean = false) = com.librestatic.opencinecam.motion.MotionTakeSummary(
+        info = com.librestatic.opencinecam.motion.MotionTakeInfo(
+            takeId = "take-1", videoFileName = "take.mp4", orientation = "yxz", readoutDirection = 0, frontFacing = false,
+            sensorOrientationDegrees = 90, storedRotationDegrees = 0, cameraClockRealtime = realtime, clockOffsetNs = 0L,
+            startedAtUnixMs = 1_700_000_000_000L, firmware = "test", route = com.librestatic.opencinecam.motion.MotionTakeRoute.GPU,
+            captureFps = 30.0, gyroMaxHz = 500.0, accelerometer = true, accelMaxHz = 400.0, magnetometer = magnetometer,
+            magMaxHz = if (magnetometer) 100.0 else null,
+        ),
+        result = com.librestatic.opencinecam.motion.MotionRenderResult(
+            gcsvRows = 6_000, gyroSamples = 6_225, accelSamples = 4_980, magSamples = if (magnetometer) 1_250 else 0,
+            measuredGyroHz = 498.23456, measuredAccelHz = 398.4, measuredMagHz = if (magnetometer) 99.81 else null,
+            largestGyroGapNs = 4_180_999L, globalRateScale = 0.1250000004, fileStartUs = 0L, fileEndUs = 12_466_000L,
+        ),
+        synced = synced, estimated = estimated, cammAppended = camm, cammPackets = if (camm) 6_233 else 0,
+        cammBinUs = if (camm) 2_000L else null, gcsvAttached = attached,
+    )
+
+    private fun motionOf(document: ClipSidecarDocument) = document.motion!!
+
+    @Test fun motionBlockDescribesSensorsSyncCammAndLog() {
+        val motion = clipMotion(summary(magnetometer = true), "take.gcsv")
+        val document = assertValid(encoded(facts(), context().copy(motion = motion)))
+        val block = motionOf(document)
+        val sensors = block.getValue("sensors").jsonObject
+        val gyro = sensors.getValue("gyroscope").jsonObject
+        assertEquals("true", gyro.getValue("present").jsonPrimitive.content)
+        assertEquals(500.0, gyro.getValue("nominalMaxHz").jsonPrimitive.content.toDouble(), 0.0)
+        assertEquals(498.23, gyro.getValue("measuredHz").jsonPrimitive.content.toDouble(), 0.0)
+        assertEquals(6_225, gyro.getValue("samples").jsonPrimitive.content.toInt())
+        assertEquals(99.81, sensors.getValue("magnetometer").jsonObject.getValue("measuredHz").jsonPrimitive.content.toDouble(), 0.0)
+        assertEquals("measured", block.getValue("sync").jsonPrimitive.content)
+        assertEquals(0.125, block.getValue("rateScale").jsonPrimitive.content.toDouble(), 0.0)
+        assertEquals(4_180L, block.getValue("largestGyroGapUs").jsonPrimitive.content.toLong())
+        val camm = block.getValue("camm").jsonObject
+        assertEquals("true", camm.getValue("present").jsonPrimitive.content)
+        assertEquals(6_233, camm.getValue("packets").jsonPrimitive.content.toInt())
+        assertEquals(2_000L, camm.getValue("binUs").jsonPrimitive.content.toLong())
+        assertEquals("take.gcsv", block.getValue("log").jsonPrimitive.content)
+        assertEquals(listOf("take.timing.json", "take.audio.json", "take.gcsv"),
+            document.media!!.getValue("sidecars").jsonArray.map { it.jsonPrimitive.content })
+    }
+
+    @Test fun motionBlockWritesUnknownsAsNullAndAbsentSensors() {
+        val motion = clipMotion(summary(camm = false, attached = false), "take.gcsv")
+        val document = assertValid(encoded(facts(), context().copy(motion = motion)))
+        val block = motionOf(document)
+        val mag = block.getValue("sensors").jsonObject.getValue("magnetometer").jsonObject
+        assertEquals("false", mag.getValue("present").jsonPrimitive.content)
+        assertEquals(kotlinx.serialization.json.JsonNull, mag.getValue("nominalMaxHz"))
+        assertEquals(kotlinx.serialization.json.JsonNull, mag.getValue("measuredHz"))
+        assertEquals(0, mag.getValue("samples").jsonPrimitive.content.toInt())
+        val camm = block.getValue("camm").jsonObject
+        assertEquals("false", camm.getValue("present").jsonPrimitive.content)
+        assertEquals(0, camm.getValue("packets").jsonPrimitive.content.toInt())
+        assertEquals(kotlinx.serialization.json.JsonNull, camm.getValue("binUs"))
+        // A log that was not attached is not named, here or among the sidecars.
+        assertEquals(kotlinx.serialization.json.JsonNull, block.getValue("log"))
+        assertEquals(listOf("take.timing.json", "take.audio.json"), document.media!!.getValue("sidecars").jsonArray.map { it.jsonPrimitive.content })
+    }
+
+    @Test fun motionSyncFollowsTheLogNote() {
+        fun sync(summary: com.librestatic.opencinecam.motion.MotionTakeSummary) =
+            motionOf(assertValid(encoded(facts(), context().copy(motion = clipMotion(summary, null))))).getValue("sync").jsonPrimitive.content
+        assertEquals("measured", sync(summary()))
+        assertEquals("estimated-clock", sync(summary(realtime = false, synced = false)))
+        assertEquals("estimated-clock", sync(summary(realtime = false, synced = false, estimated = true)))
+        assertEquals("estimated-frames", sync(summary(synced = false, estimated = true)))
+    }
+
+    @Test fun takeWithoutMotionHasNoBlock() {
+        val json = encoded(facts(), context())
+        assertFalse("\"motion\"" in json)
+        assertNull(assertValid(json).motion)
+    }
+
+    @Test fun schemaExampleMatchesTheSchema() {
+        val example = File("../docs/schemas/examples/clip-sidecar.example.json").readText()
+        val document = assertValid(example)
+        assertEquals("1.2.0", document.schemaVersion)
+        assertEquals("measured", motionOf(document).getValue("sync").jsonPrimitive.content)
+    }
+
+    @Test fun schemaStillAcceptsOlderVersions() {
+        val json = Json.parseToJsonElement(encoded(facts(), context())).jsonObject
+        listOf("1.0.0", "1.1.0").forEach { version ->
+            val older = JsonObject(json + ("schemaVersion" to JsonPrimitive(version)))
+            assertEquals(emptyList<String>(), JsonSchemaSubset.violations(schema, older))
+        }
     }
 }

@@ -116,7 +116,7 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.draw.drawWithContent
 
-/** Pause uses its own row so it never overlaps Stop on narrow/large-font displays. */
+/** While a take can be paused, the pause key takes the gallery's place beside the record button. */
 @Composable
 internal fun PortraitCaptureTransport(
     state: CameraUiState,
@@ -132,7 +132,9 @@ internal fun PortraitCaptureTransport(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            onOpenMedia?.let { open ->
+            if (recordingPauseOffered(state)) Box(Modifier.align(Alignment.CenterStart).padding(start = 24.dp)) {
+                RecordingPauseButton(state, 52.dp) { requestRecordingPause(state, binder, it) }
+            } else onOpenMedia?.let { open ->
                 Box(Modifier.align(Alignment.CenterStart).padding(start = 24.dp)) {
                     MediaThumbnailAction(state.lastSavedUri, open, size = 52.dp)
                 }
@@ -143,7 +145,6 @@ internal fun PortraitCaptureTransport(
                 else TopAction(CineIcon.MONITORING, stringResource(R.string.monitoring_tools), onShowMonitoring)
             }
         }
-        RecordingPauseButton(state) { requestRecordingPause(state, binder, it) }
         BurstCaptureProgress(state) { binder?.cancelBurstCapture() }
         BracketCaptureProgress(state) { binder?.cancelBracketCapture() }
         AccumulationCaptureProgress(state, { binder?.finishAccumulationCapture() }, { binder?.cancelAccumulationCapture() })
@@ -705,6 +706,7 @@ internal enum class RecordButtonState(val label: Int) {
     READY(R.string.rec_state_ready),
     PREPARING(R.string.rec_state_preparing),
     RECORDING(R.string.rec_state_recording),
+    PAUSED(R.string.recording_paused),
     FINALIZING(R.string.rec_state_finalizing),
     SAVED(R.string.rec_state_saved),
     PENDING(R.string.rec_state_pending),
@@ -714,7 +716,7 @@ internal enum class RecordButtonState(val label: Int) {
 internal val RecordButtonState.color: Color
     @Composable @ReadOnlyComposable get() = when (this) {
         RecordButtonState.READY -> Color.White
-        RecordButtonState.PREPARING, RecordButtonState.FINALIZING, RecordButtonState.PENDING -> Amber
+        RecordButtonState.PREPARING, RecordButtonState.PAUSED, RecordButtonState.FINALIZING, RecordButtonState.PENDING -> Amber
         RecordButtonState.RECORDING -> RecordRed
         RecordButtonState.SAVED -> OkGreen
         RecordButtonState.UNAVAILABLE -> Muted
@@ -724,6 +726,7 @@ internal fun recordButtonState(state: CameraUiState): RecordButtonState? {
     if (state.selectedMode.isStillMode()) return null
     return when {
         state.recordingFinalizing -> RecordButtonState.FINALIZING
+        state.phase == CameraUiPhase.RECORDING && state.recordingPauseStatus?.paused == true -> RecordButtonState.PAUSED
         state.phase == CameraUiPhase.RECORDING -> RecordButtonState.RECORDING
         state.phase == CameraUiPhase.CAPTURING -> RecordButtonState.PREPARING
         state.phase == CameraUiPhase.SAVED && state.takePendingRecovery -> RecordButtonState.PENDING

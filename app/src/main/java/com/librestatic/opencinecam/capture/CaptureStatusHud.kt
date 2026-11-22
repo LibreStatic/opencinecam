@@ -269,7 +269,7 @@ internal fun RecordingOverlay(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Box(Modifier.size(8.dp).clip(CircleShape).background(if (finalizing) RecordButtonState.FINALIZING.color else RecordRed))
+                Box(Modifier.size(8.dp).clip(CircleShape).background(if (finalizing || state.recordingPauseStatus?.paused == true) RecordButtonState.FINALIZING.color else RecordRed))
                 // The clock stops meaning anything once the take is closing, so the strip says so instead.
                 Text(if (finalizing) finalizingLabel
                     else (if (state.recordingPauseStatus?.paused == true) stringResource(R.string.recording_paused) else "REC") + " " + formatDuration(state.recordingElapsedMs) +

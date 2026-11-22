@@ -123,7 +123,7 @@
     <string name="raw_qualification_option_predict_body">Mais rápido. Uma configuração que o armazenamento não consegue manter é marcada como arriscada pelo teste de armazenamento, sem a gravar.</string>
     <string name="raw_qualification_option_camera_only">Só teste da câmara</string>
     <string name="raw_qualification_option_camera_only_body">Salta o teste de armazenamento. Cada configuração que a câmara fornece é marcada como arriscada: pode escolhê-la manualmente, o Automático nunca a escolhe.</string>
-    <string name="raw_qualification_reuse">As verificações da câmara da última qualificação são reaproveitadas</string>
+    <string name="raw_qualification_reuse">As medições da câmara da última qualificação são reaproveitadas</string>
     <string name="raw_qualification_item_untested">armazenamento não testado</string>
     <string name="raw_qualification_risky_body_untested">Pode escolhê-las manualmente, mas o armazenamento não foi testado à taxa delas: um take pode ter micropausas, atraso ou ficar corrompido. O Automático nunca as escolhe.</string>
     <string name="raw_qualification_risky_body_mixed">Pode escolhê-las, mas o armazenamento é demasiado lento para a taxa delas ou não foi testado: um take pode ter micropausas, atraso ou ficar corrompido.</string>

@@ -611,6 +611,7 @@
     <string name="webdav_transfer_audio">Audio</string>
     <string name="webdav_transfer_audio_metadata">Audio metadata</string>
     <string name="webdav_transfer_clip_metadata">Clip sidecar</string>
+    <string name="webdav_transfer_motion_log">Gyroflow log</string>
     <string name="webdav_transfer_preparing_capture">Stopping transfers before recording…</string>
     <string name="webdav_transfer_prepare_failed">Transfer cleanup is still pending. Recording has not started.</string>
     <string name="webdav_transfer_cancel_capture">Cancel recording preparation</string>
@@ -889,9 +890,11 @@
     <string name="lut_disable_title">Disable LUTs</string>
     <string name="permission_open_settings">Open settings</string>
     <string name="permission_blocked_explanation">Android no longer shows the permission prompt. Allow it in the app\'s system settings.</string>
-    <string name="gyroflow_log_title">Gyro data for Gyroflow</string>
-    <string name="gyroflow_log_enabled">Record gyro data for Gyroflow</string>
-    <string name="gyroflow_log_help">Saves the phone\'s motion (gyroscope and accelerometer) next to each video, LOG or HLG take as a .gcsv file with the same name, for stabilizing it in Gyroflow. Motion data is recorded only while this is on and stays in that file on your device. Not used for slow motion or time-lapse. Turn off the camera\'s own stabilization for the best match.</string>
+    <string name="gyroflow_log_title">Motion data</string>
+    <string name="gyroflow_log_enabled">Record motion data</string>
+    <string name="motion_ois_notice">OIS on: the motion data may not match the picture</string>
+    <string name="gyroflow_log_ois_warning">Optical stabilisation (OIS) may be on. The lens then moves on its own, so the gyroscope data does not match the picture and the take stabilises badly later. Set Stabilisation to Off for takes you will stabilise.</string>
+    <string name="gyroflow_log_help">Records the phone\'s motion (gyroscope, accelerometer and magnetometer) during every video take, LOG, HLG, slow motion, time-lapse and RAW video included, for stabilizing it afterwards. For an MP4 take it is saved next to the take as a .gcsv file with the same name, which Gyroflow opens by itself, and inside the MP4 as a camera motion track. RAW video keeps it inside the take, and the CinemaDNG export writes the .gcsv beside the frames. Motion data is recorded only while this is on and stays in those files on your device. Turn off the camera\'s own stabilization for the best match.</string>
     <string name="night_photo_title">Night photo</string>
     <string name="night_photo_help">Takes PHOTO stills through the device\'s night extension, which merges several frames for low light. Hold the camera steady until the save finishes. While Night is on, manual exposure, white balance and focus, RAW, HEIC, flash, bracketing and the scopes are unavailable.</string>
     <string name="night_photo_unavailable">The night extension could not start on this camera; regular photo is active.</string>
@@ -1054,6 +1057,16 @@
     <string name="caps_feature_apv">APV (Advanced Professional Video)</string>
     <string name="caps_usage_apv">Unsupported: the app has no APV recording path. Shows what this phone offers and why it is not used.</string>
     <string name="caps_warnings">Capture warnings</string>
+    <string name="caps_section_motion">Motion sensors</string>
+    <string name="caps_motion_summary">%1$d of %2$d present</string>
+    <string name="caps_motion_gyroscope">Gyroscope</string>
+    <string name="caps_motion_accelerometer">Accelerometer</string>
+    <string name="caps_motion_magnetometer">Magnetometer</string>
+    <string name="caps_motion_not_available">Not available</string>
+    <string name="caps_motion_rate">Up to %1$s Hz</string>
+    <string name="caps_motion_rate_unknown">Rate not declared</string>
+    <string name="caps_motion_resolution">Resolution %1$s</string>
+    <string name="caps_motion_capped">Limited to %1$s Hz by Android</string>
     <!-- Lens calibration (PLAN-070) -->
     <string name="lens_cal_title">Lens calibration</string>
     <string name="lens_cal_settings_summary">Match colour and framing between the lenses when you zoom</string>

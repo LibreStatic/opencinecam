@@ -121,4 +121,5 @@ private fun artifactRole(role: WebDavArtifactRole): Int = when (role) {
     WebDavArtifactRole.AUDIO -> R.string.webdav_transfer_audio
     WebDavArtifactRole.AUDIO_METADATA -> R.string.webdav_transfer_audio_metadata
     WebDavArtifactRole.CLIP_METADATA -> R.string.webdav_transfer_clip_metadata
+    WebDavArtifactRole.MOTION_LOG -> R.string.webdav_transfer_motion_log
 }

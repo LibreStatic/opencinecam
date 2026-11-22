@@ -15,22 +15,24 @@ class ProjectMp4TimingTest {
     private fun word(n: Int)=ByteBuffer.allocate(4).putInt(n).array()
     private fun box(type: String,bytes: ByteArray)=word(bytes.size+8)+type.toByteArray(Charsets.US_ASCII)+bytes
     private fun header(type: String,wide: Boolean=false): ByteArray {
-        val data=ByteArray(96); if(wide) data[0]=1
+        val data=ByteArray(if(type=="mvhd") 100 else 96); if(wide) data[0]=1
         val b=ByteBuffer.wrap(data)
         if(type=="tkhd") { if(wide) b.putLong(28,200) else b.putInt(20,200) }
         else { b.putInt(if(wide) 20 else 12,if(type=="mvhd") 1000 else 90000);if(wide) b.putLong(24,200) else b.putInt(16,200) }
         return box(type,data)
     }
-    private fun file(wide: Boolean=false, extraTrack: Boolean=false, badCtts: Boolean=false, edit: Boolean=false): Memory {
-        val hdlr=ByteArray(24);"vide".toByteArray().copyInto(hdlr,8)
-        val stts=box("stts",word(0)+word(2)+word(1)+word(1501)+word(2)+word(1502))
-        val stsz=box("stsz",word(0)+word(0)+word(3)+word(2)+word(2)+word(2))
-        val ctts=if(badCtts) box("ctts",word(0)+word(1)+word(3)+word(1)) else byteArrayOf()
-        val stco=box("stco",word(0)+word(1)+word(8))
-        val mdia=box("mdia",header("mdhd",wide)+box("hdlr",hdlr)+box("minf",box("stbl",stts+stsz+stco+ctts)))
-        val edts=if(edit) box("edts",box("elst",word(0)+word(1)+word(200)+word(0)+word(65536))) else byteArrayOf()
-        val track=box("trak",header("tkhd",wide)+mdia+edts)
-        return Memory(box("mdat",byteArrayOf(1,2,3,4,5,6))+box("moov",header("mvhd",wide)+track+(if(extraTrack) track else byteArrayOf())))
+    private fun file(wide: Boolean=false, extraTrack: Boolean=false, badCtts: Boolean=false, edit: Boolean=false, extraHandler: String="vide"): Memory {
+        fun track(handler: String): ByteArray {
+            val hdlr=ByteArray(24);handler.toByteArray().copyInto(hdlr,8)
+            val stts=box("stts",word(0)+word(2)+word(1)+word(1501)+word(2)+word(1502))
+            val stsz=box("stsz",word(0)+word(0)+word(3)+word(2)+word(2)+word(2))
+            val ctts=if(badCtts) box("ctts",word(0)+word(1)+word(3)+word(1)) else byteArrayOf()
+            val stco=box("stco",word(0)+word(1)+word(8))
+            val mdia=box("mdia",header("mdhd",wide)+box("hdlr",hdlr)+box("minf",box("stbl",stts+stsz+stco+ctts)))
+            val edts=if(edit) box("edts",box("elst",word(0)+word(1)+word(200)+word(0)+word(65536))) else byteArrayOf()
+            return box("trak",header("tkhd",wide)+mdia+edts)
+        }
+        return Memory(box("mdat",byteArrayOf(1,2,3,4,5,6))+box("moov",header("mvhd",wide)+track("vide")+(if(extraTrack) track(extraHandler) else byteArrayOf())))
     }
     private fun offset(file: Memory,type: String): Int {
         val key=type.toByteArray()
@@ -95,5 +97,28 @@ class ProjectMp4TimingTest {
         val f=file();finalizeProjectMp4Timing(f,CaptureFrameRate(25),3);val once=f.bytes.copyOf()
         finalizeProjectMp4Timing(f,CaptureFrameRate(25),3);assertArrayEquals(once,f.bytes)
         assertEquals(25L,u32(f,offset(f,"mdhd")+12));assertEquals(3L,u32(f,offset(f,"mdhd")+16))
+    }
+    private fun lastMoovPayload(bytes: ByteArray): ByteArray {
+        var at=0; var payload=byteArrayOf()
+        while(at<bytes.size) {
+            // An appended track's mdat uses a 64-bit size.
+            val size=ByteBuffer.wrap(bytes).getInt(at).let { if(it==1) ByteBuffer.wrap(bytes).getLong(at+8).toInt() else it }
+            if(String(bytes,at+4,4,Charsets.US_ASCII)=="moov") payload=bytes.copyOfRange(at+8,at+size)
+            at+=size
+        }
+        return payload
+    }
+    @Test fun aCammTrackIsCarriedOverWhileTheVideoIsRetimed() {
+        val f=Memory(withCammTrack(file().bytes)); val camm=trakPayload(lastMoovPayload(f.bytes),"meta")
+        finalizeProjectMp4Timing(f,CaptureFrameRate(30000,1001),3)
+        val moov=lastMoovPayload(f.bytes)
+        assertArrayEquals(camm,trakPayload(moov,"meta"))
+        val video=trakPayload(moov,"vide"); val at=String(video,Charsets.ISO_8859_1).indexOf("mdhd")+4
+        assertEquals(30000L,ByteBuffer.wrap(video).getInt(at+12).toLong()); assertEquals(3003L,ByteBuffer.wrap(video).getInt(at+16).toLong())
+    }
+    @Test fun aSoundTrackIsStillRejectedBeforeWriting() {
+        val f=file(extraTrack=true,extraHandler="soun")
+        assertThrows(IllegalArgumentException::class.java) { finalizeProjectMp4Timing(f,CaptureFrameRate(30),3) }
+        assertEquals(0,f.writes)
     }
 }

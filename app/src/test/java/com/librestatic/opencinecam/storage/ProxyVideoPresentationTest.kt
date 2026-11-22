@@ -10,7 +10,7 @@ class ProxyVideoPresentationTest {
     private fun ints(vararg values: Int) = ByteBuffer.allocate(values.size * 4).apply { values.forEach { putInt(it) } }.array()
     private fun box(name: String, bytes: ByteArray) = ints(bytes.size + 8) + name.toByteArray() + bytes
     private fun fixture(offset: Int = 250, scale: Int = 1000, wide: Boolean = false,
-        rate: Int = 0x10000, declared: Int = 3400 + offset, repeats: Boolean = false, edits: Boolean = true): ByteArray {
+        rate: Int = 0x10000, declared: Int = 3400 + offset, repeats: Boolean = false, edits: Boolean = true, camm: Boolean = false): ByteArray {
         val mvhd = box("mvhd", ints(0, 0, 0, scale, declared))
         val tkhd = box("tkhd", if (wide) ByteBuffer.allocate(36).putInt(0x01000000).putLong(0).putLong(0)
             .putInt(1).putInt(0).putLong(declared.toLong()).array() else ints(0, 0, 0, 1, 0, declared))
@@ -19,7 +19,10 @@ class ProxyVideoPresentationTest {
         val entries = (if (offset > 0) entry(offset, if (repeats) 0 else -1) else byteArrayOf()) + entry(3400, 72909)
         val edts = if (edits) box("edts", box("elst", ints(if (wide) 0x01000000 else 0, if (offset > 0) 2 else 1) + entries)) else byteArrayOf()
         val mdia = box("mdia", box("hdlr", ints(0, 0) + "vide".toByteArray()))
-        return box("ftyp", byteArrayOf()) + box("moov", mvhd + box("trak", tkhd + edts + mdia)) + box("mdat", byteArrayOf(1, 2, 3))
+        // A CAMM motion metadata track with its own, longer timing, as the take's finalisation appends one.
+        val cammTrak = if (camm) box("trak", box("tkhd", ints(0, 0, 0, 2, 0, 9000)) +
+            box("edts", box("elst", ints(0, 1, 9000, 0, 0x10000))) + box("mdia", box("hdlr", ints(0, 0) + "meta".toByteArray()))) else byteArrayOf()
+        return box("ftyp", byteArrayOf()) + box("moov", mvhd + box("trak", tkhd + edts + mdia) + cammTrak) + box("mdat", byteArrayOf(1, 2, 3))
     }
     private fun inspect(bytes: ByteArray): Long = inspectProxyVideoEndUs(object : ProjectMp4File {
         override val size = bytes.size.toLong()
@@ -34,6 +37,7 @@ class ProxyVideoPresentationTest {
         assertEquals(3_400_000L, inspect(fixture(0)))
         assertEquals(3_400_000L, inspect(fixture(0, edits = false)))
     }
+    @Test fun aCammTrackDoesNotChangeTheVideoEndpoint() { assertEquals(3_650_000L, inspect(fixture(camm = true))) }
     @Test fun versionOneEditsAndTrackAreReadWithoutTruncation() { assertEquals(3_650_000L, inspect(fixture(wide = true))) }
     @Test fun endpointUsesCeilingRationalMovieClock() { assertEquals(3_646_354L, inspect(fixture(scale = 1001))) }
     @Test fun rejectsDisagreeingTrackAndEditDurations() { reject(fixture(declared = 3600)) }
