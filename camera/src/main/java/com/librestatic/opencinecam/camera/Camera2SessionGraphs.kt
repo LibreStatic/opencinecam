@@ -932,8 +932,13 @@ internal fun Camera2PreviewEngine.previewCaptureCallback(
                 reportRecordingWhiteBalance(request, result)
                 // Every result of a regular session is audited, coalesced or not: the audit is cheap, and it feeds the
                 // sustained-cadence guard (Strict / Adaptive policy) with the frame-number gaps between delivered results.
-                // Its constrained high-speed count was an artefact (the file had every frame): skipped there.
-                if (!constrainedHighSpeed) auditCaptureResult(armedSession, result, sensorTimestamp)
+                // Its constrained high-speed count was an artefact (the file had every frame): skipped there, and the
+                // previous graph's statistics are retired so captureDiagnostics() never reports them for this one.
+                if (!constrainedHighSpeed) {
+                    auditCaptureResult(armedSession, result, sensorTimestamp)
+                } else if (graphAudit != null || latestCaptureDiagnostics != null) {
+                    retireGraphAudit()
+                }
                 if (!processFully) return
                 driveCadenceGuard(result, sensorTimestamp)
                 reportEffectiveZoom(result)
@@ -1030,7 +1035,9 @@ internal fun Camera2PreviewEngine.graphAuditor(session: CameraCaptureSession): C
         correlationId = "graph-audit").also { graphAudit = session to it }
 }
 
+/** cameraExecutor: summarizes and drops the current graph's auditor; [captureDiagnostics] reads null until the next audit. */
 internal fun Camera2PreviewEngine.retireGraphAudit() {
+    latestCaptureDiagnostics = null
     val auditor = graphAudit?.second ?: return
     graphAudit = null
     Log.i(TAG, "Capture audit (graph retired): ${auditor.diagnostics()}")
