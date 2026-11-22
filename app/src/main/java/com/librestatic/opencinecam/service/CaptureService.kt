@@ -724,7 +724,7 @@ class CaptureService : Service() {
     @Volatile internal var liveRedBlueRatio: Float? = null
     internal val openingCount = AtomicInteger()
     /** selectMode's deferred high-speed start while it waits on the main handler. Main thread only. */
-    private var pendingModeStart: Runnable? = null
+    internal var pendingModeStart: Runnable? = null
 
     internal val calibrationPrepareTimeoutMs = 15_000L
     internal val calibrationCaptureTimeoutMs = 10_000L

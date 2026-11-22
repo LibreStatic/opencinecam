@@ -309,6 +309,9 @@ internal fun CaptureService.finishCalibration(run: CalibrationRun, outcome: com.
         // As in selectMode: the panel applies its high refresh-rate vote before a constrained high-speed stream
         // starts. OPENING keeps a take off the standard-rate session meanwhile.
         cameraState.update { it.copy(phase = CameraUiPhase.OPENING) }
+        // A start selectMode deferred just before the run would open the restored rate ahead of this wait.
+        pendingModeStart?.let(mainHandler::removeCallbacks)
+        pendingModeStart = null
         mainHandler.postDelayed({
             val now = cameraState.value
             // A new run, another mode, camera or rate, or a newer surface has opened its own session since.
