@@ -313,6 +313,7 @@ internal fun CaptureService.finishCalibration(run: CalibrationRun, outcome: com.
             val now = cameraState.value
             // A new run, another mode, camera or rate, or a newer surface has opened its own session since.
             if (!serviceDestroyed && calibrationRun == null && now.selectedMode == restore.mode && now.selectedCameraId == restore.cameraId &&
+                Triple(now.targetVideoWidth, now.targetVideoHeight, now.targetFps) == highSpeed &&
                 now.activeVideoProfile?.constrainedHighSpeed == true && attachedPreviewSurface === surface && surface.isValid
             ) localBinder.attachPreview(surface, attachedPreviewRotationDegrees)
         }, 350L)
