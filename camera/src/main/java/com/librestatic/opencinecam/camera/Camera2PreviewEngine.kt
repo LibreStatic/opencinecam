@@ -995,6 +995,8 @@ class Camera2PreviewEngine(
     internal val faceDetectDefaults = java.util.WeakHashMap<CaptureRequest.Builder, Int?>()
     internal var professionalExposure: ExposureSelection? = null
     internal var requestedTargetFps = DEFAULT_TARGET_FPS
+    /** cameraExecutor: reopens after a camera provider death, see [reopenWhenAvailable]. */
+    private val reopenPolicy = CameraReopenPolicy()
     /** Low-light auto frame rate is on for the active graph; every other graph sends an explicit 0. */
     @Volatile internal var dynamicFpsOn = false
     /** FPS LOCK is wanted for the active graph (the service only asks in VIDEO, LOG and HLG). */
@@ -1435,8 +1437,13 @@ class Camera2PreviewEngine(
                             closeCameraDevice(device)
                             if (currentGeneration == generation) {
                                 camera = null
+                                val takeInProgress = recording || rawTake.get() != null
                                 endTakeOnCameraLoss(RawVideoReasons.CAMERA_ERROR)
                                 if (withdrawLensLock(LensLockUnavailable.OPEN_FAILED)) return
+                                if (reopenPolicy.shouldReopen(error, takeInProgress, SystemClock.elapsedRealtime())) {
+                                    reopenWhenAvailable(logicalDescriptor, error, listener, currentGeneration, start)
+                                    return
+                                }
                                 listener.onFailure("camera-open-$error", "The selected camera could not be opened.", true)
                             }
                         }
@@ -1462,6 +1469,45 @@ class Camera2PreviewEngine(
             pendingPreviewStart = start
             runPendingPreviewStart()
         }
+    }
+
+    /**
+     * cameraExecutor: the camera of this generation's [start] died with a retryable [error] (see [CameraReopenPolicy]).
+     * The session is released, the UI goes back to preparing, and once the camera service reports [descriptor]'s
+     * camera available again (or [CameraReopenPolicy.AVAILABILITY_TIMEOUT_MS] passes) [start] runs again in the same
+     * generation, as a lens-lock withdrawal does. A newer start, stopPreview or close in the meantime cancels it.
+     */
+    private fun reopenWhenAvailable(descriptor: Camera2CameraDescriptor, error: Int, listener: Camera2PreviewListener,
+        startGeneration: Long, start: Runnable) {
+        Log.w(TAG, "Camera ${descriptor.cameraId} failed (error $error); reopening it once it is available again")
+        closeResources()
+        this.listener = listener
+        listener.onOpening(descriptor)
+        val done = java.util.concurrent.atomic.AtomicBoolean(false)
+        val availability = object : CameraManager.AvailabilityCallback() {
+            override fun onCameraAvailable(cameraId: String) {
+                if (cameraId == descriptor.cameraId) finish("available")
+            }
+
+            fun finish(how: String) {
+                if (!done.compareAndSet(false, true)) return
+                runCatching { manager.unregisterAvailabilityCallback(this) }
+                cameraExecutor.execute {
+                    if (disposed.get() || startGeneration != generation) return@execute
+                    Log.i(TAG, "Reopening camera ${descriptor.cameraId} ($how)")
+                    this@Camera2PreviewEngine.listener = listener
+                    pendingPreviewStart = start
+                    runPendingPreviewStart()
+                }
+            }
+        }
+        imageHandler.postDelayed({
+            if (disposed.get() || startGeneration != generation) return@postDelayed
+            // Reported at once when the camera is already available again.
+            runCatching { manager.registerAvailabilityCallback(cameraExecutor, availability) }
+                .onFailure { availability.finish("availability unknown") }
+            imageHandler.postDelayed({ availability.finish("timed out waiting") }, CameraReopenPolicy.AVAILABILITY_TIMEOUT_MS)
+        }, CameraReopenPolicy.SETTLE_MS)
     }
 
     /** The admission callback never waits on the UI, camera worker, or a native-window worker. */
