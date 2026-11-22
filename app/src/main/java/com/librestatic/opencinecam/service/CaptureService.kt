@@ -1596,7 +1596,7 @@ class CaptureService : Service() {
             val selectedLogProfile = descriptor?.let {
                 normalizedLogProfile(it, mode, geometrySeeds.logWidth, geometrySeeds.logHeight, geometrySeeds.logFps)
             }.takeIf { mode.usesLogGraph }
-            val changedSignalPath =
+            val changedGraph =
                 desiredGpuViewfinder(current.selectedMode) != desiredGpuViewfinder(mode) ||
                 selectedStillPhotoFormat(current.selectedMode) != selectedStillPhotoFormat(mode) ||
                 nightExtensionActive(current.selectedMode) != nightExtensionActive(mode) ||
@@ -1610,6 +1610,11 @@ class CaptureService : Service() {
             val selectedVideoProfile = descriptor?.let {
                 normalizedVideoProfile(it, geometrySeeds.width(mode), geometrySeeds.height(mode), geometrySeeds.fps(mode))
             }.takeIf { mode in CameraUiState.videoProfileModes }
+            // Video and time lapse keep their own size and rate on the same graph: a session configured for one profile
+            // cannot record the other's (slow motion after a time lapse found no high-speed session).
+            val changedSignalPath = changedGraph ||
+                (current.selectedMode in CameraUiState.videoProfileModes && mode in CameraUiState.videoProfileModes &&
+                    current.activeVideoProfile != selectedVideoProfile)
             val selectedWidth = selectedLogProfile?.size?.width ?: selectedVideoProfile?.size?.width
                 ?: geometrySeeds.width(mode)
             val selectedHeight = selectedLogProfile?.size?.height ?: selectedVideoProfile?.size?.height
@@ -1647,8 +1652,13 @@ class CaptureService : Service() {
                 if (descriptor != null && surface?.isValid == true) {
                     cameraState.value = cameraState.value.copy(phase = CameraUiPhase.OPENING)
                     val start = Runnable {
-                    // A later mode change supersedes this deferred start.
-                    if (cameraState.value.selectedMode != mode || !surface.isValid) return@Runnable
+                    // A later mode change, a camera switch, a take admitted meanwhile or the RAW qualification's hold on
+                    // the preview supersedes this deferred start. A lens calibration does not: it switches the mode and
+                    // then locks the controls, and its run waits for this very reopen.
+                    val now = cameraState.value
+                    if (now.selectedMode != mode || !surface.isValid || rawQualificationPreviewHeld ||
+                        now.copy(lensCalibrationRunning = false).structuralSettingsFrozen ||
+                        now.descriptor?.cameraId != descriptor.cameraId) return@Runnable
                     previewEngine.startPreview(
                         descriptor,
                         surface,
