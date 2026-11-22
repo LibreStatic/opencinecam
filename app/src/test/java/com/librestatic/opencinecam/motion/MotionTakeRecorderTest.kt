@@ -135,6 +135,54 @@ class MotionTakeRecorderTest {
         assertNull(recorder.render(MotionTakeTiming.EncodedFrames(0L), withCamm = false))
     }
 
+    @Test fun aStalledSpoolWriteNeverHoldsTheRender() {
+        val entered = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val closed = java.util.concurrent.CountDownLatch(1)
+        val (recorder, acquisition) = recorder { file ->
+            object : OutputStream() {
+                private val out = FileOutputStream(file)
+                private var writes = 0
+                override fun write(b: Int) = write(byteArrayOf(b.toByte()), 0, 1)
+                override fun write(b: ByteArray, off: Int, len: Int) {
+                    // The header is writes 1 and 2; the first flush stalls in storage.
+                    if (++writes == 3) {
+                        entered.countDown()
+                        release.await()
+                    }
+                    out.write(b, off, len)
+                }
+                override fun close() {
+                    out.close()
+                    closed.countDown()
+                }
+            }
+        }
+        acquisition.ends = false
+        val sensor = Thread {
+            runCatching {
+                recorder.consumer.onSample(MotionSpoolFormat.KIND_GYRO, startNs, 0f, 0f, 1f)
+                recorder.consumer.onSample(MotionSpoolFormat.KIND_GYRO, startNs + 1_100_000_000L, 0f, 0f, 1f)
+            }
+        }
+        var rendered: Any? = this
+        val render = Thread { rendered = recorder.render(MotionTakeTiming.EncodedFrames(0L), withCamm = false) }
+        sensor.start()
+        try {
+            assertTrue(entered.await(5, java.util.concurrent.TimeUnit.SECONDS))
+            render.start()
+            render.join(5_000)
+            assertFalse("render() waited for the stalled write", render.isAlive)
+            assertNull(rendered)
+            assertEquals("the spool is still held by the stalled write", 1L, closed.count)
+        } finally {
+            release.countDown()
+            sensor.join(5_000)
+            if (render.isAlive) render.join(5_000)
+        }
+        assertTrue("the spool closes once the write returns", closed.await(5, java.util.concurrent.TimeUnit.SECONDS))
+    }
+
     @Test fun aFullFrameQueueStopsTheSensorsAtTheNextSample() {
         val (recorder, _) = recorder()
         // No sample drains the queue, so one frame more than it holds is lost.

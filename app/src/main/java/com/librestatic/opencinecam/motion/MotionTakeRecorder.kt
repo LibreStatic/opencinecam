@@ -113,12 +113,16 @@ internal class MotionTakeRecorder internal constructor(
         stopped = true
         acquisitionStopped = true
         // Also after stopAcquisition: waits for the sensor thread to hand over the samples it still held, so the
-        // spool's tail is whole before it is read. A thread that outlasts the wait (a stalled storage write) may
-        // still hold samples the close below would shut out, so the spool then counts as incomplete.
+        // spool's tail is whole before it is read.
         val acquisition = source
         if (acquisition != null && !runCatching { acquisition.stop() }.getOrDefault(false)) {
+            // The thread outlasted the wait (a stalled storage write): it may still hold samples, so the spool counts
+            // as incomplete, and it holds the writer, so closing here would wait for storage too. A thread of its own
+            // closes the spool once that write returns.
             failed = true
             Log.w(TAG, "Motion sensor thread did not stop in time; motion data incomplete")
+            runCatching { Thread(::closeWriter, "motion-spool-close").apply { isDaemon = true }.start() }
+            return
         }
         closeWriter()
     }
