@@ -259,7 +259,7 @@ class CameraPresetTest {
         // A V29 payload that already carries the V30 keys is not a V29 payload.
         invalid(document { it["version"] = JsonPrimitive(29) })
     }
-    @Test fun applyingAPresetWithAnotherPhotoSizeClearsThePerCameraSizes() {
+    @Test fun applyingAPresetClearsThePerCameraSizes() {
         val local = mapOf("0:JPEG" to (2000 to 1500), "1:HEIC" to (1920 to 1080))
         val current = CameraSettings(photoWidth = 2000, photoHeight = 1500, stillSizes = local)
         val other = CameraPresetCodec.decode(CameraPresetCodec.encode(CameraPreset(name = "Big", settings = CameraSettings(photoWidth = 4000, photoHeight = 3000)))).settings
@@ -267,9 +267,12 @@ class CameraPresetTest {
         assertEquals(4000 to 3000, applied.photoWidth to applied.photoHeight)
         assertTrue(applied.stillSizes.isEmpty())
         assertEquals(4000 to 3000, applied.stillSizeFor("0", StillPhotoFormat.JPEG))
-        // The same photo size keeps what this device remembers per camera.
-        val same = CameraPresetCodec.decode(CameraPresetCodec.encode(CameraPreset(name = "Same", settings = CameraSettings(photoWidth = 2000, photoHeight = 1500)))).settings
-        assertEquals(local, CameraPresetCodec.mergeLocal(same, current).stillSizes)
+        // The same photo size as the current one still wins over a size a camera remembered before.
+        val same = CameraPresetCodec.decode(CameraPresetCodec.encode(CameraPreset(name = "Same", settings = CameraSettings(photoWidth = 4000, photoHeight = 3000)))).settings
+        val remembered = CameraSettings(photoWidth = 4000, photoHeight = 3000, stillSizes = local)
+        val reapplied = CameraPresetCodec.mergeLocal(same, remembered)
+        assertTrue(reapplied.stillSizes.isEmpty())
+        assertEquals(4000 to 3000, reapplied.stillSizeFor("0", StillPhotoFormat.JPEG))
     }
     @Test fun malformedRawVideoConfigIsRejectedNotNormalised() {
         for (bad in listOf("full", "4080x3060", "full@0", "0x10@30", "full@30 ", "FULL@30", "1920x1080@60@60")) {

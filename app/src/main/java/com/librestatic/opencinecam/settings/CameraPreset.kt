@@ -247,9 +247,10 @@ object CameraPresetCodec {
         lensCorrectionPhotos = current.lensCorrectionPhotos,
         lensCorrectionAlignment = current.lensCorrectionAlignment,
         lensLock = current.lensLock,
-        // The per-camera still sizes are this device's; a preset with another photo size clears them, so its
-        // size governs wherever a camera offers it (a camera that does not falls back to its largest).
-        stillSizes = if (preset.photoWidth == current.photoWidth && preset.photoHeight == current.photoHeight) current.stillSizes else emptyMap(),
+        // The per-camera still sizes are this device's. Applying a preset clears them, even when its photo size
+        // matches the current one, so the preset's size governs every camera that offers it (one that does not
+        // falls back to its largest) instead of a size a camera remembered before.
+        stillSizes = emptyMap(),
         smoothLensSwitch = current.smoothLensSwitch,
         // Whether the interface rotates with the system lock on is a habit of this phone, not a portable key.
         rotateWhenLocked = current.rotateWhenLocked,
