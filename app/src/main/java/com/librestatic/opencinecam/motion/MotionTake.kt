@@ -208,9 +208,20 @@ internal object MotionTakeRender {
                 )
             }
         }
+        val spanFrames = timing.fileSamples - 1
+        // Not drained, but both ends were seen: the latest frame reported is within the few captures in flight of the
+        // file's last sample, which places the take far better than a frame count would. The camera drops frames under
+        // load (a hot phone at 240 fps), and the recorder stamps the ones it gets by their capture time, so the file
+        // spans the take's real length whatever its sample count.
+        if (first != null && last != null && last > first) {
+            return MotionTakeTimeline(
+                bounded(first, 0L, last, timing.lastSampleTimeUs, (last - first) / spanFrames, Math.round(fileFrameUs),
+                    info.clockOffsetNs),
+                estimated = true,
+            )
+        }
         if (info.captureFps <= 0.0) return null
         val start = first ?: (timing.recorderStartElapsedNs - info.clockOffsetNs)
-        val spanFrames = timing.fileSamples - 1
         val captureFrameNs = Math.round(1_000_000_000.0 / info.captureFps)
         val endSensor = start + Math.round(spanFrames * 1_000_000_000.0 / info.captureFps)
         return MotionTakeTimeline(

@@ -172,12 +172,16 @@ class MotionTakeTest {
     }
 
     @Test fun undrainedHighSpeedTakeStartsAtFileZeroAndIsEstimated() {
-        val timing = recorderTiming(frames = 300, drained = false, fileSamples = 241, lastSampleTimeUs = 1_000_000L, captureStepNs = 4_166_666L)
+        // A hot phone at 240 fps: two seconds between the first and the latest frame reported, but the camera dropped
+        // frames and the file holds 300 samples, stamped by capture time, instead of 481. The frames seen place the
+        // take; counting the file's samples at 240 fps would cover only its first 1.25 s.
+        val timing = recorderTiming(frames = 481, drained = false, fileSamples = 300, lastSampleTimeUs = 2_000_000L, captureStepNs = 4_166_666L)
         val take = info(MotionTakeRoute.MEDIA_RECORDER, captureFps = 240.0)
         val result = MotionTakeRender.timeline(timing, FrameTrack(LongArray(0), LongArray(0)), take)!!
         assertTrue(result.estimated)
         assertEquals(0L, result.timeline.fileUs(startNs))
-        assertEquals(1_000_000L, result.timeline.fileUs(startNs + 1_000_000_000L))
+        assertEquals(1_000_000.0, result.timeline.fileUs(startNs + 1_000_000_000L)!!.toDouble(), 2.0)
+        assertEquals(1_900_000.0, result.timeline.fileUs(startNs + 1_900_000_000L)!!.toDouble(), 2.0)
         assertEquals(1.0, result.timeline.globalRateScale, 1e-3)
         val input = MotionTakeRender.input(emptySpool(), take, result)
         assertFalse(input.synced)
