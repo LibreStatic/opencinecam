@@ -650,7 +650,10 @@ internal fun AdaptiveCaptureChrome(
         var keyColumnNaturalPx by remember { mutableIntStateOf(0) }
         // Compact portrait has no room for both the rocker and the F-keys above a docked sheet or
         // tray: the rocker steps aside (pinch still zooms) and the keys take its height.
-        val rockerShown = state.zoomSupported && !(compact && dockedUnderKeys > 0.dp)
+        // PLAN-076: while the crop editor is open the frame is its own. The keys, the rocker and the instruments standing
+        // over it would take the drags meant for the window's edges and corners, so they step aside until it closes.
+        val frameKeysShown = rawCropEditor.editing == null
+        val rockerShown = state.zoomSupported && !(compact && dockedUnderKeys > 0.dp) && frameKeysShown
         val zoomRockerLow = stackedFamily && !hinge && state.zoomSupported &&
             with(density) { keyColumnNaturalPx.toDp() } > keysAboveMidRocker - topBar - 6.dp &&
             keysAboveLowRocker > keysAboveMidRocker
@@ -705,7 +708,7 @@ internal fun AdaptiveCaptureChrome(
                     lockRowDp = 48f,
                 )
                 val keyScroll = rememberScrollState()
-                Column(
+                if (frameKeysShown) Column(
                     Modifier
                         .align(Alignment.TopEnd)
                         .padding(end = endOccupied + 8.dp, top = topBar + 6.dp)
@@ -730,7 +733,7 @@ internal fun AdaptiveCaptureChrome(
                 }
                 // Keys cut off by a docked sheet scroll; ▾ under the column says more are below
                 // and steps the column one key down.
-                if (keyScroll.canScrollForward) {
+                if (frameKeysShown && keyScroll.canScrollForward) {
                     val scope = rememberCoroutineScope()
                     val stepPx = keyPitch.px()
                     Box(
@@ -757,7 +760,7 @@ internal fun AdaptiveCaptureChrome(
                     showThumbnail = !compact,
                     height = topBar,
                 )
-            } else LockToggles(
+            } else if (frameKeysShown) LockToggles(
                 state = state,
                 binder = binder,
                 afLockBehavior = settings.afLockBehavior,
@@ -821,7 +824,7 @@ internal fun AdaptiveCaptureChrome(
             val cross = clusterBottom - instrumentTop
             if (main > 0f && cross > 0f) IntOffset(main.roundToInt(), cross.roundToInt()) else null
         } else null
-        InstrumentStack(
+        if (frameKeysShown) InstrumentStack(
             state = state,
             binder = binder,
             settings = settings,
