@@ -557,7 +557,11 @@ class Camera2PreviewEngine(
     internal var camera: CameraDevice? = null
     internal var session: CameraCaptureSession? = null
         set(value) {
-            if (field !== value) pendingPreviewStartedReceipt = null
+            if (field !== value) {
+                pendingPreviewStartedReceipt = null
+                // captureDiagnostics() describes the current graph only: null until the new one is audited.
+                latestCaptureDiagnostics = null
+            }
             field = value
         }
     internal data class PreviewStartedReceipt(val session: CameraCaptureSession, val generation: Long,
