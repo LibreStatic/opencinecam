@@ -553,6 +553,8 @@ class Camera2PreviewEngine(
     @Volatile internal var activeRawVideo: RawVideoSessionConfig? = null
     @Volatile internal var rawVideoStream: RawVideoStream? = null
     internal val rawTake = java.util.concurrent.atomic.AtomicReference<RawTake?>(null)
+    /** Serializes a queued zoom request with RAW take admission, so the zoom never changes after a take starts. */
+    private val rawZoomAdmissionLock = Any()
     @Volatile internal var generation = 0L
     internal var camera: CameraDevice? = null
     internal var session: CameraCaptureSession? = null
@@ -1673,7 +1675,8 @@ class Camera2PreviewEngine(
         val stream = rawVideoStream ?: return false
         if (!stream.live) return false
         val take = RawTake(stream, consumer)
-        if (!rawTake.compareAndSet(null, take)) return false
+        // A queued zoom change either lands before this take is admitted or sees it and drops (see setZoomRatio).
+        if (!synchronized(rawZoomAdmissionLock) { rawTake.compareAndSet(null, take) }) return false
         val begin = Runnable {
             if (rawTake.get() !== take) return@Runnable
             if (!stream.live || rawVideoStream !== stream) {
@@ -2362,15 +2365,19 @@ class Camera2PreviewEngine(
         // A lens-locked session takes the ratio on the logical scale; the physical camera gets its own.
         val target = descriptor.lensLock?.let { LensLockZoom.toPhysical(ratio, it.anchorRatio, range) } ?: ratio
         cameraExecutor.execute {
-            val previousRatio = requestedZoomRatio
-            requestedZoomRatio = ZoomMath.coerce(target, range)
-            if (ZoomSettingsOverride.shouldArm(zoomOverrideEligible(descriptor), previousRatio, requestedZoomRatio)) {
-                zoomOverrideArmed = true
-                lastZoomChangeAtMs = SystemClock.elapsedRealtime()
+            // Held with startRawVideo's admission: a zoom queued before a take never reaches the request after it.
+            synchronized(rawZoomAdmissionLock) {
+                if (rawTake.get() != null) return@execute
+                val previousRatio = requestedZoomRatio
+                requestedZoomRatio = ZoomMath.coerce(target, range)
+                if (ZoomSettingsOverride.shouldArm(zoomOverrideEligible(descriptor), previousRatio, requestedZoomRatio)) {
+                    zoomOverrideArmed = true
+                    lastZoomChangeAtMs = SystemClock.elapsedRealtime()
+                }
+                val builder = repeatingBuilder ?: return@execute
+                val configured = session ?: return@execute
+                reissueRepeating(builder, configured, descriptor)
             }
-            val builder = repeatingBuilder ?: return@execute
-            val configured = session ?: return@execute
-            reissueRepeating(builder, configured, descriptor)
         }
         return true
     }
