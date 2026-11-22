@@ -1425,14 +1425,19 @@ def _main_cinemadng_wav(args: argparse.Namespace) -> int:
 
 
 def _main_gcsv(args: argparse.Namespace) -> int:
-    """`--gcsv PATH`, or with an output folder `<folder>/<folder name>.gcsv` when the take has IMU samples."""
+    """`--gcsv PATH`, or with an output folder `<folder>/<folder name>.gcsv` when the take has IMU samples (`-o .`
+    and `-o ..` use the folder's resolved name)."""
     if args.no_gcsv:
         return 0
     if args.gcsv is None:
         if not take_has_imu(args.input):
             print("motion log: none (the take has no IMU samples)")
             return 0
-        args.gcsv = args.output / f"{args.output.name}.gcsv"
+        # `Path` names "." nothing and ".." "..": the folder's own name is its resolved one.
+        name = args.output.name
+        if name in ("", ".", ".."):
+            name = args.output.resolve().name or "motion"
+        args.gcsv = args.output / f"{name}.gcsv"
     try:
         report = export_gcsv(args.input, args.gcsv)
     except ValueError as error:

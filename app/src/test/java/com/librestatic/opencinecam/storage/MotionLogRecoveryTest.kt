@@ -122,6 +122,9 @@ class MotionLogRecoveryTest {
         assertEquals(190, rows.size)
         // No muxer offset after a crash: the first frame is at file time 0, the first gyro sample 1 ms after it.
         assertEquals(1_000L, rows.first().substringBefore(',').toLong())
+        // That 0 is assumed, so the log says its sync is estimated rather than measured.
+        assertTrue(lines.contains("note,sync estimated: file offset not measured"))
+        assertFalse(lines.any { it.contains("t=0 at first recorded frame") })
         // Published with the take: the marker went, the log is no empty row.
         assertFalse(File(takeDir(), SafRecordingRows.MARKER).exists())
         assertEquals(setOf("A001.mp4", "A001.timing.json", "A001.gcsv"), takeDir().list()!!.toSet())
@@ -140,6 +143,45 @@ class MotionLogRecoveryTest {
         assertEquals(setOf("A001.mp4", "A001.timing.json", "A001.gcsv"), takeDir().list()!!.toSet())
         assertTrue(File(takeDir(), "A001.gcsv").readLines().size > 190)
         assertMotionFilesGone(id)
+    }
+
+    /** Take [id]'s log row from an earlier attempt, holding [text]. */
+    private fun earlierLog(id: String, text: String) {
+        SafRecordingRows(context, tree, Uri.parse(database { db ->
+            db.rawQuery("SELECT folder FROM captures WHERE id = ?", arrayOf(id)).use { it.moveToFirst(); it.getString(0) }
+        })) { error("no folder") }.insert(id, "Download", "A001.gcsv", GyroflowLog.MIME_TYPE).also { write(it, text.toByteArray()) }
+    }
+
+    @Test fun aLogRowThatCannotBeOpenedKeepsTheCompleteLogOfAnEarlierAttempt() {
+        val id = interrupted()
+        val complete = "GYROFLOW IMU LOG\nt,gx,gy,gz\n1000,1,2,3\n"
+        earlierLog(id, complete)
+        spool(id)
+        drive.unopenable = setOf("A001.gcsv")
+
+        assertEquals(1, journal().recover().incompleteGroups)
+
+        drive.unopenable = emptySet()
+        assertEquals(setOf("A001.mp4", "A001.timing.json", "A001.gcsv"), takeDir().list()!!.toSet())
+        assertEquals(complete, File(takeDir(), "A001.gcsv").readText())
+        assertFalse(File(takeDir(), SafRecordingRows.MARKER).exists())
+    }
+
+    @Test fun aRewriteThatFailsAfterOpeningTheRowRemovesIt() {
+        val id = interrupted()
+        earlierLog(id, "GYROFLOW IMU LOG\nt,gx,gy,gz\n1000,1,2,3\n")
+        // A rendered log that cannot be read: the copy fails once the row was opened, and so truncated.
+        val rendered = motion.renderedOf(id).apply { parentFile!!.mkdirs(); writeText("GYROFLOW IMU LOG\n") }
+        org.junit.Assume.assumeTrue(rendered.setReadable(false, false) && !rendered.canRead())
+        try {
+            assertEquals(1, journal().recover().incompleteGroups)
+        } finally {
+            rendered.setReadable(true, false)
+        }
+
+        // The video is published without a log rather than with a truncated one.
+        assertEquals(setOf("A001.mp4", "A001.timing.json"), takeDir().list()!!.toSet())
+        assertFalse(File(takeDir(), SafRecordingRows.MARKER).exists())
     }
 
     @Test fun aMediaRecorderTakeCannotBePlacedAfterACrashAndOnlyLosesItsLog() {

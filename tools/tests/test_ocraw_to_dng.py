@@ -1228,6 +1228,26 @@ class OcrawGcsvExportTest(unittest.TestCase):
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
             to_dng.main([str(path), "--gcsv", str(self.tmp / "x.gcsv"), "--no-gcsv"])
 
+    def test_output_folder_given_as_dot_or_dot_dot_names_the_log_after_the_folder(self):
+        path = self.write(self.full_take())
+        here = self.tmp / "here"
+        here.mkdir()
+        up = self.tmp / "up"
+        (up / "inner").mkdir(parents=True)
+        previous = os.getcwd()
+        try:
+            os.chdir(here)
+            code, summary = run_cli([str(path), "-o", ".", "--pure"])
+            self.assertEqual(0, code, summary)
+            os.chdir(up / "inner")
+            code, summary = run_cli([str(path), "-o", "..", "--pure"])
+            self.assertEqual(0, code, summary)
+        finally:
+            os.chdir(previous)
+        self.assertEqual(["here.gcsv", "take_000000.dng", "take_000001.dng"], sorted(p.name for p in here.iterdir()))
+        self.assertEqual(["take_000000.dng", "take_000001.dng", "up.gcsv"],
+                         sorted(p.name for p in up.iterdir() if p.is_file()))
+
     def test_a_take_without_imu_chunks_writes_no_log(self):
         path = self.write(build_take(frames=2)[0])
         out = self.tmp / "dng"

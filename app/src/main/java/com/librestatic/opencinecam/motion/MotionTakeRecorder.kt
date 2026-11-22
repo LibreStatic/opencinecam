@@ -6,6 +6,7 @@ import android.util.Log
 import java.io.BufferedWriter
 import java.io.File
 import java.io.FileOutputStream
+import java.io.OutputStream
 import java.io.OutputStreamWriter
 
 /** A rendered take: the Gyroflow log in a temporary file and the series for a CAMM track. */
@@ -25,7 +26,7 @@ internal class MotionTakeOutputs(
  * take's description in `<take id>.json` beside it, so a take whose process died can still be rendered. It only
  * observes: every failure ends the motion data quietly and never touches the take, and no method throws.
  */
-internal class MotionTakeRecorder private constructor(
+internal class MotionTakeRecorder internal constructor(
     initialInfo: MotionTakeInfo,
     val spoolFile: File,
     val infoFile: File,
@@ -37,19 +38,29 @@ internal class MotionTakeRecorder private constructor(
         private set
     @Volatile private var failed = false
     @Volatile private var lastFlushNs = Long.MIN_VALUE
-    private var source: MotionSampleSource? = null
+    private var source: MotionAcquisition? = null
     private var stopped = false
+    private var acquisitionStopped = false
     private var lastExposureNs = -1
     private var lastSkewNs = -1
 
-    // On the sensor thread; a failure here is caught by MotionSampleSource, which then stops handing samples over.
-    private val consumer = MotionSampleConsumer { kind, timestampNs, x, y, z ->
-        writer.sample(kind, timestampNs, x, y, z)
-        // About once a second, without fsync: a crash then loses at most the last second and its page cache.
-        if (lastFlushNs == Long.MIN_VALUE) lastFlushNs = timestampNs
-        else if (timestampNs - lastFlushNs >= FLUSH_PERIOD_NS) {
-            lastFlushNs = timestampNs
-            writer.flush()
+    /**
+     * On the sensor thread. A failed write or flush ends the take's motion data: it is rethrown so that
+     * MotionSampleSource stops the sensors and hands nothing more over; the video never depends on it.
+     */
+    internal val consumer = MotionSampleConsumer { kind, timestampNs, x, y, z ->
+        if (failed) return@MotionSampleConsumer
+        try {
+            writer.sample(kind, timestampNs, x, y, z)
+            // About once a second, without fsync: a crash then loses at most the last second and its page cache.
+            if (lastFlushNs == Long.MIN_VALUE) lastFlushNs = timestampNs
+            else if (timestampNs - lastFlushNs >= FLUSH_PERIOD_NS) {
+                lastFlushNs = timestampNs
+                writer.flush()
+            }
+        } catch (problem: Exception) {
+            failed = true
+            throw problem
         }
     }
 
@@ -72,12 +83,39 @@ internal class MotionTakeRecorder private constructor(
         writer.exposure(fromSensorNs, exposure, skew)
     }
 
+    /** Hands the running sensors to the recorder, which stops them with the take. */
+    @Synchronized
+    internal fun attachAcquisition(acquisition: MotionAcquisition) {
+        source = acquisition
+    }
+
+    /**
+     * Stops the sensors without waiting, and closes the spool on their thread, keeping it for [render] or a later
+     * recovery: the take is detached and no frame reaches this recorder any more, whether or not its native writer ever
+     * retires. Never blocks on storage nor on the sensor thread, so the main thread may call it. Idempotent.
+     */
+    fun stopAcquisition() {
+        val acquisition = synchronized(this) {
+            if (acquisitionStopped) return
+            acquisitionStopped = true
+            source
+        }
+        if (acquisition == null) closeWriter() else acquisition.stopThen(::closeWriter)
+    }
+
     /** Stops the sensors and closes the spool. Idempotent. */
     @Synchronized
     fun stop() {
         if (stopped) return
         stopped = true
+        acquisitionStopped = true
+        // Also after stopAcquisition: waits for the sensor thread to hand over the samples it still held, so the
+        // spool's tail is whole before it is read.
         runCatching { source?.stop() }
+        closeWriter()
+    }
+
+    private fun closeWriter() {
         try {
             writer.close()
         } catch (problem: Exception) {
@@ -92,7 +130,10 @@ internal class MotionTakeRecorder private constructor(
      */
     fun render(timing: MotionTakeTiming, withCamm: Boolean): MotionTakeOutputs? {
         stop()
-        if (failed) return null
+        if (failed || writer.failed) {
+            Log.w(TAG, "Motion spool incomplete; no motion data for this take")
+            return null
+        }
         return renderSpool(spoolFile, info, timing, gcsvFile, withCamm)
     }
 
@@ -139,13 +180,13 @@ internal class MotionTakeRecorder private constructor(
                 check(spoolDir.isDirectory || spoolDir.mkdirs()) { "No motion directory" }
                 // Leftover logs are not swept here: the previous take may still be finalising and hold its own.
                 check(gcsvDir.isDirectory || gcsvDir.mkdirs()) { "No Gyroflow directory" }
-                val created = MotionTakeRecorder(info, spool, json, gcsv, MotionSpoolWriter(FileOutputStream(spool)))
+                val created = MotionTakeRecorder(info, spool, json, gcsv, openWriter(spool))
                 recorder = created
                 val source = MotionSampleSource.start(context, created.consumer) ?: run {
                     created.discard()
                     return null
                 }
-                synchronized(created) { created.source = source }
+                created.attachAcquisition(source)
                 val sensors = source.sensors
                 val described = info.copy(
                     gyroMaxHz = sensors.gyroMaxHz,
@@ -161,6 +202,17 @@ internal class MotionTakeRecorder private constructor(
                 Log.w(TAG, "Motion data unavailable", problem)
                 recorder?.discard() ?: deleteFiles(spool, json)
                 null
+            }
+        }
+
+        /** A writer on a new [spool]; the stream is closed when the writer cannot be made (its header not written). */
+        internal fun openWriter(spool: File, open: (File) -> OutputStream = ::FileOutputStream): MotionSpoolWriter {
+            val stream = open(spool)
+            return try {
+                MotionSpoolWriter(stream)
+            } catch (problem: Throwable) {
+                runCatching { stream.close() }
+                throw problem
             }
         }
 

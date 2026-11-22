@@ -29,6 +29,12 @@ internal class MappedSeries(
  * slow motion the rate shrinks as file time stretches, across a pause it grows to fit the pause's
  * rotation into one frame interval. The accelerometer and magnetometer are not scaled.
  *
+ * A bin whose samples come from segments of different rate scales (it spans a pause edge or a speed
+ * change) weights each scaled value by the file time its sample covers, which is its sensor spacing
+ * divided by its scale: the mean is then the raw values' sum over the sum of 1/scale, and the bin
+ * integrates over file time to the rotation its samples made. Within one scale every weight is equal,
+ * so such a bin keeps the plain mean.
+ *
  * A bin holding a single sample of a segment whose rate scale is within [PASSTHROUGH_TOLERANCE] of 1
  * emits that sample unchanged at its mapped time, so a normal take passes through bit-exact.
  * Bins are disjoint and a mean member time lies inside its bin, so output times strictly increase.
@@ -105,6 +111,12 @@ internal object MotionResampler {
         private var sumX = 0.0
         private var sumY = 0.0
         private var sumZ = 0.0
+        // For a bin of mixed rate scales: the raw values' sums and the sum of 1/scale.
+        private var mixed = false
+        private var rawX = 0.0
+        private var rawY = 0.0
+        private var rawZ = 0.0
+        private var sumInverseScale = 0.0
         private var firstUs = 0L
         private var firstX = 0f
         private var firstY = 0f
@@ -129,6 +141,11 @@ internal object MotionResampler {
                     sumX = 0.0
                     sumY = 0.0
                     sumZ = 0.0
+                    mixed = false
+                    rawX = 0.0
+                    rawY = 0.0
+                    rawZ = 0.0
+                    sumInverseScale = 0.0
                     firstUs = us
                     firstX = source.x
                     firstY = source.y
@@ -140,6 +157,11 @@ internal object MotionResampler {
                 sumX += source.x * scale
                 sumY += source.y * scale
                 sumZ += source.z * scale
+                if (scale != firstScale) mixed = true
+                rawX += source.x
+                rawY += source.y
+                rawZ += source.z
+                sumInverseScale += 1.0 / scale
                 if (closed) return true
             }
             if (count == 0) return false
@@ -163,9 +185,15 @@ internal object MotionResampler {
                 }
             } else {
                 out = Math.floorDiv(sumUs, count.toLong())
-                x = (sumX / count).toFloat()
-                y = (sumY / count).toFloat()
-                z = (sumZ / count).toFloat()
+                if (mixed) {
+                    x = (rawX / sumInverseScale).toFloat()
+                    y = (rawY / sumInverseScale).toFloat()
+                    z = (rawZ / sumInverseScale).toFloat()
+                } else {
+                    x = (sumX / count).toFloat()
+                    y = (sumY / count).toFloat()
+                    z = (sumZ / count).toFloat()
+                }
             }
             check(!emitted || out > time) { "resampled times must increase" }
             time = out

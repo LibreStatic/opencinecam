@@ -134,9 +134,41 @@ class MotionTakeTest {
         assertEquals(1.0, result.timeline.globalRateScale, 0.01)
         assertTrue(MotionTakeRender.input(emptySpool(), take, result).synced)
         assertNull(MotionTakeRender.input(emptySpool(), take, result).note)
-        // One frame past the last still maps, a second past the stop does not.
-        assertNotNull(result.timeline.fileUs(last + step))
+        // The frame interval after the last still maps, up to its exclusive end; a second past the stop does not.
+        assertNotNull(result.timeline.fileUs(last + step - 1))
+        assertNull(result.timeline.fileUs(last + step))
         assertNull(result.timeline.fileUs(last + 1_000_000_000L))
+    }
+
+    @Test fun aRecorderTimelineEndsOneFrameIntervalAfterTheLastFrame() {
+        // 120 fps: a frame interval is 8.33 ms, so a sample 8 ms after the last frame maps and one 12 ms after does not.
+        val step = 8_333_333L
+        val take = info(MotionTakeRoute.MEDIA_RECORDER, captureFps = 120.0)
+        for (drained in listOf(true, false)) {
+            val timing = recorderTiming(frames = 240, drained = drained, fileSamples = 240, lastSampleTimeUs = 239 * 8_333L, captureStepNs = step)
+            val timeline = MotionTakeRender.timeline(timing, FrameTrack(LongArray(0), LongArray(0)), take)!!.timeline
+            val last = startNs + 239 * step
+            assertNotNull("drained=$drained", timeline.fileUs(last + 8_000_000L))
+            assertNull("drained=$drained", timeline.fileUs(last + 12_000_000L))
+        }
+    }
+
+    @Test fun aGpuTakeWithAnAssumedMuxOffsetIsEstimated() {
+        val sensor = LongArray(30) { startNs + it * frameNs }
+        val pts = LongArray(30) { it * frameNs }
+        val take = info()
+        val assumed = MotionTakeRender.timeline(MotionTakeTiming.EncodedFrames(0L, minFrames = 2, offsetKnown = false),
+            frames(sensor, pts), take)!!
+        assertTrue(assumed.estimated)
+        assertEquals(0L, assumed.timeline.fileUs(startNs))
+        val input = MotionTakeRender.input(emptySpool(), take, assumed)
+        assertFalse(input.synced)
+        assertEquals("sync estimated: file offset not measured", input.note)
+        // The muxer's own offset stays measured.
+        val known = MotionTakeRender.timeline(MotionTakeTiming.EncodedFrames(20_000L, minFrames = 2), frames(sensor, pts), take)!!
+        assertFalse(known.estimated)
+        assertTrue(MotionTakeRender.input(emptySpool(), take, known).synced)
+        assertNull(MotionTakeRender.input(emptySpool(), take, known).note)
     }
 
     @Test fun undrainedHighSpeedTakeStartsAtFileZeroAndIsEstimated() {

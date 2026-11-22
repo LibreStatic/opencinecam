@@ -249,7 +249,9 @@ class Mp4AacSourceWindowTest {
     @Test fun aSecondVideoTrackIsStillRejected() {
         val original = fixture(video = true); val movie = child(original, "moov")
         val video = payloads(movie).last { it.first == "trak" }.second
-        val file = Memory(box("mdat", byteArrayOf(1)) + box("moov", movie + box("trak", video)))
+        // The original ftyp and mdat stay, so the audio chunk is valid and only the video count can refuse the file.
+        val beforeMoov = original.copyOfRange(0, original.size - (movie.size + 8))
+        val file = Memory(beforeMoov + box("moov", movie + box("trak", video)))
         assertThrows(IllegalArgumentException::class.java) { finalizeAacSourceWindow(file, window) }
         assertEquals(0, file.writes)
     }

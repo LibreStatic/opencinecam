@@ -163,4 +163,25 @@ class MotionResamplerTest {
         assertEquals(listOf(2_000L, 3_000L), merged.fileUs.toList())
         assertEquals(listOf(1.5f, 5f), merged.x.toList())
     }
+
+    @Test fun aBinAcrossARateChangeKeepsTheRotationOfItsSamples() {
+        // Sensor time 0..80 ms plays in 8 ms of file (rate scale 10), then real time. Gyro at 1 rad/s every 4 ms: a 16 ms
+        // bin holds 20 samples at scale 10 (file 0..7.6 ms) and 2 at scale 1 (file 8 and 12 ms), 88 ms of sensor time.
+        val base = 1_000_000_000L
+        val timeline = MotionTimeline.fromAnchors(
+            longArrayOf(base, base + 80_000_000L, base + 1_080_000_000L), longArrayOf(0L, 8_000L, 1_008_000L), clockOffsetNs = 0,
+        )
+        val times = LongArray(22) { base + it * 4_000_000L }
+        val mapped = MotionResampler.resample(times, FloatArray(22), FloatArray(22), FloatArray(22) { 1f }, timeline,
+            scaleByRate = true, binUs = 16_000L)
+        assertEquals(1, mapped.size)
+        // Integrated over the bin's 16 ms of file time it gives the 88 mrad the samples made (a plain mean gives 147).
+        assertEquals(0.088, mapped.z[0] * 0.016, 1e-6)
+
+        // Bins of one rate scale keep the plain mean of the scaled values.
+        val single = MotionResampler.resample(LongArray(20) { base + it * 4_000_000L }, FloatArray(20), FloatArray(20),
+            FloatArray(20) { 1f + it }, timeline, scaleByRate = true, binUs = 16_000L)
+        assertEquals(1, single.size)
+        assertEquals(((1..20).sum() * 10.0 / 20).toFloat(), single.z[0], 0f)
+    }
 }

@@ -644,8 +644,9 @@ internal fun CaptureService.newPreviewListener(): Camera2PreviewListener = objec
         }
         val transferPublication = take.publication
         var avTiming = previewEngine.consumeCaptureEpochReport()
-        // Read before the audio steps below replace the report; no report means the muxer added nothing.
-        val videoMuxOffsetUs = avTiming?.videoMuxOffsetUs ?: 0L
+        // Read before the audio steps below replace the report. No report: the muxer added nothing to a complete take,
+        // and the offset of a failed one is unknown (motionTakeTiming tells them apart).
+        val videoMuxOffsetUs = avTiming?.videoMuxOffsetUs
         lastSeparateAudioAvDrift = null
         val timing = previewEngine.consumeTimelapsePauseStatus()
         val durationMs = timing?.activeElapsedMs ?: activeRecordingElapsedMs()

@@ -18,9 +18,12 @@ internal fun motionLogName(videoName: String): String = videoName.removeSuffix("
  * Copies the rendered log [file] into the take's log row [uri], held for the drive's volume monitor as every take write
  * is (ADR-0037): a drive that leaves mid-copy ends it with an I/O error instead of the process holding its descriptor.
  */
-internal fun writeMotionLogRow(resolver: ContentResolver, uri: Uri, file: File, mode: String = "w") {
+internal fun writeMotionLogRow(resolver: ContentResolver, uri: Uri, file: File, mode: String = "w", onOpened: () -> Unit = {}) {
     val mark = DriveDescriptors.releaseMark(uri)
-    (resolver.openOutputStream(uri, mode) ?: error("Gyroflow log row could not be opened")).useOnDrive(uri, mark) { out ->
+    val stream = resolver.openOutputStream(uri, mode) ?: error("Gyroflow log row could not be opened")
+    // From here a "wt" open has truncated the row: the caller learns it before anything else can fail.
+    onOpened()
+    stream.useOnDrive(uri, mark) { out ->
         file.inputStream().use { it.copyTo(out) }
     }
 }
@@ -65,7 +68,7 @@ internal class MotionRecoveryFiles(filesDir: File, cacheDir: File) {
     /**
      * Renders take [takeId]'s spool into [renderedOf], once: an existing log is returned as it is. A GPU take only: the
      * file time of each spooled frame is its presentation time from the first frame (the muxer's offset is not known
-     * after a crash, so 0), and two frames are needed. A MediaRecorder take cannot be placed without its stop, a torn
+     * after a crash, so 0, and the log says its sync is estimated), and two frames are needed. A MediaRecorder take cannot be placed without its stop, a torn
      * description or a spool with a bad header renders nothing; a torn spool tail is cut by [MotionSpoolReader]. Null
      * when nothing was rendered. Renders run one at a time in the process, so two recovery passes never write the same
      * `.part`, and the second finds the first's log. Never throws.
@@ -88,7 +91,8 @@ internal class MotionRecoveryFiles(filesDir: File, cacheDir: File) {
             val target = renderedOf(takeId)
             // Rendered beside, then renamed: a process that dies mid-render never leaves half a log to attach.
             val partial = File(gcsvDir, target.name + PART_SUFFIX)
-            val outputs = MotionTakeRecorder.renderSpool(spool, info, MotionTakeTiming.EncodedFrames(fileOffsetUs = 0L, minFrames = 2),
+            val outputs = MotionTakeRecorder.renderSpool(spool, info, MotionTakeTiming.EncodedFrames(fileOffsetUs = 0L, minFrames = 2,
+                offsetKnown = false),
                 partial, withCamm = false) ?: return null
             if (!outputs.gcsv.renameTo(target)) {
                 outputs.gcsv.delete()

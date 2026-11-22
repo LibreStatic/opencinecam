@@ -547,7 +547,8 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
      * Attaches the log [renderMotionLogs] made for take [id] as its `<video stem>.gcsv` Download row, as the stop does
      * ([VideoOutput]): only when the take keeps its video, written through [writeMotionLogRow] (on a drive with the journal
      * unlocked, like the rest of a drive take's recovery), and the row removed when the write fails. A row left by an
-     * earlier attempt is rewritten. [recoverIncompleteTake] then publishes it with the video. Returns the take's rows,
+     * earlier attempt is rewritten; it is removed only when the failure came after opening (truncating) it, else kept. [recoverIncompleteTake]
+     * then publishes it with the video. Returns the take's rows,
      * read again when a row was touched. Every failure costs only the log.
      */
     private fun withRecoveredMotionLog(id: String, store: RecordingRowStore, rows: List<RecoveredRow<Uri>>): List<RecoveredRow<Uri>> {
@@ -561,10 +562,13 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
             val existing = rows.firstOrNull { it.root == "Download" && it.name == name }?.handle
             val uri = existing ?: store.insert(id, "Download", name, GyroflowLog.MIME_TYPE)
             touched = true
+            var opened = false
             try {
-                writeMotionLogRow(resolver, uri, log, mode = "wt")
+                writeMotionLogRow(resolver, uri, log, mode = "wt") { opened = true }
             } catch (failure: Throwable) {
-                if (existing == null) try { store.delete(uri) } catch (cleanup: Throwable) { failure.addSuppressed(cleanup) }
+                // A new row, or one the open truncated, holds no complete log and must not be published with the video.
+                // A row the failure never opened keeps the complete log an earlier attempt wrote.
+                if (existing == null || opened) try { store.delete(uri) } catch (cleanup: Throwable) { failure.addSuppressed(cleanup) }
                 throw failure
             }
             android.util.Log.i("RecordingRecovery", "Take $id: Gyroflow log $name attached from the motion spool")

@@ -36,6 +36,12 @@ internal object MotionSpoolFormat {
     const val KIND_EXPOSURE: Int = 5
 
     internal const val BUFFER_BYTES: Int = 64 * 1024
+
+    /**
+     * Frame and exposure records a [MotionSpoolWriter] holds for the sensor thread to write: about 17 s of 240 fps
+     * frames, far more than a healthy storage ever stalls for.
+     */
+    internal const val QUEUE_RECORDS: Int = 4096
 }
 
 /**
@@ -107,70 +113,153 @@ internal class MotionSpool(
 /**
  * Appends records to [out] through a 64 KiB buffer. The header is written on construction. Every
  * method is thread-safe; calls after [close] are ignored, so a late sensor callback is harmless.
+ *
+ * Only [sample], [flush] and [close] write to [out], under a lock held during the write. [frame] and
+ * [exposure] come from the camera's threads (the GL frame loop, the result callback), which must never
+ * wait on storage: they only append to a bounded queue under a lock never held during I/O, and the next
+ * [sample], [flush] or [close] moves the queue into the spool ahead of its own record, so records of one
+ * thread keep their order. When the queue is full the record is dropped and the writer is [failed].
+ *
+ * The first failed write latches [failed] and is rethrown: nothing is written again, not even by
+ * [close], which still closes [out], so a write that stopped partway is never replayed after it and
+ * the reader finds an intact prefix followed by a torn tail.
  */
-internal class MotionSpoolWriter(private val out: OutputStream) {
+internal class MotionSpoolWriter(
+    private val out: OutputStream,
+    private val queueCapacity: Int = MotionSpoolFormat.QUEUE_RECORDS,
+) {
+    private val ioLock = Any()
     private val buffer = ByteBuffer.allocate(MotionSpoolFormat.BUFFER_BYTES).order(ByteOrder.LITTLE_ENDIAN)
     private var closed = false
+    @Volatile private var writeFailed = false
 
-    @get:Synchronized var gyroCount: Long = 0
-        private set
-    @get:Synchronized var accelCount: Long = 0
-        private set
-    @get:Synchronized var magCount: Long = 0
-        private set
-    @get:Synchronized var frameCount: Long = 0
-        private set
-    @get:Synchronized var exposureCount: Long = 0
-        private set
+    // The camera-side records waiting for the spool; queueLock is never held during I/O.
+    private val queueLock = Any()
+    private val queueKind = ByteArray(queueCapacity)
+    private val queueTime = LongArray(queueCapacity)
+    private val queueValue = LongArray(queueCapacity)
+    private var queueHead = 0
+    private var queueSize = 0
+    private var queueClosed = false
+    @Volatile private var overflowed = false
+    // Where the I/O side copies the queue to, so that it appends without queueLock.
+    private val movingKind = ByteArray(queueCapacity)
+    private val movingTime = LongArray(queueCapacity)
+    private val movingValue = LongArray(queueCapacity)
+
+    private var gyroWritten = 0L
+    private var accelWritten = 0L
+    private var magWritten = 0L
+    private var framesQueued = 0L
+    private var exposuresQueued = 0L
+
+    val gyroCount: Long get() = synchronized(ioLock) { gyroWritten }
+    val accelCount: Long get() = synchronized(ioLock) { accelWritten }
+    val magCount: Long get() = synchronized(ioLock) { magWritten }
+    val frameCount: Long get() = synchronized(queueLock) { framesQueued }
+    val exposureCount: Long get() = synchronized(queueLock) { exposuresQueued }
+
+    /** True once a write failed or a frame or exposure record was dropped: the spool no longer holds the whole take. */
+    val failed: Boolean get() = writeFailed || overflowed
 
     init {
+        require(queueCapacity > 0) { "queueCapacity must be positive" }
         out.write(MotionSpoolFormat.MAGIC)
         out.write(MotionSpoolFormat.VERSION)
     }
 
     /** A gyro, accelerometer or magnetometer sample; [kind] is one of the three sensor kinds. */
-    @Synchronized fun sample(kind: Int, timeNs: Long, x: Float, y: Float, z: Float) {
+    fun sample(kind: Int, timeNs: Long, x: Float, y: Float, z: Float) {
         require(kind == MotionSpoolFormat.KIND_GYRO || kind == MotionSpoolFormat.KIND_ACCEL || kind == MotionSpoolFormat.KIND_MAG) {
             "not a sensor kind: $kind"
         }
-        if (closed) return
-        begin(kind, timeNs)
-        buffer.putFloat(x).putFloat(y).putFloat(z)
-        when (kind) {
-            MotionSpoolFormat.KIND_GYRO -> gyroCount++
-            MotionSpoolFormat.KIND_ACCEL -> accelCount++
-            else -> magCount++
+        synchronized(ioLock) {
+            if (closed || writeFailed) return
+            moveQueued()
+            begin(kind, timeNs)
+            buffer.putFloat(x).putFloat(y).putFloat(z)
+            when (kind) {
+                MotionSpoolFormat.KIND_GYRO -> gyroWritten++
+                MotionSpoolFormat.KIND_ACCEL -> accelWritten++
+                else -> magWritten++
+            }
         }
     }
 
-    @Synchronized fun frame(sensorNs: Long, filePtsNs: Long) {
-        if (closed) return
-        begin(MotionSpoolFormat.KIND_FRAME, sensorNs)
-        buffer.putLong(filePtsNs).putInt(0)
-        frameCount++
+    /** Queues a recorded frame; never waits on storage. */
+    fun frame(sensorNs: Long, filePtsNs: Long) {
+        enqueue(MotionSpoolFormat.KIND_FRAME, sensorNs, filePtsNs)
     }
 
-    @Synchronized fun exposure(fromNs: Long, exposureNs: Int, skewNs: Int) {
-        if (closed) return
-        begin(MotionSpoolFormat.KIND_EXPOSURE, fromNs)
-        buffer.putInt(exposureNs).putInt(skewNs).putInt(0)
-        exposureCount++
+    /** Queues an exposure change; never waits on storage. */
+    fun exposure(fromNs: Long, exposureNs: Int, skewNs: Int) {
+        val packed = (exposureNs.toLong() shl 32) or (skewNs.toLong() and 0xFFFF_FFFFL)
+        enqueue(MotionSpoolFormat.KIND_EXPOSURE, fromNs, packed)
     }
 
-    @Synchronized fun flush() {
-        if (closed) return
-        drain()
-        out.flush()
-    }
-
-    @Synchronized fun close() {
-        if (closed) return
-        closed = true
-        try {
+    fun flush() {
+        synchronized(ioLock) {
+            if (closed || writeFailed) return
+            moveQueued()
             drain()
-            out.flush()
-        } finally {
-            out.close()
+            write { out.flush() }
+        }
+    }
+
+    fun close() {
+        synchronized(ioLock) {
+            if (closed) return
+            closed = true
+            synchronized(queueLock) { queueClosed = true }
+            try {
+                if (!writeFailed) {
+                    moveQueued()
+                    drain()
+                    write { out.flush() }
+                }
+            } finally {
+                out.close()
+            }
+        }
+    }
+
+    private fun enqueue(kind: Int, timeNs: Long, value: Long): Unit = synchronized(queueLock) {
+        if (queueClosed || overflowed || writeFailed) return
+        if (queueSize == queueCapacity) {
+            overflowed = true
+            return
+        }
+        val slot = (queueHead + queueSize) % queueCapacity
+        queueKind[slot] = kind.toByte()
+        queueTime[slot] = timeNs
+        queueValue[slot] = value
+        queueSize++
+        if (kind == MotionSpoolFormat.KIND_FRAME) framesQueued++ else exposuresQueued++
+        Unit
+    }
+
+    /** Under [ioLock]: appends every queued record to the buffer, taking them out of the queue first. */
+    private fun moveQueued() {
+        val count = synchronized(queueLock) {
+            val n = queueSize
+            for (i in 0 until n) {
+                val slot = (queueHead + i) % queueCapacity
+                movingKind[i] = queueKind[slot]
+                movingTime[i] = queueTime[slot]
+                movingValue[i] = queueValue[slot]
+            }
+            queueHead = (queueHead + n) % queueCapacity
+            queueSize = 0
+            n
+        }
+        for (i in 0 until count) {
+            val kind = movingKind[i].toInt()
+            begin(kind, movingTime[i])
+            if (kind == MotionSpoolFormat.KIND_FRAME) {
+                buffer.putLong(movingValue[i]).putInt(0)
+            } else {
+                buffer.putInt((movingValue[i] ushr 32).toInt()).putInt(movingValue[i].toInt()).putInt(0)
+            }
         }
     }
 
@@ -181,8 +270,18 @@ internal class MotionSpoolWriter(private val out: OutputStream) {
 
     private fun drain() {
         if (buffer.position() == 0) return
-        out.write(buffer.array(), 0, buffer.position())
+        write { out.write(buffer.array(), 0, buffer.position()) }
         buffer.clear()
+    }
+
+    private inline fun write(block: () -> Unit) {
+        try {
+            block()
+        } catch (problem: Exception) {
+            // Part of the buffer may have reached the file: never write again, so nothing lands after a torn record.
+            writeFailed = true
+            throw problem
+        }
     }
 }
 

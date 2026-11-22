@@ -71,6 +71,34 @@ class OcrawGyroflowLogTest {
         }
 
     @Test
+    fun interruptionStopsTheScanAndTheRenderBetweenChunks() {
+        val file = take(mapOf("fps" to "30/1"), frames = 3, chunks = listOf(
+            listOf(gyro(2_000_000_000L, 1), gyro(2_001_000_000L, 2)),
+            listOf(gyro(2_002_000_000L, 3), gyro(2_003_000_000L, 4)),
+        ))
+        RandomAccessFile(file, "r").use { raf ->
+            val reader = OcrawStreamReader(raf.channel)
+            val index = reader.indexFrames()
+            try {
+                OcrawGyroflowLog.sensors(reader, index) { true }
+                throw AssertionError("an interrupted scan must throw")
+            } catch (_: OcrawGyroflowLog.Interrupted) {
+            }
+            val sensors = OcrawGyroflowLog.sensors(reader, index)
+            // Interrupted once the first chunk is read: its rows are out, the second chunk is never read.
+            var asked = 0
+            val out = StringWriter()
+            try {
+                OcrawGyroflowLog.render(out, reader, index, "A001_C002.ocraw", sensors) { ++asked > 1 }
+                throw AssertionError("an interrupted render must throw")
+            } catch (_: OcrawGyroflowLog.Interrupted) {
+            }
+            assertEquals(2, asked)
+            assertEquals(2, out.toString().lines().count { it.startsWith("0,") || it.startsWith("1000,") })
+        }
+    }
+
+    @Test
     fun rendersTheDesktopToolsLog() {
         val metadata = linkedMapOf(
             "fps" to "30/1",

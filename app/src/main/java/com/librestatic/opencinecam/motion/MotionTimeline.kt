@@ -17,7 +17,8 @@ package com.librestatic.opencinecam.motion
  * Samples before the first anchor map to null. After the last anchor the last segment's slope is
  * extrapolated for at most one last-segment duration (the last frame's own interval), then null.
  * With a single anchor the slope is 1 and the extrapolation lasts at most [SINGLE_ANCHOR_SPAN_NS]
- * (1 s); with no anchor nothing maps.
+ * (1 s); with no anchor nothing maps. A timeline built with `endAtLastAnchor` does not extrapolate:
+ * its last anchor is the exclusive end of the mapping.
  *
  * File times are kept in nanoseconds internally so that a take whose presentation times equal its
  * sensor times maps exactly; [fileUs] floors to whole microseconds.
@@ -26,6 +27,7 @@ internal class MotionTimeline private constructor(
     private val anchorNs: LongArray,
     private val anchorFileNs: LongArray,
     val clockOffsetNs: Long,
+    private val endAtLastAnchor: Boolean = false,
 ) {
     private val rateScales = DoubleArray(maxOf(anchorNs.size - 1, 0)) { i ->
         (anchorNs[i + 1] - anchorNs[i]).toDouble() / (anchorFileNs[i + 1] - anchorFileNs[i]).toDouble()
@@ -33,6 +35,9 @@ internal class MotionTimeline private constructor(
 
     /** Anchors kept after cleaning. */
     val anchorCount: Int get() = anchorNs.size
+
+    /** The first anchor's time on the SensorEvent clock (where the mapping starts), or null without anchors. */
+    val firstAnchorNs: Long? get() = anchorNs.firstOrNull()
 
     /** The median segment rate scale, 1.0 with fewer than two anchors. */
     val globalRateScale: Double = if (rateScales.isEmpty()) {
@@ -69,6 +74,7 @@ internal class MotionTimeline private constructor(
             if (anchorNs[mid] <= sensorNs) lo = mid else hi = mid - 1
         }
         if (lo == n - 1) {
+            if (endAtLastAnchor) return -1
             val limit = if (n == 1) SINGLE_ANCHOR_SPAN_NS else anchorNs[n - 1] - anchorNs[n - 2]
             if (sensorNs - anchorNs[n - 1] >= limit) return -1
         }
@@ -106,11 +112,12 @@ internal class MotionTimeline private constructor(
 
         /**
          * Anchors from camera timestamps [sensorNs] and file times [fileUs]. Anchors that do not
-         * strictly increase both are dropped.
+         * strictly increase both are dropped. With [endAtLastAnchor] the last anchor is the exclusive
+         * end of the mapping instead of the start of an extrapolation.
          */
-        fun fromAnchors(sensorNs: LongArray, fileUs: LongArray, clockOffsetNs: Long): MotionTimeline {
+        fun fromAnchors(sensorNs: LongArray, fileUs: LongArray, clockOffsetNs: Long, endAtLastAnchor: Boolean = false): MotionTimeline {
             require(sensorNs.size == fileUs.size) { "anchor arrays differ in size" }
-            return build(sensorNs, LongArray(fileUs.size) { fileUs[it] * 1_000L }, clockOffsetNs)
+            return build(sensorNs, LongArray(fileUs.size) { fileUs[it] * 1_000L }, clockOffsetNs, endAtLastAnchor)
         }
 
         /**
@@ -133,7 +140,7 @@ internal class MotionTimeline private constructor(
         fun linear(firstSensorNs: Long, firstFileUs: Long, lastSensorNs: Long, lastFileUs: Long, clockOffsetNs: Long): MotionTimeline =
             fromAnchors(longArrayOf(firstSensorNs, lastSensorNs), longArrayOf(firstFileUs, lastFileUs), clockOffsetNs)
 
-        private fun build(cameraNs: LongArray, fileNs: LongArray, clockOffsetNs: Long): MotionTimeline {
+        private fun build(cameraNs: LongArray, fileNs: LongArray, clockOffsetNs: Long, endAtLastAnchor: Boolean = false): MotionTimeline {
             val keptSensor = LongArray(cameraNs.size)
             val keptFile = LongArray(cameraNs.size)
             var kept = 0
@@ -145,7 +152,7 @@ internal class MotionTimeline private constructor(
                 keptFile[kept] = f
                 kept++
             }
-            return MotionTimeline(keptSensor.copyOf(kept), keptFile.copyOf(kept), clockOffsetNs)
+            return MotionTimeline(keptSensor.copyOf(kept), keptFile.copyOf(kept), clockOffsetNs, endAtLastAnchor)
         }
     }
 }

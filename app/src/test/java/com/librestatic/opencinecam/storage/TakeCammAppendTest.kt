@@ -84,6 +84,18 @@ class TakeCammAppendTest {
         assertTrue(before.contentEquals(file.bytes()))
     }
 
+    @Test fun runningOutOfMemoryWhileReadingTheMovieLeavesTheFileAsItWas() {
+        val file = MemoryMp4(videoOnlyMp4())
+        val before = file.bytes()
+        // Mp4CammAppender.begin reads the movie: the allocation that fails there is the one this simulates.
+        val starved = object : Mp4Bytes by file {
+            override fun readFully(position: Long, buffer: ByteBuffer) = throw OutOfMemoryError("simulated")
+        }
+        val camm = CammSeries(series(0, 1_000), MappedSeries.EMPTY, MappedSeries.EMPTY, LongArray(0), IntArray(0), IntArray(0))
+        assertEquals(0, appendCamm(starved, camm))
+        assertTrue(before.contentEquals(file.bytes()))
+    }
+
     /**
      * A 2 s take at 30 fps whose muxer put the first frame 20 ms into the file: the spool is rendered as the stop does,
      * the CAMM track appended to a real MP4, and the gyroscope packets read back from the track land on the Gyroflow

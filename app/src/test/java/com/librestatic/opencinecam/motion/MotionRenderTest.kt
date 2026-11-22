@@ -133,4 +133,30 @@ class MotionRenderTest {
         assertEquals(listOf(0L, 1_000_000L, 1_500_000L), camm.exposureFileUs.toList())
         assertEquals(listOf(0, 12_000_000, 0), camm.skewNs.toList())
     }
+
+    @Test fun cammSeriesWithoutFramesKeepsTheExposureSetBeforeTheFirstFrame() {
+        // Motion capture starts before MediaRecorder: the exposure arrives before the first frame and never changes.
+        val exposures = ExposureTrack(longArrayOf(startNs - 300_000_000L, startNs - 200_000_000L), intArrayOf(8_000_000, 10_000_000),
+            intArrayOf(0, 9_000_000))
+        val spool = spool()
+        val noFrames = MotionSpool(
+            FrameTrack(LongArray(0), LongArray(0)), exposures, spool.gyroStats, spool.accelStats, spool.magStats, spool.open,
+        )
+        val timeline = MotionTimeline.linear(startNs, 40_000L, startNs + 2_000_000_000L, 2_040_000L, clockOffsetNs = 0)
+        val camm = MotionRender.cammSeries(input(noFrames, timeline))
+
+        assertEquals("the latest one in force at the first frame, at its file time", listOf(40_000L), camm.exposureFileUs.toList())
+        assertEquals(listOf(10_000_000), camm.exposureNs.toList())
+        assertEquals(listOf(9_000_000), camm.skewNs.toList())
+
+        // One that applies from the first frame itself replaces the one before it.
+        val atStart = MotionSpool(
+            FrameTrack(LongArray(0), LongArray(0)),
+            ExposureTrack(longArrayOf(startNs - 1L, startNs), intArrayOf(8_000_000, 10_000_000), intArrayOf(0, 0)),
+            spool.gyroStats, spool.accelStats, spool.magStats, spool.open,
+        )
+        val replaced = MotionRender.cammSeries(input(atStart, timeline))
+        assertEquals(listOf(40_000L), replaced.exposureFileUs.toList())
+        assertEquals(listOf(10_000_000), replaced.exposureNs.toList())
+    }
 }

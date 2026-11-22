@@ -112,9 +112,10 @@ internal sealed class MotionTakeTiming {
     /**
      * The GPU route: a spooled frame's file time is its encoder presentation time minus the first frame's, plus
      * [fileOffsetUs] (the muxer's constant, `CaptureEpochReport.videoMuxOffsetUs`). Fewer than [minFrames] frames
-     * render nothing.
+     * render nothing. [offsetKnown] is false when [fileOffsetUs] is assumed rather than reported by the muxer (an
+     * interrupted take, crash recovery): the alignment is then estimated, never presented as measured.
      */
-    class EncodedFrames(val fileOffsetUs: Long, val minFrames: Int = 1) : MotionTakeTiming()
+    class EncodedFrames(val fileOffsetUs: Long, val minFrames: Int = 1, val offsetKnown: Boolean = true) : MotionTakeTiming()
 
     /**
      * The MediaRecorder route, from the recorder's frame anchors (`DirectRecorderTiming`) and the finished file's video
@@ -159,18 +160,24 @@ internal data class MotionTakeSummary(
     private fun hz(value: Double?): String = value?.let { "%.1f Hz".format(java.util.Locale.ROOT, it) } ?: "? Hz"
 }
 
-/** A take's timeline and whether it is measured or partly inferred. */
-internal class MotionTakeTimeline(val timeline: MotionTimeline, val estimated: Boolean)
+/** A take's timeline and whether it is measured or partly inferred; [estimatedNote] says what was inferred. */
+internal class MotionTakeTimeline(
+    val timeline: MotionTimeline,
+    val estimated: Boolean,
+    val estimatedNote: String = MotionTakeRender.NOTE_FRAMES_ESTIMATED,
+)
 
 internal object MotionTakeRender {
     const val NOTE_CLOCK_ESTIMATED = "sync estimated: camera clock is not the sensor clock"
     const val NOTE_FRAMES_ESTIMATED = "sync estimated: recorder timing not measured"
+    const val NOTE_OFFSET_ESTIMATED = "sync estimated: file offset not measured"
 
     /** The take's sensor-to-file timeline, or null when [timing] cannot place any frame. */
     fun timeline(timing: MotionTakeTiming, frames: FrameTrack, info: MotionTakeInfo): MotionTakeTimeline? = when (timing) {
         is MotionTakeTiming.EncodedFrames -> {
             if (frames.size < maxOf(timing.minFrames, 1)) null
-            else MotionTakeTimeline(MotionTimeline.fromFrames(frames, timing.fileOffsetUs, info.clockOffsetNs), estimated = false)
+            else MotionTakeTimeline(MotionTimeline.fromFrames(frames, timing.fileOffsetUs, info.clockOffsetNs),
+                estimated = !timing.offsetKnown, estimatedNote = NOTE_OFFSET_ESTIMATED)
         }
         is MotionTakeTiming.RecorderAnchors -> recorderTimeline(timing, info)
     }
@@ -182,8 +189,9 @@ internal object MotionTakeRender {
      * frame duration over the capture frame interval. MediaRecorder writes the high-speed file at `setVideoFrameRate`
      * (the capture rate, or the project rate off-speed, which stretches it), so the measured duration covers both.
      *
-     * Both end with a third anchor one frame past the last, on the same slope, so that only one frame interval past the
-     * last frame maps: with two anchors the extrapolation would reach a whole take length past the stop.
+     * Both end with a third anchor one frame past the last, on the same slope, which is the exclusive end of the mapping:
+     * only the one frame interval after the last frame maps (with two anchors the extrapolation would reach a whole take
+     * length past the stop).
      */
     private fun recorderTimeline(timing: MotionTakeTiming.RecorderAnchors, info: MotionTakeInfo): MotionTakeTimeline? {
         if (timing.fileSamples < 2 || timing.lastSampleTimeUs <= 0) return null
@@ -223,6 +231,7 @@ internal object MotionTakeRender {
         longArrayOf(firstNs, lastNs, lastNs + frameNs.coerceAtLeast(1L)),
         longArrayOf(firstFileUs, lastFileUs, lastFileUs + fileFrameUs.coerceAtLeast(1L)),
         clockOffsetNs,
+        endAtLastAnchor = true,
     )
 
     fun input(spool: MotionSpool, info: MotionTakeInfo, timeline: MotionTakeTimeline): MotionRenderInput = MotionRenderInput(
@@ -236,7 +245,7 @@ internal object MotionTakeRender {
         readoutDirection = info.readoutDirection,
         note = when {
             !info.cameraClockRealtime -> NOTE_CLOCK_ESTIMATED
-            timeline.estimated -> NOTE_FRAMES_ESTIMATED
+            timeline.estimated -> timeline.estimatedNote
             else -> null
         },
     )

@@ -99,8 +99,10 @@ class TimelapseUiTest {
         }
         val pause = compose.onNodeWithTag("recording-pause").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
         val stop = compose.onNodeWithContentDescription(context.getString(R.string.stop_recording)).assertIsDisplayed()
-        // The pause key sits beside the record button, never over it.
-        assertTrue(pause.getUnclippedBoundsInRoot().right <= stop.getUnclippedBoundsInRoot().left)
+        // The pause key sits beside the record button, never over it, on either side (RTL mirrors it).
+        val pauseBounds = pause.getUnclippedBoundsInRoot()
+        val stopBounds = stop.getUnclippedBoundsInRoot()
+        assertTrue(pauseBounds.right <= stopBounds.left || stopBounds.right <= pauseBounds.left)
         compose.onRoot().captureToImage().asAndroidBitmap().let { bitmap ->
             java.io.File(context.cacheDir,"PAUSE_TRANSPORT.png").outputStream().use {
                 assertTrue(bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it))

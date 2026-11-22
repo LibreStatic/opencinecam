@@ -166,4 +166,107 @@ class MotionSpoolFormatTest {
         assertEquals(MotionSpoolFormat.HEADER_BYTES, out.size())
         assertEquals(0L, writer.gyroCount)
     }
+
+    /** Writes through to [bytes]; the [failAt]th write (1-based) stores only its first [partial] bytes and throws. */
+    private class FlakyStream(private val failAt: Int, private val partial: Int) : java.io.OutputStream() {
+        val bytes = ByteArrayOutputStream()
+        var writes = 0
+        var closed = false
+        override fun write(b: Int) = write(byteArrayOf(b.toByte()), 0, 1)
+        override fun write(b: ByteArray, off: Int, len: Int) {
+            writes++
+            if (writes == failAt) {
+                bytes.write(b, off, minOf(partial, len))
+                throw java.io.IOException("no space left")
+            }
+            bytes.write(b, off, len)
+        }
+        override fun close() {
+            closed = true
+        }
+    }
+
+    @Test fun aFailedWriteIsNeverReplayedAndTheStreamStillCloses() {
+        // The header is two writes; the first buffer drain is the third, which stops 10 bytes into a 21-byte record.
+        val out = FlakyStream(failAt = 3, partial = MotionSpoolFormat.RECORD_BYTES * 5 + 10)
+        val writer = MotionSpoolWriter(out)
+        val perBuffer = MotionSpoolFormat.BUFFER_BYTES / MotionSpoolFormat.RECORD_BYTES
+        var thrown: Exception? = null
+        try {
+            for (i in 0..perBuffer) writer.sample(MotionSpoolFormat.KIND_GYRO, i + 1L, 1f, 0f, 0f)
+        } catch (problem: java.io.IOException) {
+            thrown = problem
+        }
+        assertTrue(thrown != null)
+        assertTrue(writer.failed)
+        // Storage is writable again, but nothing more reaches it: not a sample, a flush nor the close.
+        writer.sample(MotionSpoolFormat.KIND_GYRO, 1_000_000L, 1f, 0f, 0f)
+        writer.frame(1, 1)
+        writer.flush()
+        writer.close()
+        assertTrue(out.closed)
+        val bytes = out.bytes.toByteArray()
+        assertEquals(MotionSpoolFormat.HEADER_BYTES + MotionSpoolFormat.RECORD_BYTES * 5 + 10, bytes.size)
+        // The reader keeps the intact prefix and cuts the torn record.
+        assertEquals(5, read(bytes).gyro.size)
+    }
+
+    @Test fun framesNeverWaitForAWriteInProgress() {
+        val entered = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val out = object : java.io.OutputStream() {
+            var header = 0
+            override fun write(b: Int) = write(byteArrayOf(b.toByte()), 0, 1)
+            override fun write(b: ByteArray, off: Int, len: Int) {
+                if (header++ < 2) return
+                entered.countDown()
+                release.await()
+            }
+        }
+        val writer = MotionSpoolWriter(out)
+        val perBuffer = MotionSpoolFormat.BUFFER_BYTES / MotionSpoolFormat.RECORD_BYTES
+        // The sensor thread fills the buffer, and its drain stalls in the write.
+        val sensor = Thread { for (i in 0..perBuffer) writer.sample(MotionSpoolFormat.KIND_GYRO, i + 1L, 0f, 0f, 1f) }
+        sensor.start()
+        assertTrue(entered.await(5, java.util.concurrent.TimeUnit.SECONDS))
+        val frames = Thread {
+            for (i in 0 until 100) writer.frame(i.toLong(), i.toLong())
+            writer.exposure(1L, 10_000_000, 0)
+        }
+        frames.start()
+        frames.join(2_000)
+        val returned = !frames.isAlive
+        release.countDown()
+        sensor.join(5_000)
+        assertTrue("frame() waited for the stalled write", returned)
+        assertEquals(100L, writer.frameCount)
+        assertEquals(false, writer.failed)
+    }
+
+    @Test fun aFullFrameQueueFailsTheSpoolInsteadOfWaiting() {
+        val out = ByteArrayOutputStream()
+        val writer = MotionSpoolWriter(out, queueCapacity = 4)
+        for (i in 0 until 4) writer.frame(i.toLong(), i * 10L)
+        assertEquals(false, writer.failed)
+        writer.frame(4, 40)
+        assertTrue(writer.failed)
+        writer.close()
+        // What was queued is still written; the record that did not fit is not.
+        assertEquals(listOf(0L, 1L, 2L, 3L), read(out.toByteArray()).frames.sensorNs.toList())
+    }
+
+    @Test fun queuedRecordsKeepTheirPlaceAmongSamples() {
+        val bytes = spool {
+            sample(MotionSpoolFormat.KIND_GYRO, 1, 0f, 0f, 0f)
+            frame(5, 50)
+            sample(MotionSpoolFormat.KIND_GYRO, 2, 0f, 0f, 0f)
+            exposure(6, 1_000, 2_000)
+        }
+        // Kinds in file order: gyro, frame, gyro, exposure.
+        val kinds = (0 until 4).map { bytes[MotionSpoolFormat.HEADER_BYTES + it * MotionSpoolFormat.RECORD_BYTES].toInt() }
+        assertEquals(listOf(MotionSpoolFormat.KIND_GYRO, MotionSpoolFormat.KIND_FRAME, MotionSpoolFormat.KIND_GYRO,
+            MotionSpoolFormat.KIND_EXPOSURE), kinds)
+        assertEquals(listOf(1_000), read(bytes).exposures.exposureNs.toList())
+        assertEquals(listOf(2_000), read(bytes).exposures.skewNs.toList())
+    }
 }

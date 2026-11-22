@@ -36,12 +36,19 @@ internal object OcrawGyroflowLog {
 
     class Report(val rows: Long, val droppedRows: Long, val accelerometer: Boolean, val magnetometer: Boolean, val synced: Boolean)
 
-    /** Which sensors the take holds samples of; a chunk that cannot be read or decoded is skipped. */
-    fun sensors(reader: OcrawStreamReader, index: OcrawFrameIndex): Sensors {
+    /** Thrown by [sensors] and [render] when their `isInterrupted` answers true before a chunk is read. */
+    class Interrupted : RuntimeException("motion log interrupted")
+
+    /**
+     * Which sensors the take holds samples of; a chunk that cannot be read or decoded is skipped. [isInterrupted] is
+     * asked before each chunk is read; true throws [Interrupted].
+     */
+    fun sensors(reader: OcrawStreamReader, index: OcrawFrameIndex, isInterrupted: () -> Boolean = { false }): Sensors {
         var gyro = false
         var accel = false
         var mag = false
         for (chunk in index.imu) {
+            if (isInterrupted()) throw Interrupted()
             val data = read(reader, chunk) ?: continue
             for (i in 0 until data.count) when (data.kind(i)) {
                 OcrawImuSamples.KIND_GYROSCOPE -> gyro = true
@@ -56,6 +63,7 @@ internal object OcrawGyroflowLog {
     /**
      * Writes the log to [out] (flushed, not closed) and returns what it wrote, or null without writing anything when
      * the take has no frame or no gyroscope sample. [videoFileName] is the `.ocraw` file's name, as the desktop tool writes.
+     * [isInterrupted] is asked before each chunk is read; true throws [Interrupted], leaving [out] partly written.
      */
     fun render(
         out: Writer,
@@ -63,6 +71,7 @@ internal object OcrawGyroflowLog {
         index: OcrawFrameIndex,
         videoFileName: String,
         sensors: Sensors = sensors(reader, index),
+        isInterrupted: () -> Boolean = { false },
     ): Report? {
         val frames = index.frames
         val timeBase = index.timeBase
@@ -87,9 +96,9 @@ internal object OcrawGyroflowLog {
         val mag = accel && sensors.magnetometer
         out.write(header(metadata, videoFileName, synced, accel, mag))
 
-        val gyro = KindStream(reader, index.imu, OcrawImuSamples.KIND_GYROSCOPE)
-        val accelPair = if (accel) Nearest(KindStream(reader, index.imu, OcrawImuSamples.KIND_ACCELEROMETER)) else null
-        val magPair = if (mag) Nearest(KindStream(reader, index.imu, OcrawImuSamples.KIND_MAGNETOMETER)) else null
+        val gyro = KindStream(reader, index.imu, OcrawImuSamples.KIND_GYROSCOPE, isInterrupted)
+        val accelPair = if (accel) Nearest(KindStream(reader, index.imu, OcrawImuSamples.KIND_ACCELEROMETER, isInterrupted)) else null
+        val magPair = if (mag) Nearest(KindStream(reader, index.imu, OcrawImuSamples.KIND_MAGNETOMETER, isInterrupted)) else null
         val line = StringBuilder(96)
         var rows = 0L
         var dropped = 0L
@@ -183,7 +192,12 @@ internal object OcrawGyroflowLog {
     }
 
     /** One sensor's samples across the take's chunks, in file order, decoding one chunk at a time. */
-    private class KindStream(private val reader: OcrawStreamReader, private val chunks: List<OcrawImuChunk>, private val kind: Int) {
+    private class KindStream(
+        private val reader: OcrawStreamReader,
+        private val chunks: List<OcrawImuChunk>,
+        private val kind: Int,
+        private val isInterrupted: () -> Boolean,
+    ) {
         private var nextChunk = 0
         private var data: OcrawImuSamplesData? = null
         private var at = 0
@@ -214,6 +228,7 @@ internal object OcrawGyroflowLog {
                     data = null
                     return false
                 }
+                if (isInterrupted()) throw Interrupted()
                 data = read(reader, chunks[nextChunk++])
                 at = 0
             }

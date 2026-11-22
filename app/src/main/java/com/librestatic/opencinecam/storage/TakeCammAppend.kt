@@ -67,20 +67,23 @@ internal fun appendCamm(file: Mp4Bytes, series: CammSeries): Int {
     if (series.gyro.fileUs.isEmpty() && series.accel.fileUs.isEmpty() && series.mag.fileUs.isEmpty() &&
         series.exposureFileUs.isEmpty()
     ) return 0
-    val appender = Mp4CammAppender.begin(file)
+    var appender: Mp4CammAppender? = null
     try {
+        // Inside the guard: begin reads the movie into memory, which can run out of it as well.
+        val opened = Mp4CammAppender.begin(file).also { appender = it }
         val packets = mergeCammPackets(series, object : CammPacketSink {
-            override fun vector(timeUs: Long, type: Int, a: Float, b: Float, c: Float) = appender.writePacket(timeUs, type, a, b, c)
-            override fun exposure(timeUs: Long, exposureNs: Int, skewNs: Int) = appender.writeExposure(timeUs, exposureNs, skewNs)
+            override fun vector(timeUs: Long, type: Int, a: Float, b: Float, c: Float) = opened.writePacket(timeUs, type, a, b, c)
+            override fun exposure(timeUs: Long, exposureNs: Int, skewNs: Int) = opened.writeExposure(timeUs, exposureNs, skewNs)
         })
-        return if (packets == 0) 0 else appender.finish()
+        return if (packets == 0) 0 else opened.finish()
     } catch (problem: OutOfMemoryError) {
         // The packet tables and the new moov are built in memory; MotionCammBudget keeps them small, and this is the
         // last line: the take finalises without the track rather than taking the service down.
-        android.util.Log.w("MotionData", "CAMM track not added: out of memory", problem)
+        // Guarded so the function stays usable on a plain JVM, where android.util.Log is not implemented.
+        runCatching { android.util.Log.w("MotionData", "CAMM track not added: out of memory", problem) }
         return 0
     } finally {
-        appender.close()
+        appender?.close()
     }
 }
 

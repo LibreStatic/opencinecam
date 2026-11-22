@@ -275,7 +275,14 @@ internal class CinemaDngExporter(
                 }
             }
             interruption()?.let { return stop(it) }
-            val motionLog = writeMotionLog(target)?.also { bytes += it } != null
+            // The log is optional: it gets only what the DNGs and the WAV left above the reserve, now and as planned.
+            val fresh = try { destination.freeBytes() } catch (_: Exception) { null }
+            val motionBudget = listOfNotNull(free?.let { it - bytes }, fresh)
+                .minOrNull()?.let { it - CinemaDngExportPlan.SPACE_RESERVE_BYTES }
+            var motionStop: CinemaDngStopReason? = null
+            val motionLog = writeMotionLog(target, motionBudget) { interruption()?.also { motionStop = it } != null }
+                ?.also { bytes += it } != null
+            motionStop?.let { return stop(it) }
             interruption()?.let { return stop(it) }
             target.publish()
             return CinemaDngExportOutcome.Exported(target.location, written, skipped, audio, audioOmitted, bytes, noMedia, motionLog)
@@ -285,25 +292,35 @@ internal class CinemaDngExporter(
     }
 
     /**
-     * Writes `<take>.gcsv` beside the DNGs when the take has gyroscope samples, and returns its bytes; null when the
-     * take has none or the log could not be written, which costs only the log (the target removed the partial file).
+     * Writes `<take>.gcsv` beside the DNGs when the take has gyroscope samples in its frames' span, and returns its
+     * bytes; null when the take has none, the log would need more than [budget] bytes (null: no limit), [isInterrupted]
+     * answered true (asked between sample chunks), or the log could not be written. Each costs only the log: the target
+     * removes the partial file.
      */
-    private fun writeMotionLog(target: CinemaDngTarget): Long? {
+    private fun writeMotionLog(target: CinemaDngTarget, budget: Long?, isInterrupted: () -> Boolean): Long? {
         if (index.imu.isEmpty() || index.frames.isEmpty()) return null
+        if (budget != null && budget <= 0) return null
         return try {
             val reader = OcrawStreamReader(channel, scratchBytes = OcrawFrameHeader.BYTES)
-            val sensors = OcrawGyroflowLog.sensors(reader, index)
+            val sensors = OcrawGyroflowLog.sensors(reader, index, isInterrupted)
             if (!sensors.gyroscope) return null
             var written = 0L
             target.write("$takeName.${GyroflowLog.EXTENSION}", GCSV_MIME_TYPE) { out ->
                 val counting = object : WritableByteChannel by out {
-                    override fun write(src: ByteBuffer): Int = out.write(src).also { written += it }
+                    override fun write(src: ByteBuffer): Int {
+                        if (budget != null && written + src.remaining() > budget) throw IOException("the motion log would use the space reserve")
+                        return out.write(src).also { written += it }
+                    }
                 }
                 val writer = BufferedWriter(java.io.OutputStreamWriter(Channels.newOutputStream(counting), Charsets.UTF_8), GCSV_BUFFER_CHARS)
-                checkNotNull(OcrawGyroflowLog.render(writer, reader, index, sourceFileName, sensors)) { "no gyroscope rows" }
+                val report = checkNotNull(OcrawGyroflowLog.render(writer, reader, index, sourceFileName, sensors, isInterrupted)) { "no gyroscope rows" }
+                // Every gyroscope sample before the first frame or after the last: a header alone is no log.
+                check(report.rows > 0) { "no gyroscope rows in the frames' span" }
                 writer.flush()
             }
             written
+        } catch (_: OcrawGyroflowLog.Interrupted) {
+            null
         } catch (failure: Exception) {
             // Guarded so the class stays usable on a plain JVM, where android.util.Log is not implemented.
             runCatching { android.util.Log.w(LOG_TAG, "The motion log of $takeName could not be written; the export goes on without it", failure) }

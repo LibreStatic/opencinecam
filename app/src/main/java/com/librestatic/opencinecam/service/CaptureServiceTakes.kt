@@ -155,19 +155,22 @@ internal fun CaptureService.attachMotionLog(
 
 /**
  * How the take's motion data meets its file, or null when it has none left to seal or it cannot be placed. The GPU
- * route needs only the muxer's offset; a take kept incomplete needs two spooled frames. The MediaRecorder route reads
+ * route needs only the muxer's offset; a take kept incomplete needs two spooled frames. A null [videoMuxOffsetUs] (no
+ * capture epoch report) is 0: exact for a complete take, which reports one whenever the muxer adds an offset, but only
+ * assumed for an incomplete one, whose alignment is then estimated. The MediaRecorder route reads
  * the finished file's video track, so the descriptor must still be open.
  */
 internal fun motionTakeTiming(
     output: VideoOutput,
     direct: com.librestatic.opencinecam.camera.DirectRecorderTiming?,
-    videoMuxOffsetUs: Long,
+    videoMuxOffsetUs: Long?,
     complete: Boolean,
 ): MotionTakeTiming? {
     if (!output.motionPending()) return null
     val recorder = output.motionRecorder() ?: return null
     return when (recorder.info.route) {
-        MotionTakeRoute.GPU -> MotionTakeTiming.EncodedFrames(videoMuxOffsetUs, minFrames = if (complete) 1 else 2)
+        MotionTakeRoute.GPU -> MotionTakeTiming.EncodedFrames(videoMuxOffsetUs ?: 0L, minFrames = if (complete) 1 else 2,
+            offsetKnown = videoMuxOffsetUs != null || complete)
         MotionTakeRoute.MEDIA_RECORDER -> {
             val anchors = direct ?: return null
             val video = try {
@@ -190,19 +193,27 @@ internal fun motionTakeTiming(
 }
 
 /** Engine callbacks and main detach the take-owned outputs exactly once; the caller finishes them. */
-internal fun CaptureService.detachTake(): DetachedTake = synchronized(takeOwnershipLock) {
-    // Read before clearTakeDestination() below forgets it.
-    DetachedTake(videoOutput, audioSidecarRecorder, activeTransferPublication, audioStartFailure, activeRecordingGeometry,
-        takeContinuation?.link).also {
-        // Every frame reached the encoder before the stop detaches the take; later callbacks belong to no take.
-        activeMotionRecorder = null
-        videoOutput = null
-        audioSidecarRecorder = null
-        activeTransferPublication = null
-        audioStartFailure = null
-        activeRecordingGeometry = null
-        clearTakeDestination()
+internal fun CaptureService.detachTake(): DetachedTake {
+    var motion: MotionTakeRecorder? = null
+    val take = synchronized(takeOwnershipLock) {
+        // Read before clearTakeDestination() below forgets it.
+        motion = activeMotionRecorder
+        DetachedTake(videoOutput, audioSidecarRecorder, activeTransferPublication, audioStartFailure, activeRecordingGeometry,
+            takeContinuation?.link).also {
+            // Every frame reached the encoder before the stop detaches the take; later callbacks belong to no take.
+            activeMotionRecorder = null
+            videoOutput = null
+            audioSidecarRecorder = null
+            activeTransferPublication = null
+            audioStartFailure = null
+            activeRecordingGeometry = null
+            clearTakeDestination()
+        }
     }
+    // The sensors stop with the take, whether or not its native writer retires; the spool stays for the seal or a
+    // later salvage. Never blocks: the spool is closed on the sensor thread.
+    listOfNotNull(take.video?.motionRecorder(), motion).distinct().forEach { it.stopAcquisition() }
+    return take
 }
 
 /** Stable failure codes pass through as incomplete reasons; anything else is an encoder failure. */
@@ -355,8 +366,9 @@ internal fun CaptureService.salvageInterruptedTake(take: DetachedTake, retiremen
                 reasons = reasons,
                 prepareAudio = audio?.let { sidecar -> { r -> sidecar.prepareIncompleteCompletion(r) } },
                 prepareVideo = { r ->
-                    // No muxer offset survives an interruption: 0 is exact without embedded audio, a few frames off with it.
-                    output?.sealMotion(MotionTakeTiming.EncodedFrames(fileOffsetUs = 0L, minFrames = 2)
+                    // No muxer offset survives an interruption: 0 is exact without embedded audio, a few frames off with
+                    // it, so the log says its sync is estimated.
+                    output?.sealMotion(MotionTakeTiming.EncodedFrames(fileOffsetUs = 0L, minFrames = 2, offsetKnown = false)
                         .takeIf { output.motionRecorder()?.info?.route == MotionTakeRoute.GPU }, appendCamm = false)
                     output?.prepareIncomplete(r, null, false, false, encodedFrames, clipSidecar)
                 },

@@ -156,7 +156,8 @@ internal object MotionRender {
      * from [plan] (which must hold [binUs]) and rotated into image axes as it is read. An exposure entry is kept only
      * where the exposure or the skew changes: at the first recorded frame it is in force, then at each frame where it
      * differs. A take without spooled frames (the MediaRecorder route) places each exposure record at its own mapped
-     * time instead.
+     * time instead, except that the latest record from before the timeline's start (motion capture starts before the
+     * recorder) is placed at that start, as the exposure in force at the first frame.
      */
     fun cammSeries(
         input: MotionRenderInput,
@@ -211,15 +212,21 @@ internal object MotionRender {
         val frames = input.spool.frames
         val exposures = input.spool.exposures
         val timeline = input.timeline
+        val startNs = timeline.firstAnchorNs
         val placed = if (frames.size > 0) frames.size else exposures.size
         val fileUs = LongArray(placed)
         val exposureNs = IntArray(placed)
         val skewNs = IntArray(placed)
         var count = 0
         for (i in 0 until placed) {
-            val cameraNs = if (frames.size > 0) frames.sensorNs[i] else exposures.fromNs[i]
+            var cameraNs = if (frames.size > 0) frames.sensorNs[i] else exposures.fromNs[i]
             val exposure = if (frames.size > 0) inForce(exposures.fromNs, cameraNs) else i
             if (exposure < 0) continue
+            if (frames.size == 0 && startNs != null && cameraNs + timeline.clockOffsetNs < startNs) {
+                // Only the last record before the start is in force there, unless another applies from the start itself.
+                if (i + 1 < exposures.size && exposures.fromNs[i + 1] + timeline.clockOffsetNs <= startNs) continue
+                cameraNs = startNs - timeline.clockOffsetNs
+            }
             val us = timeline.fileUs(cameraNs + timeline.clockOffsetNs) ?: continue
             if (count > 0 && us <= fileUs[count - 1]) continue
             val e = exposures.exposureNs[exposure]

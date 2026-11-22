@@ -107,7 +107,7 @@ class MotionStreamingRenderTest {
 
     private fun timeline(spool: MotionSpool) = MotionTimeline.fromFrames(spool.frames, fileOffsetUs = 0, clockOffsetNs = 0)
 
-    // The former in-memory render, as the oracle.
+    // The former in-memory render, as the oracle; a bin of mixed rate scales weights each value by 1/scale (finding 6).
 
     private fun oldResample(s: SampleArrays, timeline: MotionTimeline, scaleByRate: Boolean, binUs: Long = 1_000L): MappedSeries {
         val outTimes = LongArray(s.size)
@@ -126,6 +126,11 @@ class MotionStreamingRenderTest {
         var firstY = 0f
         var firstZ = 0f
         var firstScale = 1.0
+        var mixed = false
+        var rawX = 0.0
+        var rawY = 0.0
+        var rawZ = 0.0
+        var inverse = 0.0
         fun emit() {
             if (count == 0) return
             val time: Long
@@ -142,9 +147,15 @@ class MotionStreamingRenderTest {
                 }
             } else {
                 time = Math.floorDiv(sumUs, count.toLong())
-                outX[out] = (sumX / count).toFloat()
-                outY[out] = (sumY / count).toFloat()
-                outZ[out] = (sumZ / count).toFloat()
+                if (mixed) {
+                    outX[out] = (rawX / inverse).toFloat()
+                    outY[out] = (rawY / inverse).toFloat()
+                    outZ[out] = (rawZ / inverse).toFloat()
+                } else {
+                    outX[out] = (sumX / count).toFloat()
+                    outY[out] = (sumY / count).toFloat()
+                    outZ[out] = (sumZ / count).toFloat()
+                }
             }
             outTimes[out] = time
             out++
@@ -168,8 +179,18 @@ class MotionStreamingRenderTest {
                 firstY = s.y[i]
                 firstZ = s.z[i]
                 firstScale = scale
+                mixed = false
+                rawX = 0.0
+                rawY = 0.0
+                rawZ = 0.0
+                inverse = 0.0
             }
             count++
+            if (scale != firstScale) mixed = true
+            rawX += s.x[i]
+            rawY += s.y[i]
+            rawZ += s.z[i]
+            inverse += 1.0 / scale
             sumUs += us
             sumX += s.x[i] * scale
             sumY += s.y[i] * scale

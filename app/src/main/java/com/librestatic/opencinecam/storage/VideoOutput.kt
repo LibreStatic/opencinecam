@@ -349,16 +349,24 @@ class VideoOutput private constructor(
 
     private fun deleteOwned() {
         check(descriptorRetired) { "Video descriptor retirement is incomplete" }
-        discardMotionLog()
+        // The sensors stop whatever happens to the output; its motion files go only with it.
+        synchronized(this) { motionRecorder?.stop() }
         // ADR-0011: only a zero-length file is deleted. A file with bytes stays pending, owned by the
         // recovery journal, which publishes it as incomplete if the process dies before a retry.
         if (!neverRecorded && (retainedBytes || context.contentResolver.ownedRowBytes(uri) != 0L)) {
             android.util.Log.w("VideoOutput", "Keeping $displayName: it holds bytes")
             recoveryMember.keepBytes()
+            // The spool, its description and any rendered log stay: a salvage in this process attaches the log, and
+            // after a process death the journal's recovery renders the spool for the kept take.
             return
         }
-        // The group waits for the separate native engine guard and any audio worker.
-        recoveryMember.abort()
+        try {
+            // The group waits for the separate native engine guard and any audio worker.
+            recoveryMember.abort()
+        } finally {
+            // A deleted (or never recorded) output has no use for its motion data.
+            discardMotionLog()
+        }
     }
 
     /**
