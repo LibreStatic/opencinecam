@@ -10,6 +10,7 @@ import com.librestatic.opencinecam.capture.RawVideoConfigOption
 import com.librestatic.opencinecam.capture.RawVideoCropPreview
 import com.librestatic.opencinecam.capture.RawVideoCropStatus
 import com.librestatic.opencinecam.capture.RawVideoSelection
+import com.librestatic.opencinecam.rawvideo.RawVideoArmState
 import com.librestatic.opencinecam.rawvideo.RawVideoCrop
 import com.librestatic.opencinecam.capture.RawVideoLeftOutOption
 import com.librestatic.opencinecam.capture.RawVideoLeftOutReason
@@ -246,6 +247,8 @@ internal data class RawVideoCustomContext(
     val sweepMedianBytesPerSecond: Long? = null,
     val ringBytes: Long? = null,
     val burstSeconds: Map<RawVideoConfig, Long> = emptyMap(),
+    /** The ring armed now, whose budget a take of its own configuration and window runs with. */
+    val armed: RawVideoArmState? = null,
 ) {
     /**
      * [key] parsed on this camera ([RawVideoConfigKeys.parse]) and judged ([rawVideoCustomVerdict]); null when it does not
@@ -258,7 +261,20 @@ internal data class RawVideoCustomContext(
         if (config in usable && selection.crop.isCentredIn(config)) return RawVideoResolvedSelection(selection, null)
         val verdict = rawVideoCustomVerdict(config, usable, risky, reduced, leftOut, sweepMedianBytesPerSecond, ringBytes)
             .let { if (it is RawVideoCustomVerdict.Risky && it.burstSeconds == null && config in usable) RawVideoCustomVerdict.Risky(burstSeconds[config]) else it }
+            .let { armedBurst(config, selection.crop, it) }
         return RawVideoResolvedSelection(selection, verdict)
+    }
+
+    /**
+     * A risky window's burst estimate from the [armed] ring when that ring is armed for it, instead of the ring the
+     * qualification used ([ringBytes]); [verdict] otherwise. Only the estimate changes, never the verdict, so arming a
+     * smaller ring cannot refuse the window it was armed for.
+     */
+    private fun armedBurst(config: RawVideoConfig, crop: RawVideoCrop, verdict: RawVideoCustomVerdict): RawVideoCustomVerdict {
+        val ring = armed?.takeIf { it.config == config && it.crop == crop }?.ringBytes ?: return verdict
+        if (verdict !is RawVideoCustomVerdict.Risky || verdict.burstSeconds == null || config in usable) return verdict
+        val burst = RawQualificationRisk.estimateBurstSeconds(config.streamBytesPerSecond, sweepMedianBytesPerSecond, ring) ?: return verdict
+        return RawVideoCustomVerdict.Risky(burst)
     }
 
     /** The frame rates a window can be judged at ([rawVideoCustomRates]). */

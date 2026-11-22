@@ -116,6 +116,26 @@ class RawCropGeometryTest {
         assertEquals(window.top + window.height, fromTopLeft.top + fromTopLeft.height)
     }
 
+    @Test fun anUnalignedDragKeepsTheOppositeCornerExactly() {
+        // The top-left corner of 1920 x 816 at +1080 +1122 dragged by (-401, -101): the bottom-right corner stays at
+        // (3000, 1938), the size aligned to 2320 x 916 (not 2996 x 1936 from rounding the origin on its own).
+        val dragged = rawCropResized(RawVideoCrop(1080, 1122, 1920, 816), movingLeft = true, movingTop = true, dx = -401f, dy = -101f,
+            aspect = null, sensorWidth = 4080, sensorHeight = 3060)
+        assertEquals(RawVideoCrop(680, 1022, 2320, 916), dragged)
+        // The other corners too, with an aspect lock and when the drag would cross the anchor.
+        for (movingLeft in listOf(true, false)) for (movingTop in listOf(true, false)) for (aspect in listOf(null, 16f / 9f)) {
+            for ((dx, dy) in listOf(-401f to -101f, 333f to 77f, 99999f to 99999f, -99999f to -99999f)) {
+                val resized = rawCropResized(window, movingLeft, movingTop, dx, dy, aspect, sensorW, sensorH)
+                aligned(resized)
+                val label = "$movingLeft $movingTop $aspect $dx $dy gave $resized"
+                if (movingLeft) assertEquals(label, window.left + window.width, resized.left + resized.width)
+                else assertEquals(label, window.left, resized.left)
+                if (movingTop) assertEquals(label, window.top + window.height, resized.top + resized.height)
+                else assertEquals(label, window.top, resized.top)
+            }
+        }
+    }
+
     @Test fun resizingStopsAtTheSensorEdgeAndTheMinimumSize() {
         val huge = rawCropResized(window, false, false, 99999f, 99999f, null, sensorW, sensorH)
         aligned(huge)

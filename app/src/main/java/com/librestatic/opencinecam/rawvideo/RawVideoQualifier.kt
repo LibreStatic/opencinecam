@@ -1702,10 +1702,16 @@ class RawVideoQualifier(
     private fun declaredMinFrameDurationNs(camera: CameraInfo, previewSize: Pair<Int, Int>): Long {
         val streamMap = camera.characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
         return maxOf(
-            runCatching { streamMap?.getOutputMinFrameDuration(ImageFormat.RAW10, camera.size) ?: 0L }.getOrDefault(0L),
+            raw10MinFrameDurationNs(camera),
             runCatching { streamMap?.getOutputMinFrameDuration(SurfaceTexture::class.java, Size(previewSize.first, previewSize.second)) ?: 0L }
                 .getOrDefault(0L),
         )
+    }
+
+    /** The RAW10 stream's declared minimum frame duration at [camera]'s size, what a take's frame-rate plan reads; 0 when unknown. */
+    private fun raw10MinFrameDurationNs(camera: CameraInfo): Long {
+        val streamMap = camera.characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+        return runCatching { streamMap?.getOutputMinFrameDuration(ImageFormat.RAW10, camera.size) ?: 0L }.getOrDefault(0L)
     }
 
     /** [camera] has the `QTI_RAW_FRAME_RATE_OVERRIDE` quirk; false when the device profile cannot be read. */
@@ -1725,11 +1731,12 @@ class RawVideoQualifier(
      * PLAN-076: the row of a [kind] session of [run] the camera cannot be asked for, or null when it can. With no AE
      * range containing the rate and no vendor override reaching it ([rawVideoFrameRatePlan] gives no AE range), the
      * engine's graph pre-check (`rawVideoGraphDecision`) refuses it, so it fails as the camera's limit
-     * ([RawQualificationFrameRate.REASON_CAMERA_FPS_LIMIT]) without the camera being opened.
+     * ([RawQualificationFrameRate.REASON_CAMERA_FPS_LIMIT]) without the camera being opened. The plan reads the RAW10
+     * stream's declared duration alone, as a take's does; the row's `declaredMaxFps` keeps the session's combined one.
      */
     private fun unrequestableRateRow(camera: CameraInfo, run: RawQualificationRun, kind: SessionKind): JSONObject? {
+        if (frameRatePlanOf(camera, run.config.fps, raw10MinFrameDurationNs(camera), qtiFrameRateOverride(camera)).aeRange != null) return null
         val declared = declaredMinFrameDurationNs(camera, previewSizeOf(camera))
-        if (frameRatePlanOf(camera, run.config.fps, declared, qtiFrameRateOverride(camera)).aeRange != null) return null
         val reason = RawQualificationFrameRate.REASON_CAMERA_FPS_LIMIT
         return skipped(run, reason, kind)
             .put("status", RawBenchmarkStatus.FAIL.name)

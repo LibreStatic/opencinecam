@@ -21,8 +21,10 @@ import org.junit.Test
 class RawCropEditorLogicTest {
     private val saved = RawSavedCrop("a", "Slow-mo 240p", 4080, 3060, 1828, 1410, 428, 240)
 
-    private fun state(selected: String?, crop: RawVideoCropUi?, rates: List<Int> = listOf(15, 24, 30, 60), phase: CameraUiPhase = CameraUiPhase.PREVIEWING) =
+    private fun state(selected: String?, crop: RawVideoCropUi?, rates: List<Int> = listOf(15, 24, 30, 60), phase: CameraUiPhase = CameraUiPhase.PREVIEWING,
+        cameraId: String = "0") =
         CameraUiState(
+            selectedCameraId = cameraId,
             selectedMode = CaptureMode.RAW_VIDEO,
             phase = phase,
             modeGates = CameraUiState().modeGates + (CaptureMode.RAW_VIDEO to ModeGateState.AVAILABLE),
@@ -55,8 +57,17 @@ class RawCropEditorLogicTest {
         assertNull(rawCropEditStateFor(state(null, null)))
     }
 
+    @Test fun theEditorClosesWhenAnotherCameraWithTheSameOutputIsSelected() {
+        val crop = RawVideoCropUi(4080, 3060, 200, 300, 1920, 816)
+        val edit = rawCropEditStateFor(state("1920x816+200+300@24", crop))!!
+        assertEquals("0", edit.cameraId)
+        assertTrue(rawCropEditorKeeps(state("1920x816+200+300@24", crop), edit, paneOpen = true))
+        assertFalse(rawCropEditorKeeps(state("1920x816+200+300@24", crop, cameraId = "2"), edit, paneOpen = true))
+        assertFalse(rawCropEditorKeeps(state("1920x816+200+300@24", crop), edit, paneOpen = false))
+    }
+
     @Test fun anAspectLockReshapesTheWindow() {
-        val edit = RawCropEditState(4080, 3060, RawVideoCrop(200, 300, 1920, 816), 24, false)
+        val edit = RawCropEditState(4080, 3060, RawVideoCrop(200, 300, 1920, 816), 24, false, "0")
         edit.chooseAspect(RawCropAspect.WIDE)
         assertEquals(1920, edit.window.width)
         assertEquals(1080, edit.window.height)

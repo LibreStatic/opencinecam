@@ -190,7 +190,7 @@ converter needs. Later `METADATA` chunks may add keys; a later value wins.
 | `colorMatrix1`, `colorMatrix2` | 9 rationals, row-major |
 | `forwardMatrix1`, `forwardMatrix2` | 9 rationals, row-major |
 | `calibrationIlluminant1`, `calibrationIlluminant2` | EXIF LightSource integer |
-| `sensorWidth`, `sensorHeight` | pixel array size, integers |
+| `sensorWidth`, `sensorHeight` | size of the camera's RAW output the frames are cropped from (the RAW10 stream, which may be smaller than the pixel array), integers; `crop` origins are relative to it |
 | `activeArray` | `left top right bottom`, integers |
 | `crop` | `left top width height` of every frame, integers |
 | `fps` | rational |

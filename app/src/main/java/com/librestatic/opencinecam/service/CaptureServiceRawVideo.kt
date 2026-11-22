@@ -291,8 +291,9 @@ internal fun CaptureService.rawGateDestination(): RecordingDestination? =
 
 /**
  * Main: the PLAN-076 context windows of the operator's on [cameraId] are judged in, for the gate's destination: its
- * sweep median and ring from [rawQualificationStorageModel] (a small store read and preference read). Null without a
- * qualifier sensor size.
+ * sweep median and ring from [rawQualificationStorageModel] (a small store read and preference read), and the ring armed
+ * now, whose budget replaces that ring in the burst estimate of the window it was armed for. Null without a qualifier
+ * sensor size.
  */
 internal fun CaptureService.rawCustomContextFor(
     cameraId: String,
@@ -305,7 +306,7 @@ internal fun CaptureService.rawCustomContextFor(
     val (sensorWidth, sensorHeight) = rawQualificationSensorSize(cameraId) ?: return null
     val storage = rawGateDestination()?.let { rawQualificationStorageModel(cameraId, it) }
     return RawVideoCustomContext(cameraId, sensorWidth, sensorHeight, usable, risky, reduced, leftOut,
-        storage?.writeBytesPerSecond, storage?.ringBytes, burst)
+        storage?.writeBytesPerSecond, storage?.ringBytes, burst, rawArmedRing?.takeIf { it.config.cameraId == cameraId })
 }
 
 /**

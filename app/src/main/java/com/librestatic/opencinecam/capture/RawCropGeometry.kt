@@ -150,9 +150,13 @@ internal fun rawCropResized(
         if (h > maxH) { h = maxH; w = h * aspect }
         if (w > maxW) { w = maxW; h = w / aspect }
     }
-    val left = if (movingLeft) anchorX - w else anchorX.toFloat()
-    val top = if (movingTop) anchorY - h else anchorY.toFloat()
-    return RawVideoCrop.snapped(sensorWidth, sensorHeight, left.roundToInt(), top.roundToInt(), w.roundToInt(), h.roundToInt())
+    // The size is aligned first (width to a multiple of 4, height to even) and the moving edges placed from the anchor,
+    // so the opposite corner stays where it was: on an aligned window the origin then needs no rounding of its own.
+    val width = w.roundToInt().coerceIn(minWidth(sensorWidth), sensorWidth) / 4 * 4
+    val height = h.roundToInt().coerceIn(minHeight(sensorHeight), sensorHeight) / 2 * 2
+    val left = if (movingLeft) anchorX - width else anchorX
+    val top = if (movingTop) anchorY - height else anchorY
+    return RawVideoCrop.snapped(sensorWidth, sensorHeight, left, top, width, height)
 }
 
 /**

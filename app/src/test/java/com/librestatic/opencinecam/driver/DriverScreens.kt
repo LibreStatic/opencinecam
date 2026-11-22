@@ -1855,8 +1855,12 @@ private fun CaptureChrome(
 ) = DriverTheme(forceDark = true) {
     BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
         val window = AdaptiveWindow(maxWidth.value, maxHeight.value, hardwareKeyboard)
-        // A caller whose settings change (the crop screens' selection) starts the copy again from them.
-        var current by remember(settings) { mutableStateOf(settings) }
+        var current by remember { mutableStateOf(settings) }
+        // A caller whose RAW selection changes (the crop screens' fake service) passes it into the copy, keeping the
+        // other local changes.
+        LaunchedEffect(settings.rawVideoConfig) {
+            if (current.rawVideoConfig != settings.rawVideoConfig) current = current.copy(rawVideoConfig = settings.rawVideoConfig)
+        }
         val scopes = rememberSaveable(saver = CaptureScopeVisibility.Saver) { CaptureScopeVisibility(scopesHidden) }
         val live = withDriverAnalysis(state, current.monitoring).let {
             if (fakeListening) it.copy(audioListeningStatus = driverListeningStatus(current, it.audioListeningOutputs)) else it

@@ -147,7 +147,15 @@ internal fun binderRawCropActions(binder: CaptureService.LocalBinder): RawCropAc
  * locked to, and the rate and encoding it would record at. [key] is what Apply selects and Save as stores.
  */
 @Stable
-internal class RawCropEditState(val sensorWidth: Int, val sensorHeight: Int, window: RawVideoCrop, fps: Int, compressed: Boolean) {
+internal class RawCropEditState(
+    val sensorWidth: Int,
+    val sensorHeight: Int,
+    window: RawVideoCrop,
+    fps: Int,
+    compressed: Boolean,
+    /** The camera the editor opened on; it closes when another is selected. */
+    val cameraId: String?,
+) {
     var window by mutableStateOf(window)
     var aspect by mutableStateOf(RawCropAspect.FREE)
     var fps by mutableIntStateOf(fps)
@@ -199,8 +207,15 @@ internal fun rawCropEditStateFor(state: CameraUiState, fresh: Boolean = false): 
     val rates = state.rawVideoCustomRates
     val fps = rawKeyFps(state.rawVideoSelectedKey) ?: rates.lastOrNull { it <= 30 } ?: rates.firstOrNull() ?: 30
     val compressed = rawKeyBlockPack(state.rawVideoSelectedKey) && state.rawVideoOptions.any { it.isBlockPack }
-    return RawCropEditState(ui.sensorWidth, ui.sensorHeight, window, fps, compressed)
+    return RawCropEditState(ui.sensorWidth, ui.sensorHeight, window, fps, compressed, state.selectedCameraId)
 }
+
+/**
+ * What changes with each gate recompute that may judge windows differently (the configurations and their risk, the
+ * left-out ones, whose records, the custom rates, the camera): the verdicts read from the service restart on it.
+ */
+internal fun rawCropGateContext(state: CameraUiState): List<Any?> =
+    listOf(state.selectedCameraId, state.rawVideoOptions, state.rawVideoLeftOut, state.rawVideoProfile, state.rawVideoCustomRates)
 
 /** The rates the editor offers: the camera's custom rates and the one it started at, ascending. */
 internal fun rawCropEditorRates(customRates: List<Int>, current: Int): List<Int> = (customRates + current).distinct().sorted()
@@ -212,10 +227,14 @@ internal fun rawCropEditorRates(customRates: List<Int>, current: Int): List<Int>
 @Composable
 internal fun RawCropEditorGuard(state: CameraUiState, editor: RawCropEditor, paneOpen: Boolean) {
     val edit = editor.editing ?: return
+    if (!rawCropEditorKeeps(state, edit, paneOpen)) SideEffect { editor.close() }
+}
+
+/** True while [edit] still applies to [state]: the pane open, the editor available, the same camera and RAW output size. */
+internal fun rawCropEditorKeeps(state: CameraUiState, edit: RawCropEditState, paneOpen: Boolean): Boolean {
     val sensor = state.rawVideoCrop
-    val keep = paneOpen && rawCropEditorAvailable(state) && sensor != null &&
+    return paneOpen && rawCropEditorAvailable(state) && sensor != null && state.selectedCameraId == edit.cameraId &&
         sensor.sensorWidth == edit.sensorWidth && sensor.sensorHeight == edit.sensorHeight
-    if (!keep) SideEffect { editor.close() }
 }
 
 /** True when [crop] covers its whole sensor. */
@@ -313,7 +332,7 @@ internal fun rawCropViewAvailable(state: CameraUiState, editorOpen: Boolean): Bo
  * The RAW video window over the viewfinder, in the frame's coordinates ([viewport]): the editor's window while it is open,
  * else the guide of a selected window smaller than the sensor. Nothing outside RAW video. Only the editor takes touches.
  * [enlargedArea] is the frame's visible area while the enlarged crop view is on: the guide is then only the window's
- * frame line inside it.
+ * frame line inside it, with the area around the window blacked out.
  */
 @Composable
 internal fun RawCropFrameLayer(
@@ -355,7 +374,7 @@ private const val RAW_CROP_SHADE_ALPHA = 0.55f
 
 /**
  * The window [crop] on screen: the picture dimmed around it, a thin frame and corner marks. With [enlargedArea] (the
- * enlarged crop view) nothing outside the window shows, so only the frame line is drawn, inset to stay inside the area.
+ * enlarged crop view) the area outside the window is black, and the frame line is drawn inset to stay inside the area.
  * It takes no touches.
  */
 @Composable
@@ -365,6 +384,14 @@ private fun RawCropGuide(crop: RawVideoCropUi, mapping: RawCropMapping, enlarged
     Box(modifier) {
         Canvas(Modifier.matchParentSize()) {
             if (enlargedArea != null) {
+                // The take records only the window: the frame's area around it is blacked out, the letterbox of a
+                // window whose aspect differs from the frame's.
+                val mask = Path().apply {
+                    fillType = PathFillType.EvenOdd
+                    addRect(enlargedArea)
+                    addRect(window.intersect(enlargedArea))
+                }
+                drawPath(mask, Color.Black)
                 val stroke = 1.dp.toPx()
                 val line = window.intersect(enlargedArea).deflate(stroke / 2f)
                 if (line.width > 0f && line.height > 0f) {
@@ -551,7 +578,8 @@ internal fun RawCropEditorPanel(
     BackHandler { editor.close() }
     val actions = LocalRawCropActions.current
     val key = edit.key
-    val verdict by produceState<Pair<String, RawVideoCropPreview?>?>(null, key, actions) { value = key to actions?.verdict(key) }
+    val gate = rawCropGateContext(state)
+    val verdict by produceState<Pair<String, RawVideoCropPreview?>?>(null, key, actions, gate) { value = key to actions?.verdict(key) }
     val judged = verdict?.first == key
     val preview = verdict?.takeIf { judged }?.second
     val allowed = rawVideoConfigChangeAllowed(state)
@@ -767,7 +795,8 @@ internal fun RawVideoCustomCropSection(
     val currentFps = rawKeyFps(state.rawVideoSelectedKey)
     val currentCompressed = rawKeyBlockPack(state.rawVideoSelectedKey)
     val candidates = rawSavedCropCandidates(currentFps, currentCompressed, state.rawVideoCustomRates)
-    val judged by produceState<Map<String, RawSavedCropChoice?>>(emptyMap(), saved, candidates, actions) {
+    val gate = rawCropGateContext(state)
+    val judged by produceState<Map<String, RawSavedCropChoice?>>(emptyMap(), saved, candidates, actions, gate) {
         value = saved.associate { crop -> crop.id to rawSavedCropChoice(crop, candidates) { actions?.verdict(it) } }
     }
     val activeCustom = rawVideoActiveOption(state)?.takeIf { it.isCustom && it.key == chosenKey }

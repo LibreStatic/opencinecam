@@ -11,6 +11,7 @@ import com.librestatic.opencinecam.capture.RawVideoCropPreview
 import com.librestatic.opencinecam.capture.RawVideoCropStatus
 import com.librestatic.opencinecam.capture.RawVideoLeftOutReason
 import com.librestatic.opencinecam.capture.RawVideoSelection
+import com.librestatic.opencinecam.rawvideo.RawVideoArmState
 import com.librestatic.opencinecam.rawvideo.RawVideoCrop
 import com.librestatic.opencinecam.camera.RawThroughputBenchmark
 import com.librestatic.opencinecam.rawvideo.RawQualificationFrameRate
@@ -689,7 +690,8 @@ class RawVideoGateTest {
         median: Long? = null,
         ring: Long? = null,
         burst: Map<RawVideoConfig, Long> = emptyMap(),
-    ) = RawVideoCustomContext("0", 4080, 3060, usable, risky, reduced, leftOut, median, ring, burst)
+        armed: RawVideoArmState? = null,
+    ) = RawVideoCustomContext("0", 4080, 3060, usable, risky, reduced, leftOut, median, ring, burst, armed)
 
     @Test fun anExactUsableKeySelectsItCentred() {
         val usable = listOf(full24, crop1080at24)
@@ -723,6 +725,23 @@ class RawVideoGateTest {
         val gib = 1L shl 30
         assertEquals(RawVideoCustomVerdict.Risky(153),
             resolveRawVideoSelection("1920x816+0+0@24", usable, custom = context(usable, median = 40_000_000L, ring = gib))?.custom)
+    }
+
+    @Test fun theRingArmedForAWindowSetsItsBurstButNotItsVerdict() {
+        val usable = listOf(crop720at24)
+        val gib = 1L shl 30
+        val window = RawVideoCrop(1000, 1100, 1920, 816)
+        // A 100 MB ring armed for this window lasts 100 000 000 / 7 001 600 B/s = 14 s, not the qualification ring's 153 s,
+        // and stays risky: a smaller ring never refuses the window it was armed for.
+        val armed = RawVideoArmState(custom, window, slotBytes = 1_000_000, slotCount = 100)
+        assertEquals(RawVideoCustomVerdict.Risky(14),
+            resolveRawVideoSelection("1920x816+1000+1100@24", usable, custom = context(usable, median = 40_000_000L, ring = gib, armed = armed))?.custom)
+        // A ring armed for another window leaves the qualification ring's estimate.
+        assertEquals(RawVideoCustomVerdict.Risky(153),
+            resolveRawVideoSelection("1920x816+0+0@24", usable, custom = context(usable, median = 40_000_000L, ring = gib, armed = armed))?.custom)
+        // A refused window stays refused whatever the armed ring.
+        assertEquals(RawVideoCustomVerdict.Refused(RawVideoLeftOutReason.STORAGE),
+            context(usable, median = 40_000_000L, ring = 100_000_000L, armed = armed.copy(slotCount = 1000)).judge("1920x816+1000+1100@24")?.custom)
     }
 
     @Test fun aRefusedWindowFallsBackToAutomatic() {

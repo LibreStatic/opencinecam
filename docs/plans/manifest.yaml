@@ -1003,6 +1003,9 @@ plans:
     requirements: [OCC-PRO-006, OCC-PRO-007, OCC-PRIV-001, OCC-RAW-001]
     adrs: [ADR-0019, ADR-0027, ADR-0033]
     risks: [RISK-010, RISK-018, RISK-019]
+    conditional_gates: []
+    intended_executor: Claude Code
+
   - id: OCC-PLAN-076
     title: "RAW video: manual crop"
     status: InProgress

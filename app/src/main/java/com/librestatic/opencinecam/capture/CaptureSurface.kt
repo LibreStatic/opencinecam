@@ -88,6 +88,8 @@ import com.librestatic.opencinecam.settings.HistogramMode
 import com.librestatic.opencinecam.settings.ViewfinderScale
 import com.librestatic.opencinecam.subject.InterviewOperatorControl
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.roundToInt
 import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -268,6 +270,21 @@ internal fun CaptureSurface(
             val enlargedClip = if (enlargedFrame != null) Modifier.drawWithContent {
                 clipRect(frameArea.left, frameArea.top, frameArea.right, frameArea.bottom) { this@drawWithContent.drawContent() }
             } else Modifier
+            // The Compose clip does not reach the native surface, so the view clips itself to the same area, given in
+            // its own coordinates: before the frame's transform, mirrored with the view.
+            val mirrored = descriptor.lensFacing == CameraCharacteristics.LENS_FACING_FRONT && !state.gpuViewfinder && !state.selectedMode.usesLogGraph
+            val surfaceClip = if (enlargedFrame != null && targetFrame.width > 0f && targetFrame.height > 0f) {
+                val toLocalX = restingFrame.width / targetFrame.width
+                val toLocalY = restingFrame.height / targetFrame.height
+                val left = (frameArea.left - targetFrame.left) * toLocalX
+                val right = (frameArea.right - targetFrame.left) * toLocalX
+                Rect(
+                    if (mirrored) restingFrame.width - right else left,
+                    (frameArea.top - targetFrame.top) * toLocalY,
+                    if (mirrored) restingFrame.width - left else right,
+                    (frameArea.bottom - targetFrame.top) * toLocalY,
+                )
+            } else null
             Box(Modifier.fillMaxSize().then(enlargedClip)) {
             PreviewSurfaceView(
                 descriptor.cameraId,
@@ -275,10 +292,11 @@ internal fun CaptureSurface(
                 streamSize.height,
                 state.gpuViewfinder || state.selectedMode.usesLogGraph,
                 state.targetFps,
-                descriptor.lensFacing == CameraCharacteristics.LENS_FACING_FRONT && !state.gpuViewfinder && !state.selectedMode.usesLogGraph,
+                mirrored,
                 widthPx,
                 heightPx,
                 binder,
+                surfaceClip,
                 Modifier.align(Alignment.Center)
                     .graphicsLayer {
                         scaleX = frameScale
@@ -427,6 +445,7 @@ private fun PreviewSurfaceView(
     displayWidthPx: Int,
     displayHeightPx: Int,
     binder: CaptureService.LocalBinder,
+    clip: Rect?,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -539,7 +558,13 @@ private fun PreviewSurfaceView(
     }
     AndroidView(
         factory = { view },
-        update = { it.scaleX = if (mirrorViewfinder) -1f else 1f },
+        update = {
+            it.scaleX = if (mirrorViewfinder) -1f else 1f
+            // In the view's own coordinates; null shows the whole view.
+            it.clipBounds = clip?.let { area ->
+                android.graphics.Rect(floor(area.left).toInt(), floor(area.top).toInt(), ceil(area.right).toInt(), ceil(area.bottom).toInt())
+            }
+        },
         // The caller sizes the view: aspectRatio picks the largest rectangle that fits both width
         // and height, and a filled viewfinder uses an oversized box with the same ratio. A
         // preceding fillMaxWidth would lock the landscape width and squeeze the EGL output.
