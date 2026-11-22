@@ -34,7 +34,11 @@ internal fun Camera2PreviewEngine.openRawVideoStream(descriptor: Camera2CameraDe
         streamMap?.getOutputSizes(ImageFormat.RAW10)?.map { it.width to it.height }
     }.getOrNull().orEmpty()
     val fpsRanges = descriptor.targetFpsRanges.map { it.lower to it.upper }
-    val decision = rawVideoGraphDecision(config, raw10Sizes, fpsRanges)
+    val declaredMinFrameDurationNs = runCatching {
+        streamMap?.getOutputMinFrameDuration(ImageFormat.RAW10, Size(config.rawWidth, config.rawHeight))
+    }.getOrNull()?.takeIf { it > 0 }
+    val qtiOverride = deviceQuirks.resolve(descriptor.quirkCameraId).applies(QuirkEffect.QTI_RAW_FRAME_RATE_OVERRIDE)
+    val decision = rawVideoGraphDecision(config, raw10Sizes, fpsRanges, declaredMinFrameDurationNs, qtiOverride)
     if (decision is RawVideoGraphDecision.Rejected) {
         Log.w(TAG, "RAW video graph rejected on camera ${descriptor.cameraId}: ${decision.detail}")
         rawVideoUnavailable(decision.detail)
@@ -46,10 +50,6 @@ internal fun Camera2PreviewEngine.openRawVideoStream(descriptor: Camera2CameraDe
         rawVideoUnavailable("The RAW10 reader could not be created: ${failure.message}")
         return null
     }
-    val declaredMinFrameDurationNs = runCatching {
-        streamMap?.getOutputMinFrameDuration(ImageFormat.RAW10, Size(config.rawWidth, config.rawHeight))
-    }.getOrNull()?.takeIf { it > 0 }
-    val qtiOverride = deviceQuirks.resolve(descriptor.quirkCameraId).applies(QuirkEffect.QTI_RAW_FRAME_RATE_OVERRIDE)
     val stream = RawVideoStream(
         config, reader, reader.surface, descriptor.cameraId, characteristics, descriptor, owner, declaredMinFrameDurationNs, qtiOverride,
     )
@@ -191,6 +191,14 @@ internal fun Camera2PreviewEngine.noteRawBufferLost(target: Surface) {
     Log.w(TAG, "RAW10 buffer lost during a take")
     rawVideoHandler.post { endRawTake(take, RawVideoReasons.FRAME_LOST, streamFailure = true) }
 }
+
+/**
+ * PLAN-076: the viewfinder stream of a graph without a video or LOG profile: in a RAW_VIDEO session
+ * [Camera2CameraDescriptor.rawVideoViewfinderSize] (the RAW output's aspect, so the viewfinder shows its
+ * whole field), in every other mode [Camera2CameraDescriptor.previewSize].
+ */
+internal fun Camera2PreviewEngine.baseViewfinderSize(descriptor: Camera2CameraDescriptor): Size =
+    if (activeRawVideo != null) descriptor.rawVideoViewfinderSize else descriptor.previewSize
 
 /** The RAW_VIDEO frame-rate plan for [descriptor] at the requested rate (PLAN-071). */
 internal fun Camera2PreviewEngine.rawVideoFrameRatePlanFor(descriptor: Camera2CameraDescriptor): RawVideoFrameRatePlan {

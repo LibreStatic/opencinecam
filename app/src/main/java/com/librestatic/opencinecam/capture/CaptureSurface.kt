@@ -28,6 +28,9 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -74,6 +77,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.librestatic.opencinecam.calibration.LensCalibrationUiState
 import com.librestatic.opencinecam.CameraUiPhase
 import com.librestatic.opencinecam.CameraUiState
+import com.librestatic.opencinecam.CaptureMode
 import com.librestatic.opencinecam.fold.FoldDisplayState
 import com.librestatic.opencinecam.fold.FoldPane
 import com.librestatic.opencinecam.fold.foldPanes
@@ -147,6 +151,9 @@ internal fun CaptureSurface(
                 state.activeLogProfile?.size ?: it.preferredLogProfile?.size ?: it.previewSize
             } else if (state.selectedMode in CameraUiState.videoProfileModes) {
                 state.activeVideoProfile?.size ?: it.previewSize
+            } else if (state.selectedMode == CaptureMode.RAW_VIDEO) {
+                // PLAN-076: the RAW_VIDEO viewfinder has the RAW output's aspect, its whole field.
+                it.rawVideoViewfinderSize
             } else {
                 it.previewSize
             }
@@ -179,6 +186,8 @@ internal fun CaptureSurface(
         var stackedDeckHeightPx by remember { mutableIntStateOf(0) }
         // What an open pane or the scopes take from the frame's end or bottom edge, reported by the chrome.
         var frameReserve by remember { mutableStateOf(CaptureFrameReserve.None) }
+        // PLAN-076: the enlarged crop view, reported by the chrome, which holds its key.
+        var rawCropView by remember { mutableStateOf(false) }
         // Translucent chrome floats over a viewfinder that spans the whole window. The pane is not
         // inset, so a filled (cropped) frame overflows the physical screen rather than relying on
         // Compose clipping, which a SurfaceView does not reliably honour.
@@ -227,14 +236,25 @@ internal fun CaptureSurface(
             val paneHeight = constraints.maxHeight.toFloat()
             val deckSpace = if (stacked && !overlayChrome) stackedDeckHeightPx.toFloat() else 0f
             val reserve = if (fullChrome && !overlayChrome) CaptureFrameReserve(reserveEnd, reserveBottom) else CaptureFrameReserve.None
-            val restingFrame = fittedPreviewViewport(paneWidth, paneHeight, displayRatio)
-            val targetFrame = if (sideRails && !overlayChrome) with(density) {
+            // A filled overlay viewfinder is laid out larger than the pane; that is where it rests.
+            val filledOverlay = overlayChrome && settings.viewfinderScale == ViewfinderScale.FILL
+            val restingFrame = if (filledOverlay) filledPreviewViewport(paneWidth, paneHeight, displayRatio)
+                else fittedPreviewViewport(paneWidth, paneHeight, displayRatio)
+            val frame = if (filledOverlay) restingFrame else if (sideRails && !overlayChrome) with(density) {
                 // The pane's start padding is the rail and its end padding the column, mirrored right to left.
                 val railPx = CAPTURE_RAIL_WIDTH_DP.dp.toPx()
                 val columnPx = SIDE_COLUMN_WIDTH_DP.dp.toPx()
                 railsPreviewViewport(paneWidth, paneHeight, if (rightToLeft) columnPx else railPx, if (rightToLeft) railPx else columnPx,
                     viewfinderExpansion, reserve, displayRatio, rightToLeft)
             } else reservedPreviewViewport(paneWidth, paneHeight, deckSpace, viewfinderExpansion, reserve, displayRatio, rightToLeft)
+            // The enlarged crop view grows the picture from the frame until the RAW window fills what the frame shows, by
+            // the same transform as the frame's own moves, so the surface keeps its layout size (no reattach mid-take).
+            // The chrome derives the same viewport for its guide and tap to focus.
+            val frameArea = previewVisibleArea(frame, if (overlayChrome) Rect(0f, 0f, paneWidth, paneHeight) else null)
+            val enlargedFrame = if (rawCropView && fullChrome) {
+                rawCropWindowRect(state, frame, displayRotationDegrees, squeezeFactor)?.let { rawCropEnlargedViewport(frame, it, frameArea) }
+            } else null
+            val targetFrame = enlargedFrame ?: frame
             val frameMoved = targetFrame != restingFrame && restingFrame.width > 0f
             val frameScale = if (frameMoved) targetFrame.width / restingFrame.width else 1f
             val shiftX = if (frameMoved) (targetFrame.left + targetFrame.width / 2f) - (restingFrame.left + restingFrame.width / 2f) else 0f
@@ -244,6 +264,11 @@ internal fun CaptureSurface(
                 Modifier.absoluteOffset { IntOffset(shiftX.roundToInt(), shiftY.roundToInt()) }
                     .requiredSize(targetFrame.width.toDp(), targetFrame.height.toDp())
             } else previewSizeModifier
+            // Enlarged, the picture outside the frame's visible area is cut away, so the chrome around stays clear.
+            val enlargedClip = if (enlargedFrame != null) Modifier.drawWithContent {
+                clipRect(frameArea.left, frameArea.top, frameArea.right, frameArea.bottom) { this@drawWithContent.drawContent() }
+            } else Modifier
+            Box(Modifier.fillMaxSize().then(enlargedClip)) {
             PreviewSurfaceView(
                 descriptor.cameraId,
                 streamSize.width,
@@ -285,7 +310,10 @@ internal fun CaptureSurface(
                 // The full chrome hosts the scopes beside the frame (a tray, a strip or the
                 // inspector); a hinge split and the self-recording chrome leave them on it.
                 drawScopesPanel = !fullChrome,
+                // The full chrome draws the RAW window's guide with its crop editor; the others leave it here.
+                drawRawCropGuide = !fullChrome,
             )
+            }
         }
         }
         Box(paneModifier(panes?.controls).testTag("fold-controls-pane")) {
@@ -340,6 +368,7 @@ internal fun CaptureSurface(
             onLensCalibrationSave = { binder?.saveLensCalibration() },
             onLensCalibrationDiscard = { binder?.discardLensCalibration() },
             onOpenRawQualification = onOpenRawQualification,
+            onRawCropView = { rawCropView = it },
         )
         }
         }

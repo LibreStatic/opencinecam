@@ -11,6 +11,7 @@ import com.librestatic.opencinecam.playback.RawDevelop
 import com.librestatic.opencinecam.playback.codecLabel
 import com.librestatic.opencinecam.playback.durationLabel
 import com.librestatic.opencinecam.playback.resolutionLabel
+import com.librestatic.opencinecam.rawvideo.RawVideoCrop
 import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.storage.LocalMediaArtifact
 import com.librestatic.opencinecam.storage.LocalMediaKind
@@ -292,7 +293,9 @@ internal data class OcrawSummary(val width: Int?, val height: Int?, val requeste
     val orientationDegrees: Int = 0, val audioSampleRateHz: Int? = null, val audioChannels: Int? = null, val audioSource: String? = null,
     val audioDroppedSamples: Long? = null, val bytesPerSecond: Double? = null, val compressionRatio: Double? = null,
     val isoMin: Int? = null, val isoMax: Int? = null, val exposureMinNs: Long? = null, val exposureMaxNs: Long? = null,
-    val missingFrames: Long? = null, val closedCleanly: Boolean = false) {
+    val missingFrames: Long? = null, val closedCleanly: Boolean = false,
+    /** The take's window in its [sensorWidth] × [sensorHeight] RAW output, from the `crop` metadata (PLAN-076). */
+    val crop: RawVideoCrop? = null, val sensorWidth: Int? = null, val sensorHeight: Int? = null) {
 
     val facts: GalleryFacts get() = GalleryFacts(durationUs?.let { (it + 500) / 1000 }, width, height, codec = rawCodecBadge(leadingEncoding))
 
@@ -327,9 +330,18 @@ internal data class OcrawSummary(val width: Int?, val height: Int?, val requeste
                 compressionRatio = packed?.takeIf { sizeBytes > 0 && it > 0 }?.let { it / sizeBytes },
                 isoMin = isos.minOrNull(), isoMax = isos.maxOrNull(), exposureMinNs = exposures.minOrNull(), exposureMaxNs = exposures.maxOrNull(),
                 missingFrames = missing, closedCleanly = index.hasEnd && !index.tornTail,
+                crop = text("crop")?.let(::parseRawCrop), sensorWidth = text("sensorWidth")?.toIntOrNull()?.takeIf { it > 0 },
+                sensorHeight = text("sensorHeight")?.toIntOrNull()?.takeIf { it > 0 },
             )
         }
     }
+}
+
+/** A `crop` metadata value, `left top width height`; null when it is not four numbers of a valid window. */
+internal fun parseRawCrop(value: String): RawVideoCrop? {
+    val numbers = value.trim().split(Regex("\\s+")).map { it.toIntOrNull() ?: return null }
+    if (numbers.size != 4) return null
+    return runCatching { RawVideoCrop(numbers[0], numbers[1], numbers[2], numbers[3]) }.getOrNull()
 }
 
 /** The EXIF tags [addExifRows] reads; the reader snapshots exactly these. */
@@ -491,6 +503,15 @@ internal fun exifCfa(value: String?): String? {
     return last.joinToString("") { "RGB"[it].toString() }
 }
 
+/** "1920 × 816 at +1080 +1122 of 4080 × 3060" for a take written from a window smaller than its RAW output, else null. */
+private fun rawCropValue(raw: OcrawSummary, text: DetailText): String? {
+    val crop = raw.crop ?: return null
+    val sensorWidth = raw.sensorWidth ?: return null
+    val sensorHeight = raw.sensorHeight ?: return null
+    if (crop.width >= sensorWidth && crop.height >= sensorHeight) return null
+    return text.s(R.string.media_detail_crop_value, crop.width, crop.height, crop.left, crop.top, sensorWidth, sensorHeight)
+}
+
 private fun DetailRowsBuilder.addRawRows(raw: OcrawSummary, text: DetailText) {
     val video = DetailGroupKind.VIDEO
     if (raw.width != null && raw.height != null) add(video, R.string.media_detail_resolution, resolutionLabel(raw.width, raw.height), "resolution")
@@ -500,6 +521,7 @@ private fun DetailRowsBuilder.addRawRows(raw: OcrawSummary, text: DetailText) {
     add(video, R.string.media_detail_orientation, "${raw.orientationDegrees}°", "orientation")
     val g = DetailGroupKind.RAW
     add(g, R.string.media_detail_raw_encoding, raw.encoding, "raw-encoding")
+    rawCropValue(raw, text)?.let { add(g, R.string.media_detail_crop, it, "crop") }
     add(g, R.string.media_detail_bit_depth, text.s(R.string.media_detail_bits, raw.bitDepth), "raw-bit-depth")
     add(g, R.string.media_detail_cfa, raw.cfa, "cfa")
     add(g, R.string.media_detail_black_level, raw.blackLevel, "black-level")

@@ -706,6 +706,96 @@ fun CaptureRawVideoRingHigh() = CaptureChrome(
     DriverRawVideoSettings,
 )
 
+// Manual RAW video crop (PLAN-076 delivery 3b)
+
+/** The rates a window of the operator's can be judged at on the fake camera; 240 fps is its camera limit. */
+private val DriverRawCropRates = listOf(15, 24, 30, 60, 120, 240)
+
+/** Two saved windows: a centred 2.39:1 scope and a small off-centre slow-motion window. */
+private val DriverRawSavedCrops = listOf(
+    com.librestatic.opencinecam.storage.RawSavedCrop("scope", "Scope 2.39", 4080, 3060, 120, 726, 3840, 1608),
+    com.librestatic.opencinecam.storage.RawSavedCrop("slowmo", "Slow-mo 240p", 4080, 3060, 1828, 1410, 428, 240),
+)
+
+/**
+ * RAW video over a fake capture service ([DriverRawCropService]) that selects, judges and saves windows, starting on
+ * [wanted]. The fake camera's sensor is mounted so the picture stands upright in portrait and landscape, and the
+ * viewfinder has the 4:3 of the RAW output, so the crop guide and the editor's window sit where a device draws them.
+ */
+@Composable
+private fun CaptureRawCropChrome(
+    wanted: String,
+    saved: List<com.librestatic.opencinecam.storage.RawSavedCrop> = emptyList(),
+    rates: List<Int> = DriverRawCropRates,
+    compressed: Boolean = false,
+    initialPane: CaptureInitialPane? = null,
+    cropView: Boolean = false,
+) {
+    val service = remember {
+        DriverRawCropService(if (compressed) DriverRawVideoOptionsCompressed else DriverRawVideoOptions, rates, saved, wanted)
+    }
+    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+    val landscape = configuration.screenWidthDp > configuration.screenHeightDp
+    val displayDegrees = HorizonRollMath.surfaceRotationDegrees(LocalView.current.display?.rotation ?: Surface.ROTATION_0)
+    val camera = DriverCamera.copy(sensorOrientation = ((if (landscape) 0 else 90) + displayDegrees) % 360)
+    val base = driverRawVideoState(compressed = compressed).copy(cameras = listOf(camera))
+    CaptureChrome(
+        service.state(base),
+        DriverRawVideoSettings.copy(rawVideoConfig = service.wanted),
+        initialPane,
+        previewAspectRatio = if (landscape) 4f / 3f else 3f / 4f,
+        rawCropActions = service,
+        initialRawCropView = cropView,
+    )
+}
+
+/**
+ * RAW video on a window of the operator's, 3840×1608 · 24 fps centred (not one of the qualified crops): the guide
+ * (`raw-crop-guide`, "Crop 3840 × 1608") dims the frame outside it and takes no touches.
+ */
+@Composable
+fun CaptureRawVideoCrop() = CaptureRawCropChrome("3840x1608@24")
+
+/**
+ * The enlarged crop view on a 1920×816 window, centred (+1080 +1122), at 24 fps: the CROP key
+ * (`capture-raw-crop-view`, state "on") is lit, and the guide (`raw-crop-guide`) is only the window's frame line, which
+ * fills the frame's height (portrait) or width (landscape), centred. Headless there is no picture, so the enlarged
+ * viewfinder itself shows only on a device. `click tag=capture-raw-crop-view` returns to the full field with the guide.
+ */
+@Composable
+fun CaptureRawVideoCropView() = CaptureRawCropChrome("1920x816@24", cropView = true)
+
+/**
+ * The RAW chooser with two saved crops ("Scope 2.39", selected at 24 fps, and "Slow-mo 240p", 428×240 off centre)
+ * under CUSTOM CROP (`raw-video-crop-<id>`), with Edit crop and New crop; a long press manages a saved one.
+ */
+@Composable
+fun CaptureRawVideoCropSaved() = CaptureRawCropChrome("3840x1608@24", DriverRawSavedCrops, initialPane = CaptureInitialPane.RESOLUTION)
+
+/**
+ * The crop editor open on the full sensor at 30 fps, with block-pack twins so the Compressed switch shows: the window
+ * starts half the sensor's width at 16:9, centred (`raw-crop-editor-frame`, handles `raw-crop-handle-tl/-tr/-bl/-br`),
+ * and the panel (`raw-crop-editor-panel`) reads the fake gate's verdict: 240 fps is the camera limit, above 900 MB/s the
+ * storage refuses, above 480 MB/s it is risky with a 75 s burst.
+ */
+@Composable
+fun CaptureRawVideoCropEditor() =
+    CaptureRawCropChrome("full@30", DriverRawSavedCrops, compressed = true, initialPane = CaptureInitialPane.RAW_CROP_EDITOR)
+
+/**
+ * A risky window chosen by hand, 4000×1676 · 60 fps (about 503 MB/s): the guide and the risky-rate notice
+ * (`raw-video-risky-notice`, "frames may drop after about 1 min").
+ */
+@Composable
+fun CaptureRawVideoCropRisky() = CaptureRawCropChrome("4000x1676@60")
+
+/**
+ * The saved "Slow-mo 240p" window, 428×240 off centre, at 120 fps; the camera's rates include 90 and 120 (240 is its limit).
+ */
+@Composable
+fun CaptureRawVideoCropSlowMotion() =
+    CaptureRawCropChrome("428x240+1828+1410@120", DriverRawSavedCrops, rates = listOf(15, 24, 30, 60, 90, 120, 240))
+
 private fun driverRawCandidateState(): CameraUiState =
     driverCaptureState(CaptureMode.VIDEO).let { it.copy(modeGates = it.modeGates + (CaptureMode.RAW_VIDEO to ModeGateState.CANDIDATE)) }
 
@@ -1121,6 +1211,23 @@ fun SettingsRawVideo() = DriverTheme {
 }
 
 /**
+ * Settings with the saved window "Scope 2.39" (3840×1608 centred) selected at 24 fps (PLAN-076): the row's summary and
+ * its pill read the saved name, and `settings-raw-video-crop-note` says custom windows are made in the capture screen.
+ * Picking a fixed pill goes through the same fake service as the crop screens, so the custom pill then leaves.
+ */
+@Composable
+fun SettingsRawVideoCrop() = DriverTheme {
+    val service = remember {
+        DriverRawCropService(DriverRawVideoOptionsCompressed, DriverRawCropRates, DriverRawSavedCrops, "3840x1608@24")
+    }
+    var settings by remember { mutableStateOf(DriverRawVideoSettings) }
+    SettingsScreen(service.state(driverRawVideoState(compressed = true)), settings.copy(rawVideoConfig = service.wanted),
+        audioPermissionGranted = true, onRequestAudioPermission = {}, onOpenAbout = {},
+        onSettingsChange = { settings = it }, onSelectRawVideoConfig = { key -> service.select(key) },
+        onRequalifyRawVideo = {})
+}
+
+/**
  * Settings with RAW video qualified on the phone while a drive is configured but not connected: the row's profile line
  * "Qualified on the phone’s storage" (`settings-raw-video-profile`), and under "Not available"
  * (`settings-raw-video-left-out`) 4080×3060 and 3840×2160 at 60 fps out for heat, with the cool-down hint
@@ -1525,6 +1632,13 @@ fun GalleryRaw() = GalleryWith(FakeCatalog(SampleRawTakes + SampleTakes) { artif
 @Composable
 fun GalleryRawInspector() = GalleryWith(FakeCatalog(SampleRawTakes + SampleTakes), initialSelection = SampleRawTakes.first().take.id)
 
+/**
+ * The second RAW take's details (PLAN-076): near-lossless 3840×2160, the centred window of the 4080×3060 output, so its
+ * RAW section has the Crop row (`gallery-detail-raw-crop`, "3840 × 2160 at +120 +450 of 4080 × 3060").
+ */
+@Composable
+fun GalleryRawCropInspector() = GalleryWith(FakeCatalog(SampleRawTakes + SampleTakes), initialSelection = SampleRawTakes[1].take.id)
+
 /** The CinemaDNG export form for the first RAW take: Documents, LJ92 offered, two damaged frames, the size against the free space. */
 @Composable
 fun GalleryCinemaDngExport() = CinemaDngExportFormScreen(CinemaDngExportFormState(SampleExportTakeName, SampleExportPlan,
@@ -1678,17 +1792,23 @@ private fun CaptureChrome(
     initialRawQualifyPrompt: Boolean = false,
     // The listening status follows the settings copy, so the listen key and panel answer taps.
     fakeListening: Boolean = false,
+    // PLAN-076: the crop editor's and custom crops' fake service; the settings above follow its selection.
+    rawCropActions: com.librestatic.opencinecam.capture.RawCropActions? = null,
+    // PLAN-076: start with the enlarged crop view on.
+    initialRawCropView: Boolean = false,
 ) = DriverTheme(forceDark = true) {
     BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
         val window = AdaptiveWindow(maxWidth.value, maxHeight.value, hardwareKeyboard)
-        var current by remember { mutableStateOf(settings) }
+        // A caller whose settings change (the crop screens' selection) starts the copy again from them.
+        var current by remember(settings) { mutableStateOf(settings) }
         val scopes = rememberSaveable(saver = CaptureScopeVisibility.Saver) { CaptureScopeVisibility(scopesHidden) }
         val live = withDriverAnalysis(state, current.monitoring).let {
             if (fakeListening) it.copy(audioListeningStatus = driverListeningStatus(current, it.audioListeningOutputs)) else it
         }
         val actions = driverOperatorActions(live, current, scopes) { current = it }
         CompositionLocalProvider(LocalAdaptiveWindow provides window, LocalOperatorActions provides actions,
-            LocalFoldDisplayStateWithoutCoordinator provides foldState) {
+            LocalFoldDisplayStateWithoutCoordinator provides foldState,
+            com.librestatic.opencinecam.capture.LocalRawCropActions provides rawCropActions) {
             AdaptiveCaptureChrome(
                 state = live,
                 binder = null,
@@ -1721,6 +1841,7 @@ private fun CaptureChrome(
                 lensCalibration = lensCalibration,
                 rawQualificationInfo = rawQualificationInfo,
                 initialRawQualifyPrompt = initialRawQualifyPrompt,
+                initialRawCropView = initialRawCropView,
             )
         }
     }

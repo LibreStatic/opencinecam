@@ -159,6 +159,9 @@ internal fun LockToggles(
     onSettingsChanged: (CameraSettings) -> Unit,
     onOpenListen: () -> Unit,
     modifier: Modifier = Modifier,
+    /** The enlarged crop view (PLAN-076): on or off where it is offered, null where it is not. */
+    rawCropView: Boolean? = null,
+    onToggleRawCropView: () -> Unit = {},
 ) {
     val haptics = LocalAppHaptics.current
     val listen = currentListenStarter(settings, state.audioListeningStatus, onSettingsChanged)
@@ -256,6 +259,22 @@ internal fun LockToggles(
                 onClick = {
                     haptics.perform(if (on) HapticEvent.LockOff else HapticEvent.LockOn)
                     binder?.setLensLock(if (on) null else lensLockToggleTarget(state) ?: return@LockButton)
+                },
+            )
+        }
+        // CROP (RAW video on a window smaller than the output): enlarges the picture until the window fills the frame.
+        // It only changes the view, so it stays usable during a take.
+        if (rawCropView != null) {
+            LockButton(
+                label = stringResource(R.string.raw_crop_view_key),
+                shortLabel = stringResource(R.string.raw_crop_view_short),
+                active = rawCropView,
+                testTag = "capture-raw-crop-view",
+                glyph = if (rawCropView) CineIcon.FULLSCREEN_EXIT else CineIcon.FULLSCREEN,
+                stateLabel = stringResource(if (rawCropView) R.string.raw_crop_view_on else R.string.raw_crop_view_off),
+                onClick = {
+                    haptics.perform(if (rawCropView) HapticEvent.LockOff else HapticEvent.LockOn)
+                    onToggleRawCropView()
                 },
             )
         }

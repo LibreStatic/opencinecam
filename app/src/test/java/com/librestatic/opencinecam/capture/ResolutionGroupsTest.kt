@@ -49,6 +49,14 @@ class ResolutionGroupsTest {
         expected.forEach { (size, name) -> assertEquals("$size", name, resolutionShortName(size.first, size.second)) }
     }
 
+    @Test fun customRawWindowsReadAShortSizeClass() {
+        assertEquals("1.9K", rawCustomSizeClass(1920, 816))
+        assertEquals("4K", rawCustomSizeClass(3840, 1608))
+        assertEquals("4K+", rawCustomSizeClass(4000, 1676))
+        assertEquals("240p", rawCustomSizeClass(428, 240))
+        assertEquals("1.2K", rawCustomSizeClass(1168, 278))
+    }
+
     @Test fun megapixelNames() {
         assertEquals("12 MP", megapixelName(4000, 3000))
         assertEquals("8 MP", megapixelName(3264, 2448))

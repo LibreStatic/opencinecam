@@ -99,8 +99,9 @@ class RawVideoQualificationPlanTest {
 
     @Test fun defaultPlanSkipsWhatASmallerSensorCannotDo() {
         val plan = RawQualificationPlan.DEFAULT
-        assertEquals(8, runs(plan.specs).size)
-        assertEquals(listOf("full@15", "full@24", "full@30", "full@60", "1920x1080@30", "1920x1080@60"),
+        assertEquals(10, runs(plan.specs).size)
+        assertEquals(listOf("full@15", "full@24", "full@30", "full@60", "1920x1080@30", "1920x1080@60",
+            "1280x720@90", "1280x720@120"),
             runs(plan.specs, 1920, 1080).map { it.spec })
         assertTrue(plan.specs.none(RawQualificationSpecs::isCompressed))
     }
@@ -205,16 +206,16 @@ class RawVideoQualificationPlanTest {
 
     @Test fun defaultPlanEstimateOnAnS24LikeSensor() {
         val withCodec = RawQualificationEstimates.of(RawQualificationPlan.DEFAULT, "0", sensorW, sensorH, codecAvailable = true)
-        // Ring 2 s + 8 camera checks of 12.5 s + one 34.5 s benchmark + the 120 s storage rest + sweep 152 s (60 burst
-        // windows, up to 90 s sustained, 2 s overhead) + 8 long runs (6 at 46.5 s, 2 at 86.5 s) + 16 cool-downs of 3 s.
-        assertEquals(2_000L + 100_000L + 34_500L + 120_000L + 152_000L + 452_000L + 48_000L, withCodec.durationMs)
-        assertEquals(17, withCodec.runCount)
+        // Ring 2 s + 10 camera checks of 12.5 s + one 34.5 s benchmark + the 120 s storage rest + sweep 152 s (60 burst
+        // windows, up to 90 s sustained, 2 s overhead) + 10 long runs (8 at 46.5 s, 2 at 86.5 s) + 20 cool-downs of 3 s.
+        assertEquals(2_000L + 125_000L + 34_500L + 120_000L + 152_000L + 545_000L + 60_000L, withCodec.durationMs)
+        assertEquals(21, withCodec.runCount)
         // The disk need is the sweep and the largest long run; the encode benchmark writes nothing.
         assertEquals(936_360_000L * 85 + (1L shl 30), withCodec.freeBytesNeeded)
         assertEquals(RawVideoQualifier.SWEEP_WRAP_BYTES + 15_606_000L, withCodec.sweepFreeBytesNeeded)
         val withoutCodec = RawQualificationEstimates.of(RawQualificationPlan.DEFAULT, "0", sensorW, sensorH, codecAvailable = false)
-        assertEquals(2_000L + 100_000L + 120_000L + 152_000L + 452_000L + 45_000L, withoutCodec.durationMs)
-        assertEquals(16, withoutCodec.runCount)
+        assertEquals(2_000L + 125_000L + 120_000L + 152_000L + 545_000L + 57_000L, withoutCodec.durationMs)
+        assertEquals(20, withoutCodec.runCount)
         assertEquals(withCodec.freeBytesNeeded, withoutCodec.freeBytesNeeded)
     }
 
@@ -225,8 +226,8 @@ class RawVideoQualificationPlanTest {
         // Camera checks only: no sweep, no disk, one check per configuration.
         val checks = RawQualificationEstimates.of(RawQualificationPlan.DEFAULT.copy(stages = setOf(RawQualificationStage.CAMERA)),
             "0", sensorW, sensorH, codecAvailable = true)
-        assertEquals(2_000L + 8 * 12_500L + 7 * 3_000L, checks.durationMs)
-        assertEquals(8, checks.runCount)
+        assertEquals(2_000L + 10 * 12_500L + 9 * 3_000L, checks.durationMs)
+        assertEquals(10, checks.runCount)
         assertEquals(0L, checks.freeBytesNeeded)
         // Three thread counts, the benchmark alone.
         val bench = RawQualificationEstimates.of(
@@ -429,7 +430,7 @@ class RawVideoQualificationPlanTest {
         assertTrue(skipped > 0)
         assertEquals(skipped, partial.skippedRuns)
         // The camera checks and the benchmark need no space, so only the skipped long runs leave the plan.
-        assertEquals(17 - skipped, partial.estimate.runCount)
+        assertEquals(21 - skipped, partial.estimate.runCount)
         val full = RawQualificationEstimates.of(RawQualificationPlan.DEFAULT, "0", sensorW, sensorH, codecAvailable = true)
         assertEquals(full.durationMs - runs.filter { timing.neededBytes(it.config) > largest - 1 }
             .sumOf { timing.runMs(it.config) + RawQualificationTiming.COOL_DOWN_MS }, partial.estimate.durationMs)
@@ -439,7 +440,8 @@ class RawVideoQualificationPlanTest {
     @Test fun freeSpaceEstimateListsEveryPlannedConfigWithTheFigureTheSkipUses() {
         val timing = RawQualificationTiming()
         val runs = RawQualificationStaging.longRunOrder(runs(RawQualificationPlan.DEFAULT.specs))
-        assertEquals(listOf("full@60", "3840x2160@60", "full@30", "full@24", "3840x2160@30", "full@15", "1920x1080@60", "1920x1080@30"),
+        assertEquals(listOf("full@60", "3840x2160@60", "full@30", "full@24", "3840x2160@30", "full@15", "1920x1080@60",
+            "1280x720@120", "1280x720@90", "1920x1080@30"),
             runs.map { it.spec })
         val largest = runs.maxOf { timing.neededBytes(it.config) }
         val partial = RawQualificationEstimates.forFreeSpace(RawQualificationPlan.DEFAULT, "0", sensorW, sensorH, codecAvailable = true,
@@ -466,11 +468,17 @@ class RawVideoQualificationPlanTest {
     }
 
     @Test fun previewSizeMirrorsTheEngineChoice() {
-        val sizes = listOf(4080 to 3060, 3840 to 2160, 1920 to 1440, 1920 to 1080, 1280 to 720, 640 to 480)
-        assertEquals(1920 to 1080, rawQualificationPreviewSize(sizes))
-        assertEquals(1280 to 720, rawQualificationPreviewSize(listOf(4080 to 3060, 1280 to 720, 640 to 480)))
-        assertEquals(3840 to 2160, rawQualificationPreviewSize(listOf(4080 to 3060, 3840 to 2160)))
-        assertNull(rawQualificationPreviewSize(emptyList()))
+        // PLAN-076: the preview takes the aspect of the RAW10 output, as rawPreviewSizeIndex does.
+        val sizes = listOf(4080 to 3060, 3840 to 2160, 1920 to 1440, 1920 to 1080, 1440 to 1080, 1280 to 720, 640 to 480)
+        assertEquals(1440 to 1080, rawQualificationPreviewSize(sizes, 4080, 3060))
+        // A 16:9 RAW output keeps the 16:9 preview.
+        assertEquals(1920 to 1080, rawQualificationPreviewSize(sizes, 3840, 2160))
+        // No size of the exact aspect: the nearest aspect within 1080p, then the nearest pixel count.
+        assertEquals(1280 to 1024, rawQualificationPreviewSize(listOf(1920 to 1080, 1600 to 900, 1280 to 1024, 640 to 512), 4080, 3060))
+        // Nothing within 1080p: the whole list is considered.
+        assertEquals(4080 to 3060, rawQualificationPreviewSize(listOf(4080 to 3060, 3840 to 2160), 4080, 3060))
+        assertNull(rawQualificationPreviewSize(emptyList(), 4080, 3060))
+        assertNull(rawQualificationPreviewSize(sizes, 0, 3060))
     }
 
     // endregion

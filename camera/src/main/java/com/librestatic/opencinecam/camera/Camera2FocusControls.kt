@@ -159,7 +159,7 @@ internal fun Camera2PreviewEngine.reportSubjectFraming(request: CaptureRequest, 
     val crop = result.get(android.hardware.camera2.CaptureResult.SCALER_CROP_REGION)
         ?.let { SensorRect(it.left, it.top, it.right, it.bottom) }
         ?: SensorRect(0, 0, active.width(), active.height())
-    val stream = activeLogProfile?.size ?: activeVideoProfile?.size ?: descriptor.previewSize
+    val stream = activeLogProfile?.size ?: activeVideoProfile?.size ?: baseViewfinderSize(descriptor)
     val recorded = SubjectFramingGeometry.recordedArea(crop, stream.width, stream.height)
     var inFrame = false
     var anyFace = false

@@ -21,6 +21,8 @@ import com.librestatic.opencinecam.settings.captureFileStem
 import com.librestatic.opencinecam.settings.continuationFileStem
 import com.librestatic.opencinecam.capture.RawVideoConfigOption
 import com.librestatic.opencinecam.capture.RawVideoLeftOutOption
+import com.librestatic.opencinecam.capture.RawVideoCropUi
+import com.librestatic.opencinecam.rawvideo.RawVideoCrop
 import com.librestatic.opencinecam.capture.rawConfigLabelLocalized
 import com.librestatic.opencinecam.camera.RawVideoConfig
 import com.librestatic.opencinecam.camera.RawVideoQualificationSet
@@ -123,7 +125,8 @@ internal fun CaptureService.followRawSelection(before: String?): Boolean {
     if (current.selectedMode != CaptureMode.RAW_VIDEO) return false
     val fallback = rawVideoModeFallback(current.selectedMode, current.modeGates, rawModeFallback, hasConfig = current.rawVideoSelectedKey != null)
     if (fallback != null && !current.structuralSettingsFrozen) { localBinder.selectMode(fallback, reopen = true); return true }
-    if (current.rawVideoSelectedKey != before && !current.structuralSettingsFrozen) {
+    // PLAN-076: a window moved alone keeps the session; the caller re-arms the ring at the new origin.
+    if (RawVideoConfigKeys.sessionChanged(before, current.rawVideoSelectedKey) && !current.structuralSettingsFrozen) {
         attachedPreviewSurface?.takeIf { it.isValid }?.let { localBinder.attachPreview(it, attachedPreviewRotationDegrees) }
     }
     return false
@@ -169,16 +172,32 @@ internal fun CaptureService.rawCameraFailedConfigs(cameraId: String): List<RawVi
 /**
  * PLAN-072 Delivery 4: [config] is qualified for the phone (`mediastore-documents`), and not only as a risky rate, so a
  * RAW take on a drive that was lost may continue on the phone with it. Reads the store directly: during the take the
- * gate still describes the drive.
+ * gate still describes the drive. PLAN-076: a window [crop] of the operator's continues only when the phone's records
+ * pass it ([RawVideoCustomContext.judge]); risky there, it does not.
  */
-internal fun CaptureService.rawQualifiedOnPhone(config: RawVideoConfig): Boolean = runCatching {
+internal fun CaptureService.rawQualifiedOnPhone(config: RawVideoConfig, crop: RawVideoCrop = RawVideoCrop.centred(config)): Boolean = runCatching {
     val set = rawQualifications ?: rawQualificationStore.load().also { rawQualifications = it }
     val phone = RawVideoQualificationStore.DESTINATION_MEDIASTORE_DOCUMENTS
     val key = RawVideoConfigKeys.key(config)
     val fingerprint = rawQualificationStore.fingerprint
     val protocol = rawQualificationStore.protocolVersion
-    set.qualifiedConfigs(fingerprint, protocol, phone, config.cameraId).any { RawVideoConfigKeys.key(it) == key } &&
-        RawQualificationRisk.riskyConfigs(set, fingerprint, protocol, phone, config.cameraId).none { RawVideoConfigKeys.key(it) == key }
+    val qualified = set.qualifiedConfigs(fingerprint, protocol, phone, config.cameraId)
+    val riskyRecorded = RawQualificationRisk.riskyConfigs(set, fingerprint, protocol, phone, config.cameraId)
+    // A qualified size passes at any origin: the window's place does not change its rate.
+    if (qualified.any { RawVideoConfigKeys.key(it) == key } && riskyRecorded.none { RawVideoConfigKeys.key(it) == key }) {
+        return@runCatching true
+    }
+    // PLAN-076: a window of the operator's continues only when the phone's records pass it, not when they find it risky.
+    // A usable configuration at its centred origin judges as no window (null): risky there, as above, it does not continue.
+    val sizes = raw10Sizes(config.cameraId)
+    val usable = rawVideoUsableConfigs(config.cameraId, sizes, qualified + riskyRecorded,
+        cameraFailed = RawQualificationRisk.cameraFailedConfigs(set, fingerprint, protocol, phone, config.cameraId))
+    val current = set.current(fingerprint, protocol)
+    val storage = rawQualificationStorageModel(config.cameraId, RecordingDestination.Phone)
+    val context = RawVideoCustomContext(config.cameraId, config.sensorWidth, config.sensorHeight, usable,
+        rawVideoRiskyConfigs(usable, riskyRecorded), rawVideoReducedRates(usable, current, phone),
+        rawVideoLeftOutConfigs(config.cameraId, sizes, current, phone, usable), storage?.writeBytesPerSecond, storage?.ringBytes)
+    context.judge(RawVideoConfigKeys.key(config, crop))?.custom is RawVideoCustomVerdict.Passed
 }.getOrDefault(false)
 
 /** The configurations a RAW_VIDEO session can run on [cameraId]: the qualified ones and the risky ones. */
@@ -254,17 +273,45 @@ internal fun CaptureService.rawReducedRates(usable: List<RawVideoConfig>): Map<R
 }
 
 /** The configurations of [cameraId] the gate's destination judged that are not [usable], with why ([rawVideoLeftOutConfigs]). */
-internal fun CaptureService.rawLeftOutOptions(cameraId: String, sizes: List<Pair<Int, Int>>, usable: List<RawVideoConfig>): List<RawVideoLeftOutOption> {
+internal fun CaptureService.rawLeftOutConfigs(cameraId: String, sizes: List<Pair<Int, Int>>, usable: List<RawVideoConfig>): List<RawVideoLeftOutConfig> {
     val current = runCatching {
         (rawQualifications ?: rawQualificationStore.load().also { rawQualifications = it })
             .current(rawQualificationStore.fingerprint, rawQualificationStore.protocolVersion)
     }.getOrElse { return emptyList() }
-    return rawVideoLeftOutOptions(rawVideoLeftOutConfigs(cameraId, sizes, current, rawGateDestinationId, usable))
+    return rawVideoLeftOutConfigs(cameraId, sizes, current, rawGateDestinationId, usable)
+}
+
+/**
+ * Main: the destination the gate's records describe ([rawGateDestinationId]): a running RAW take's, else the next
+ * take's; the phone when neither carries that id but it is the phone's; else null.
+ */
+internal fun CaptureService.rawGateDestination(): RecordingDestination? =
+    listOfNotNull(rawTake?.destination?.destination, nextTakeDestination.destination, RecordingDestination.Phone)
+        .firstOrNull { rawDestinationId(it) == rawGateDestinationId }
+
+/**
+ * Main: the PLAN-076 context windows of the operator's on [cameraId] are judged in, for the gate's destination: its
+ * sweep median and ring from [rawQualificationStorageModel] (a small store read and preference read). Null without a
+ * qualifier sensor size.
+ */
+internal fun CaptureService.rawCustomContextFor(
+    cameraId: String,
+    usable: List<RawVideoConfig>,
+    risky: Set<RawVideoConfig>,
+    reduced: Map<RawVideoConfig, Double?>,
+    leftOut: List<RawVideoLeftOutConfig>,
+    burst: Map<RawVideoConfig, Long>,
+): RawVideoCustomContext? {
+    val (sensorWidth, sensorHeight) = rawQualificationSensorSize(cameraId) ?: return null
+    val storage = rawGateDestination()?.let { rawQualificationStorageModel(cameraId, it) }
+    return RawVideoCustomContext(cameraId, sensorWidth, sensorHeight, usable, risky, reduced, leftOut,
+        storage?.writeBytesPerSecond, storage?.ringBytes, burst)
 }
 
 /**
  * [state] with the RAW_VIDEO gate, the qualified configurations and the selected one for
  * [cameraId]. In RAW_VIDEO the take geometry and rate follow the selected configuration.
+ * PLAN-076: the selection may be a window of the operator's ([resolveRawVideoSelection]), listed as its own custom option.
  */
 internal fun CaptureService.withRawVideoGate(state: CameraUiState, cameraId: String?): CameraUiState {
     rawGateDestinationId = rawLookupDestinationId()
@@ -280,37 +327,65 @@ internal fun CaptureService.withRawVideoGate(state: CameraUiState, cameraId: Str
     // A risky or reduced-rate configuration runs only when chosen by hand: Automatic never resolves
     // to one, so with only such ones and Automatic chosen nothing is selected and a take is refused.
     val manualOnly = risky + reduced.keys
+    val leftOut = if (cameraId == null || (gate != ModeGateState.AVAILABLE && gate != ModeGateState.CANDIDATE)) emptyList()
+        else rawLeftOutConfigs(cameraId, sizes, usable)
+    val custom = if (available && cameraId != null) rawCustomContextFor(cameraId, usable, risky, reduced, leftOut, burst) else null
+    rawCustomContext = custom
     // A drive take's continuation on the phone keeps that take's configuration, whatever Automatic would choose here.
     val wantedKey = rawVideoGateKey(settings.rawVideoConfig, continuationStarting ?: rawTake?.continuation ?: driveContinuation.pendingRequest)
-    val selected = selectRawVideoConfig(usable, wantedKey, manualOnly).takeIf { available }
+    val selected = resolveRawVideoSelection(wantedKey, usable, manualOnly, custom).takeIf { available }
+    val customOption = selected?.custom?.let { verdict ->
+        val config = selected.config
+        val riskyCustom = verdict is RawVideoCustomVerdict.Risky || config == runtimeRisky
+        val passed = verdict as? RawVideoCustomVerdict.Passed
+        RawVideoConfigOption.of(config, risky = riskyCustom,
+            burstSeconds = (verdict as? RawVideoCustomVerdict.Risky)?.burstSeconds ?: burst[config],
+            achievedFps = passed?.achievedFps?.takeIf { passed.reducedRate })
+            .copy(key = selected.key, isCustom = true)
+    }
+    val savedCrops = custom?.let { context -> rawSavedCrops.filter { it.sensorWidth == context.sensorWidth && it.sensorHeight == context.sensorHeight } }
     val next = state.copy(
         modeGates = state.modeGates + (CaptureMode.RAW_VIDEO to gate),
         // The runtime risk only warns (option and capture notice); selection above ignores it.
         rawVideoOptions = if (available) usable.map {
             RawVideoConfigOption.of(it, risky = it in risky || it == runtimeRisky, burstSeconds = burst[it], achievedFps = reduced[it],
                 storageUntested = it in untested)
-        } else emptyList(),
-        rawVideoSelectedKey = selected?.let(RawVideoConfigKeys::key),
+        } + listOfNotNull(customOption) else emptyList(),
+        rawVideoSelectedKey = selected?.key,
         rawVideoAutoKey = selectRawVideoConfig(usable, "", manualOnly).takeIf { available }?.let(RawVideoConfigKeys::key),
         rawVideoNearLosslessAvailable = available && usable.any { rawNearLosslessProfile(it, ignoreSetting = true) != null },
         // Display only: why judged configurations are missing, and whose records these are (the gate's own destination id).
-        rawVideoLeftOut = if (cameraId == null || (gate != ModeGateState.AVAILABLE && gate != ModeGateState.CANDIDATE)) emptyList()
-            else rawLeftOutOptions(cameraId, sizes, usable),
+        rawVideoLeftOut = rawVideoLeftOutOptions(leftOut),
         rawVideoProfile = rawVideoProfile(rawGateDestinationId, nextTakeDestination, state.recordingDestination.driveLabel),
+        rawVideoCrop = selected?.let {
+            RawVideoCropUi(it.config.sensorWidth, it.config.sensorHeight, it.crop.left, it.crop.top, it.crop.width, it.crop.height)
+        },
+        rawVideoCustomRates = custom?.customRates.orEmpty(),
+        rawVideoSavedCrops = savedCrops.orEmpty(),
     )
     return if (next.selectedMode == CaptureMode.RAW_VIDEO && selected != null) {
         // The status line shows the RAW time left before a take too, so the free space is read here, not only by the REC ticker.
         // Idle, this is the phone's figure; with the next take on a drive the HUD reads the drive's own (captureStatusFreeBytes).
-        next.copy(targetFps = selected.fps, targetVideoWidth = selected.cropWidth, targetVideoHeight = selected.cropHeight,
+        next.copy(targetFps = selected.config.fps, targetVideoWidth = selected.config.cropWidth, targetVideoHeight = selected.config.cropHeight,
             availableStorageBytes = if (next.phase == CameraUiPhase.RECORDING) next.availableStorageBytes else phoneVolumeFreeBytes())
     } else next
 }
 
 /** The configuration a RAW_VIDEO session runs, or null outside RAW_VIDEO or without a qualified one. */
-internal fun CaptureService.currentRawVideoConfig(state: CameraUiState = cameraState.value): RawVideoConfig? {
+internal fun CaptureService.currentRawVideoConfig(state: CameraUiState = cameraState.value): RawVideoConfig? =
+    currentRawVideoSelection(state)?.config
+
+/**
+ * PLAN-076: the configuration and window a RAW_VIDEO session runs, or null outside RAW_VIDEO or without one: the usable
+ * configuration [CameraUiState.rawVideoSelectedKey] names (centred), else the window of the operator's it names, judged
+ * in the last gate's context ([rawCustomContext]) and not refused there.
+ */
+internal fun CaptureService.currentRawVideoSelection(state: CameraUiState = cameraState.value): RawVideoResolvedSelection? {
     if (state.selectedMode != CaptureMode.RAW_VIDEO || state.modeGates[CaptureMode.RAW_VIDEO] != ModeGateState.AVAILABLE) return null
     val cameraId = state.selectedCameraId ?: return null
-    return rawUsableConfigs(cameraId).firstOrNull { RawVideoConfigKeys.key(it) == state.rawVideoSelectedKey }
+    val key = state.rawVideoSelectedKey ?: return null
+    rawUsableConfigs(cameraId).firstOrNull { RawVideoConfigKeys.key(it) == key }?.let { return rawVideoCentredSelection(it) }
+    return rawCustomContext?.takeIf { it.cameraId == cameraId }?.judge(key)?.takeIf { it.custom !is RawVideoCustomVerdict.Refused }
 }
 
 /** The RAW10 stream of the session: the full sensor readout at the selected rate (the recorder crops). */
@@ -324,10 +399,13 @@ internal fun CaptureService.rawVideoSessionConfig(): RawVideoSessionConfig? =
 internal fun CaptureService.syncRawVideoArm() {
     if (serviceDestroyed || rawTake != null) return
     // A qualification allocates its own ring: the two never coexist.
-    val wanted = currentRawVideoConfig().takeIf { attachedPreviewSurface != null && rawQualificationSession == null }
+    val selection = currentRawVideoSelection().takeIf { attachedPreviewSurface != null && rawQualificationSession == null }
+    val wanted = selection?.config
+    val crop = selection?.crop
     // A block-pack configuration records near-lossless when its camera has a noise profile and the setting is on.
     val noiseProfile = wanted?.let { rawNearLosslessProfile(it) }
-    val target = wanted?.let { it to noiseProfile }
+    // PLAN-076: the window is part of the target, so moving it alone re-arms the ring at the new origin.
+    val target = selection?.let { Triple(it.config, it.crop, noiseProfile) }
     if (target == rawArmTarget) return
     rawArmTarget = target
     rawControlExecute {
@@ -335,7 +413,7 @@ internal fun CaptureService.syncRawVideoArm() {
         runCatching { rawRecorder.disarm() }
         val wasArmed = rawArmedRing != null
         rawArmedRing = null
-        if (wanted == null) {
+        if (wanted == null || crop == null) {
             rawArmNoMemory = null
             if (wasArmed) postRawVideoGate()
             return@rawControlExecute
@@ -343,7 +421,7 @@ internal fun CaptureService.syncRawVideoArm() {
         val plan = runCatching { RawRingBudget.plan(this, wanted.bytesPerFrame.toInt()) }.getOrNull()
         try {
             checkNotNull(plan) { "no RAM budget for a ring of ${RawRingBudget.MIN_SLOTS} frames" }
-            val armed = rawRecorder.arm(wanted, plan.ringBytes, noiseProfile)
+            val armed = rawRecorder.arm(wanted, plan.ringBytes, noiseProfile, crop)
             rawArmNoMemory = null
             // Re-evaluate the runtime risk against the ring actually armed.
             rawArmedRing = armed
@@ -362,6 +440,27 @@ internal fun CaptureService.syncRawVideoArm() {
             if (wasArmed) postRawVideoGate()
         }
     }
+}
+
+/**
+ * Main: runs [change] on the saved-crop store on [CaptureService.storageExecutor] (it ends with the store's whole list),
+ * then on main replaces [CaptureService.rawSavedCrops] with that list and republishes the gate. A failed change ([what]
+ * in the log) leaves the list as it was. False when the executor refused the work (the service is closing).
+ */
+internal fun CaptureService.updateRawSavedCrops(what: String, change: (com.librestatic.opencinecam.storage.RawCropStore) -> Unit): Boolean = try {
+    storageExecutor.execute {
+        val crops = runCatching { rawCropStore.also(change).all() }
+            .onFailure { android.util.Log.w("CaptureService", "Saved RAW crops: $what failed", it) }
+            .getOrNull() ?: return@execute
+        mainHandler.post {
+            if (serviceDestroyed) return@post
+            rawSavedCrops = crops
+            cameraState.value = withRawVideoGate(cameraState.value, cameraState.value.selectedCameraId)
+        }
+    }
+    true
+} catch (_: RejectedExecutionException) {
+    false
 }
 
 /** Any thread: recompute the RAW_VIDEO gate and options on main (the armed ring changed). */
@@ -680,11 +779,12 @@ internal fun CaptureService.toggleRawTake(audioForThisTake: Boolean? = null): Bo
         syncRawVideoArm()
     }
     val gated = cameraState.value
-    val config = currentRawVideoConfig(gated)
-    // The continuation records the drive take's configuration or nothing. The gate keeps that configuration selected
-    // while the continuation is pending ([rawVideoGateKey]), so this only fails when the phone cannot use it.
-    if (continuation != null && config?.let(RawVideoConfigKeys::key) != continuation.rawConfigKey) {
-        android.util.Log.w("RecordingDestination", "RAW continuation refused: the phone selects ${config?.let(RawVideoConfigKeys::key)}, not ${continuation.rawConfigKey}")
+    val selection = currentRawVideoSelection(gated)
+    val config = selection?.config
+    // The continuation records the drive take's configuration and window or nothing. The gate keeps them selected
+    // while the continuation is pending ([rawVideoGateKey]), so this only fails when the phone cannot use them.
+    if (continuation != null && selection?.key != continuation.rawConfigKey) {
+        android.util.Log.w("RecordingDestination", "RAW continuation refused: the phone selects ${selection?.key}, not ${continuation.rawConfigKey}")
         return false
     }
     val free = destinationFreeBytes(destination.destination)
@@ -695,6 +795,7 @@ internal fun CaptureService.toggleRawTake(audioForThisTake: Boolean? = null): Bo
         return false
     }
     val admitted = checkNotNull(config)
+    val admittedCrop = checkNotNull(selection).crop
     val audioRequested = when (RawTakeAudio.decide(audioForThisTake ?: settings.audioEnabled,
         checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)) {
         RawTakeAudio.NONE -> false
@@ -724,7 +825,8 @@ internal fun CaptureService.toggleRawTake(audioForThisTake: Boolean? = null): Bo
     }
     // A continuation keeps the drive take's names and slate (the same take number).
     val captureNames = continuation?.captureNames ?: admittedCaptureNames()
-    val session = RawTakeSession(java.util.UUID.randomUUID().toString(), admitted, destination, captureNames, audioRequested, continuation)
+    val session = RawTakeSession(java.util.UUID.randomUUID().toString(), admitted, destination, captureNames, audioRequested,
+        continuation, admittedCrop)
     rawTake = session
     holdTakeDestination(destination, continuation)
     pendingStopReason = null
@@ -747,7 +849,8 @@ internal fun CaptureService.startRawTakeOnControl(session: RawTakeSession, captu
         }
     }
     if (serviceDestroyed) { refuse(RawVideoServiceReasons.START_FAILED); return }
-    if (rawRecorder.armState?.config != session.config) {
+    // PLAN-076: the ring must be armed at the admitted window too, or the take would write another one.
+    if (rawRecorder.armState?.let { it.config == session.config && it.crop == session.crop } != true) {
         refuse(if (rawArmNoMemory == session.config) rawArmFailure else RawVideoServiceReasons.START_FAILED)
         return
     }
@@ -960,12 +1063,12 @@ internal fun CaptureService.finishRawTake(result: RawTakeResult?, engineReason: 
     }
     // PLAN-072 Delivery 4: the volume event and a writer's ENODEV both end here with the drive's reason, once per take.
     val continuationNote = decideDriveContinuation(policy, onDrive, CaptureMode.RAW_VIDEO, highSpeed = false,
-        rawQualifiedOnPhone = rawQualifiedOnPhone(session.config),
+        rawQualifiedOnPhone = rawQualifiedOnPhone(session.config, session.crop),
         phoneRoom = phoneVolumeFreeBytes()?.let { it >= rawTakeMinimumFreeBytes(session.config) } == true) {
         val parentName = result?.displayName ?: (captureFileStem(session.takeId, session.captureNames) + RawVideoOutput.EXTENSION)
         ContinuationRequest(CaptureMode.RAW_VIDEO, continuationFileStem(parentName.removeSuffix(RawVideoOutput.EXTENSION), 1),
             ClipContinuation(session.takeId, parentName, 1, requireNotNull(policy).correlationId), session.captureNames, session.audio,
-            rawConfigKey = RawVideoConfigKeys.key(session.config))
+            rawConfigKey = RawVideoConfigKeys.key(session.config, session.crop))
     }
     val outcome = when {
         result?.writerStalled == true -> getString(R.string.raw_video_writer_stalled)

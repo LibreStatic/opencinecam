@@ -83,6 +83,9 @@ import com.librestatic.opencinecam.ui.viewfinder.ZoomRocker
 import com.librestatic.opencinecam.ui.zoomHapticFor
 import com.librestatic.opencinecam.usesLogGraph
 import com.librestatic.opencinecam.ui.viewfinder.LocalChromeOpacity
+import android.view.Surface
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -140,7 +143,7 @@ private sealed interface CapturePane {
 }
 
 /** A pane the capture chrome opens with. Only the headless renders set it; the app always starts closed. */
-internal enum class CaptureInitialPane { WHITE_BALANCE, FOCUS, TAKE_LENGTH, MONITOR, MODES, MODE_SHEET, DISPLAYS, RESOLUTION, LISTEN }
+internal enum class CaptureInitialPane { WHITE_BALANCE, FOCUS, TAKE_LENGTH, MONITOR, MODES, MODE_SHEET, DISPLAYS, RESOLUTION, LISTEN, RAW_CROP_EDITOR }
 
 private fun CaptureInitialPane.pane(): CapturePane? = when (this) {
     CaptureInitialPane.WHITE_BALANCE -> CapturePane.Control(ControlDial.WB)
@@ -152,6 +155,8 @@ private fun CaptureInitialPane.pane(): CapturePane? = when (this) {
     CaptureInitialPane.DISPLAYS -> CapturePane.Displays
     CaptureInitialPane.RESOLUTION -> CapturePane.Control(ControlDial.RESOLUTION)
     CaptureInitialPane.LISTEN -> CapturePane.Listen
+    // The crop editor's panel lives in the RAW video chooser's pane (PLAN-076).
+    CaptureInitialPane.RAW_CROP_EDITOR -> CapturePane.Control(ControlDial.RESOLUTION)
 }
 
 @Composable
@@ -197,11 +202,23 @@ internal fun AdaptiveCaptureChrome(
     onOpenRawQualification: () -> Unit = {},
     rawQualificationInfo: (() -> RawVideoQualificationInfo?)? = null,
     initialRawQualifyPrompt: Boolean = false,
+    // PLAN-076: reports whether the enlarged crop view is on, so the viewfinder enlarges the picture with the chrome.
+    onRawCropView: (Boolean) -> Unit = {},
+    initialRawCropView: Boolean = false,
 ) {
     // One pane at a time: a control's dial, the modes or the monitoring toggles.
     var pane by remember { mutableStateOf(initialPane?.pane()) }
     // Compact portrait shows the modes in a modal sheet rather than in the docked pane.
     var modeSheet by remember { mutableStateOf(initialPane == CaptureInitialPane.MODE_SHEET) }
+    // PLAN-076: the crop editor, shared by its window on the frame and its panel in the RES/FPS pane.
+    val rawCropActions = LocalRawCropActions.current ?: remember(binder) { binder?.let(::binderRawCropActions) }
+    val rawCropEditor = remember { RawCropEditor().also { if (initialPane == CaptureInitialPane.RAW_CROP_EDITOR) it.open(state) } }
+    // The enlarged crop view: off again whenever the window, the mode or the camera changes.
+    var rawCropViewOn by remember(state.rawVideoCrop, state.selectedMode, state.selectedCameraId) { mutableStateOf(initialRawCropView) }
+    val rawCropViewOffered = rawCropViewAvailable(state, rawCropEditor.editing != null)
+    val rawCropView = rawCropViewOn && rawCropViewOffered
+    LaunchedEffect(rawCropView) { onRawCropView(rawCropView) }
+    RawCropEditorGuard(state, rawCropEditor, (pane as? CapturePane.Control)?.dial.let { it == ControlDial.RESOLUTION || it == ControlDial.FPS })
     var scopesExpanded by rememberSaveable { mutableStateOf(false) }
     val operatorInput = LocalOperatorActions.current
     // The scopes stay switched on in Settings; H and the panel's close key only hide them here.
@@ -339,7 +356,8 @@ internal fun AdaptiveCaptureChrome(
                 maxHeight = maxHeight,
             )
         }
-    CompositionLocalProvider(LocalModeSelection provides modeSelection) {
+    CompositionLocalProvider(LocalModeSelection provides modeSelection, LocalRawCropEditor provides rawCropEditor,
+        LocalRawCropActions provides rawCropActions) {
     Box(
         Modifier
             .fillMaxSize()
@@ -348,7 +366,7 @@ internal fun AdaptiveCaptureChrome(
             // root rather than the viewfinder surface: Compose hit-tests each finger on its own, and a
             // second finger that landed on a control above the surface never reached a detector there,
             // so the pinch read as a tap and refocused.
-            .pinchToZoom(previewGesturesEnabled && !state.captureControlsLocked && state.zoomSupported) { first, zoom ->
+            .pinchToZoom(previewGesturesEnabled && !state.captureControlsLocked && state.zoomSupported && rawCropEditor.editing == null) { first, zoom ->
                 val shown = currentPinchState
                 if (first) pinchRatio.floatValue = shown.zoomRatio
                 val base = pinchRatio.floatValue
@@ -466,6 +484,8 @@ internal fun AdaptiveCaptureChrome(
             overlay || hinge || inspector -> CaptureFrameReserve.None
             paneShown && sideRails -> CaptureFrameReserve(end = (SIDE_PANE_WIDTH_DP - SIDE_COLUMN_WIDTH_DP).dp.px())
             dockedEndPane -> CaptureFrameReserve(end = sidePaneWidth.px())
+            // The crop editor shapes a window on the frame, so on a phone in portrait the frame moves above its pane.
+            compact && dockedBottomPane && rawCropEditor.editing != null -> CaptureFrameReserve(bottom = dockedPaneHeightPx.toFloat())
             // A phone in portrait has no height to give: its sheets and scope tray overlay the frame.
             compact -> CaptureFrameReserve.None
             dockedBottomPane -> CaptureFrameReserve(bottom = dockedPaneHeightPx.toFloat())
@@ -516,6 +536,19 @@ internal fun AdaptiveCaptureChrome(
         val previewHeight = previewViewport.height
         val previewLeft = previewViewport.left
         val previewTop = previewViewport.top
+        // PLAN-076: the enlarged crop view scales the picture until the RAW window fills the frame's visible area. The
+        // frame itself (previewViewport) stays where it is for the instruments; the picture and tap to focus follow
+        // pictureViewport, which the viewfinder derives the same way (CaptureSurface).
+        val frameVisibleArea = previewVisibleArea(previewViewport, if (overlay) {
+            Rect(-safeInsets.getLeft(density, layoutDirection).toFloat(), -(safeInsets.getTop(density) + extraTop.px()),
+                width + safeInsets.getRight(density, layoutDirection), height + safeInsets.getBottom(density))
+        } else null)
+        val rawCropDisplayDegrees = HorizonRollMath.surfaceRotationDegrees(LocalView.current.display?.rotation ?: Surface.ROTATION_0)
+        val pictureViewport = if (rawCropView && !hinge) {
+            rawCropWindowRect(state, previewViewport, rawCropDisplayDegrees, settings.anamorphicSqueeze.factor)
+                ?.let { rawCropEnlargedViewport(previewViewport, it, frameVisibleArea) } ?: previewViewport
+        } else previewViewport
+        val enlarged = pictureViewport != previewViewport
         // SurfaceView owns a native surface, so keep an explicit Compose hit target over it.
         // This is the first child: controls composed later remain the winning hit targets.
         Box(
@@ -529,23 +562,28 @@ internal fun AdaptiveCaptureChrome(
                     }
                 }
                 .pointerInput(previewGesturesEnabled, state.captureControlsLocked, recording, chromeVisible, ratio, settings.tapExposureMeteringEnabled, state.phase,
-                    previewLeft, previewTop, previewWidth, previewHeight) {
+                    pictureViewport, frameVisibleArea) {
                     detectTapGestures { position ->
                         if (recording) manualReveal = true
                         // During a take the tap that brings the chrome back must not refocus the shot.
                         if (recording && !chromeVisible) return@detectTapGestures
-                        if (!previewGesturesEnabled || state.captureControlsLocked || ratio == null || position.x !in previewLeft..(previewLeft + previewWidth) ||
-                            position.y !in previewTop..(previewTop + previewHeight)
-                        ) return@detectTapGestures
+                        // Only the visible part of the frame focuses; the point is read on the picture, enlarged or not.
+                        if (!previewGesturesEnabled || state.captureControlsLocked || ratio == null || !frameVisibleArea.contains(position)) {
+                            return@detectTapGestures
+                        }
+                        val focus = rawCropTapPoint(pictureViewport, position)
                         val accepted = binder?.tapToFocus(
-                            (position.x - previewLeft) / previewWidth,
-                            (position.y - previewTop) / previewHeight,
+                            focus.x,
+                            focus.y,
                             settings.tapExposureMeteringEnabled,
                         ) == true
                         if (accepted) tapPoint = position
                     }
                 },
         )
+        // PLAN-076: the RAW window's guide, or the crop editor's window, which takes the touches meant for focus while open.
+        // A hinge split shows the picture on the other pane, where the monitoring overlay draws the guide.
+        if (!hinge) RawCropFrameLayer(state, settings, pictureViewport, Modifier.matchParentSize(), enlargedArea = frameVisibleArea.takeIf { enlarged })
 
         tapPoint?.let { point ->
             val color = when (state.tapFocusState) {
@@ -684,7 +722,8 @@ internal fun AdaptiveCaptureChrome(
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         LockToggles(state = state, binder = binder, afLockBehavior = settings.afLockBehavior, settings = settings, onSettingsChanged = onSettingsChanged,
-                            onOpenListen = { pane = CapturePane.Listen; modeSheet = false })
+                            onOpenListen = { pane = CapturePane.Listen; modeSheet = false },
+                            rawCropView = rawCropView.takeIf { rawCropViewOffered && !hinge }, onToggleRawCropView = { rawCropViewOn = !rawCropViewOn })
                         // A hinge split has no picture under its chrome: its F-keys go in the deck.
                         if (!hinge) OperatorButtonColumn(state, settings)
                     }
@@ -727,6 +766,8 @@ internal fun AdaptiveCaptureChrome(
                 onOpenListen = { pane = CapturePane.Listen; modeSheet = false },
                 modifier = Modifier.align(Alignment.TopEnd).padding(end = endOccupied + 8.dp, top = 8.dp)
                     .onSizeChanged { topEndClusterWidthPx = it.width },
+                rawCropView = rawCropView.takeIf { rawCropViewOffered && !hinge },
+                onToggleRawCropView = { rawCropViewOn = !rawCropViewOn },
             )
         }
 
@@ -1258,10 +1299,13 @@ internal fun CameraUiState.resolutionChoices(mode: CaptureMode, projectRate: Cap
     else -> emptyList()
 }
 
-/** The RES slot value: "4K", "1080p" or "3.4K" for video, "12 MP" for stills. */
-private fun CameraUiState.resolutionName(mode: CaptureMode): String =
-    if (mode in CameraUiState.photoResolutionModes) activeStillSize?.let { (w, h) -> megapixelName(w, h) } ?: "—"
-    else resolutionShortName(targetVideoWidth, targetVideoHeight)
+/** The RES slot value: "4K", "1080p" or "3.4K" for video, "12 MP" for stills, a size class for a custom RAW window. */
+private fun CameraUiState.resolutionName(mode: CaptureMode): String = when {
+    mode in CameraUiState.photoResolutionModes -> activeStillSize?.let { (w, h) -> megapixelName(w, h) } ?: "—"
+    mode == CaptureMode.RAW_VIDEO && rawVideoOptions.any { it.isCustom && it.key == rawVideoSelectedKey } ->
+        rawCustomSizeClass(targetVideoWidth, targetVideoHeight)
+    else -> resolutionShortName(targetVideoWidth, targetVideoHeight)
+}
 
 /** RAW video offers Automatic plus each qualified configuration (PLAN-071); the other modes their sizes. */
 private fun rawOrResolutionChoiceCount(state: CameraUiState, mode: CaptureMode, projectRate: CaptureFrameRate): Int =

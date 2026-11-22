@@ -44,6 +44,8 @@ import kotlinx.coroutines.delay
 internal val DriverCamera = Camera2CameraDescriptor(
     cameraId = "0", lensFacing = CameraMetadata.LENS_FACING_BACK, focalLengthsMm = listOf(6.9f), sensorSizeMm = 9.6f to 7.2f,
     previewSize = Size(1920, 1080), jpegSize = Size(4000, 3000), rawSize = Size(4000, 3000), analysisSize = Size(640, 360),
+    // The Razr's RAW_VIDEO viewfinder: the 4:3 of its RAW10 output.
+    rawPreviewSize = Size(1440, 1080),
     sensorOrientation = 90, sensitivityRange = Range(50, 6400), exposureTimeRangeNs = Range(100_000L, 500_000_000L),
     aeCompensationRange = Range(-6, 6), aeCompensationStep = 1f / 3f, minimumFocusDistance = 10f,
     supportsRaw = true, flashAvailable = true,

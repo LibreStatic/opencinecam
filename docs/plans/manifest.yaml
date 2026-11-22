@@ -991,3 +991,17 @@ plans:
     risks: [RISK-006, RISK-020]
     conditional_gates: []
     intended_executor: Claude Code
+
+  - id: OCC-PLAN-076
+    title: "RAW video: manual crop"
+    status: InProgress
+    revision: 1
+    milestone: H3
+    path: docs/plans/PLAN-076-raw-manual-crop.md
+    depends_on: [OCC-PLAN-071]
+    blocks: []
+    requirements: [OCC-RAW-001, OCC-CAM-001]
+    adrs: [ADR-0019]
+    risks: [RISK-001, RISK-004]
+    conditional_gates: []
+    intended_executor: Claude Code

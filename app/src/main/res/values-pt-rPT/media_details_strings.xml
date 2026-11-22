@@ -117,4 +117,7 @@
     <string name="media_detail_audio_separate_wav">Ficheiro separado (WAV)</string>
     <string name="media_detail_audio_separate_flac">Ficheiro separado (FLAC)</string>
     <string name="media_detail_eis_preview">Estabilização da pré-visualização</string>
+    <!-- PLAN-076: a RAW take's window in its RAW output, when smaller. -->
+    <string name="media_detail_crop">Recorte</string>
+    <string name="media_detail_crop_value">%1$d × %2$d em +%3$d +%4$d de %5$d × %6$d</string>
 </resources>

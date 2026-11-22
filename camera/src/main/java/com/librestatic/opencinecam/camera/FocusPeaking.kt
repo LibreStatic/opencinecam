@@ -175,6 +175,22 @@ internal fun previewSizeIndex(sizes: List<Pair<Int, Int>>): Int {
 }
 
 /**
+ * Index of the RAW_VIDEO viewfinder stream among [sizes] (width to height) for a [rawWidth] × [rawHeight]
+ * RAW10 output, so the viewfinder shows the whole field the RAW stream carries. Within 1080p's pixel count
+ * (all sizes when none is): the sizes of exactly the RAW output's aspect, else those of the nearest aspect,
+ * then the pixel count nearest 1080p. A 4000 × 3000 output takes 1440 × 1080 where the camera offers it.
+ */
+internal fun rawPreviewSizeIndex(sizes: List<Pair<Int, Int>>, rawWidth: Int, rawHeight: Int): Int {
+    require(sizes.isNotEmpty() && rawWidth > 0 && rawHeight > 0)
+    val bounded = sizes.indices.filter { sizes[it].first.toLong() * sizes[it].second <= PREVIEW_PIXELS }.ifEmpty { sizes.indices.toList() }
+    fun pixelDistance(index: Int) = abs(sizes[index].first.toLong() * sizes[index].second - PREVIEW_PIXELS)
+    val exact = bounded.filter { sizes[it].first.toLong() * rawHeight == sizes[it].second.toLong() * rawWidth }
+    if (exact.isNotEmpty()) return exact.minBy(::pixelDistance)
+    val rawAspect = rawWidth.toDouble() / rawHeight
+    return bounded.minWith(compareBy<Int> { abs(sizes[it].first.toDouble() / sizes[it].second - rawAspect) }.thenBy(::pixelDistance))
+}
+
+/**
  * Index of the YUV analysis stream among [sizes], or -1 when there is none. It takes the preview's
  * aspect whenever the HAL offers it at a modest size, because outputs of one aspect crop the sensor
  * alike on any HAL. Outputs of different aspects only line up when the HAL centres each crop, as

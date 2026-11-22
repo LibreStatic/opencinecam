@@ -216,6 +216,9 @@ internal fun Camera2PreviewEngine.descriptor(cameraId: String, targetWidth: Int,
             physicalHeicSizes = if (ImageFormat.HEIC in map.outputFormats)
                 physicalExtraStillSizes(unityZoomPhysicalIds(logicalFocal, physicalFocals), ImageFormat.HEIC, map) else emptyMap(),
             rawSize = map.getOutputSizes(ImageFormat.RAW_SENSOR)?.maxByOrNull { it.width.toLong() * it.height },
+            rawPreviewSize = rawVideoOutputSize(map)?.let { raw ->
+                previews[rawPreviewSizeIndex(previews.map { it.width to it.height }, raw.width, raw.height)]
+            },
             analysisSize = map.getOutputSizes(ImageFormat.YUV_420_888)?.toList().orEmpty().let { sizes ->
                 sizes.getOrNull(analysisSizeIndex(sizes.map { it.width to it.height }, previewSize.width, previewSize.height))
             },
@@ -328,6 +331,15 @@ internal fun Camera2PreviewEngine.descriptor(cameraId: String, targetWidth: Int,
             } else TorchCapabilities(characteristics.get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true),
         )
     }.getOrNull()
+
+/**
+ * The RAW10 output a RAW_VIDEO session streams: the largest one whose width is a multiple of 4, as the app's
+ * qualification and RAW_VIDEO configuration pick it; null without one.
+ */
+internal fun rawVideoOutputSize(map: android.hardware.camera2.params.StreamConfigurationMap): Size? =
+    runCatching { map.getOutputSizes(ImageFormat.RAW10)?.toList() }.getOrNull().orEmpty()
+        .filter { it.width > 0 && it.height > 0 && it.width % 4 == 0 }
+        .maxByOrNull { it.width.toLong() * it.height }
 
 internal fun Camera2PreviewEngine.choosePreviewSize(sizes: List<Size>, targetWidth: Int, targetHeight: Int): Size =
     sizes[previewSizeIndex(sizes.map { it.width to it.height })]

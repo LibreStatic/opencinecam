@@ -13,6 +13,7 @@ import android.util.Rational
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.librestatic.opencinecam.camera.RawVideoConfig
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertThrows
@@ -103,6 +104,43 @@ class RawVideoMetadataTest {
         // (4000 - 1924) / 2 = 1038 -> 1036 (multiple of 4); (3000 - 1081) / 2 = 959 -> 958 (even).
         assertEquals(RawVideoCrop(1036, 958, 1924, 1081), RawVideoCrop.centred(RawVideoConfig("1", 4000, 3000, 1924, 1081, 30)))
         assertThrows(IllegalArgumentException::class.java) { RawVideoCrop.centred(RawVideoConfig("0", 4080, 3060, 1922, 1080, 30)) }
+    }
+
+    @Test
+    fun snappedWindowsKeepPackingCfaPhaseAndTheSensor() {
+        // An aligned off-centre window stays as it is, and is not the centred one.
+        val config = RawVideoConfig("0", 4080, 3060, 1920, 816, 24)
+        val offCentre = RawVideoCrop.snapped(4080, 3060, 1000, 1100, 1920, 816)
+        assertEquals(RawVideoCrop(1000, 1100, 1920, 816), offCentre)
+        assertFalse(offCentre.isCentredIn(config))
+        assertTrue(RawVideoCrop.centred(config).isCentredIn(config))
+        // Odd inputs round down: width to a multiple of 4, height to even, left to a multiple of 4, top to even.
+        assertEquals(RawVideoCrop(1080, 1120, 1920, 816), RawVideoCrop.snapped(4080, 3060, 1083, 1121, 1923, 817))
+        // Bigger than the sensor: the whole sensor.
+        assertEquals(RawVideoCrop(0, 0, 4080, 3060), RawVideoCrop.snapped(4080, 3060, 100, 100, 5000, 4000))
+        // An origin that would push it out is pulled back inside: 4080 - 1920 = 2160, 3060 - 816 = 2244.
+        assertEquals(RawVideoCrop(2160, 2244, 1920, 816), RawVideoCrop.snapped(4080, 3060, 3000, 3000, 1920, 816))
+        assertEquals(RawVideoCrop(0, 0, 1920, 816), RawVideoCrop.snapped(4080, 3060, -10, -3, 1920, 816))
+        // Under the minimum: 128 x 96. A small window above it stays.
+        assertEquals(RawVideoCrop(0, 0, RawVideoCrop.MIN_WIDTH, RawVideoCrop.MIN_HEIGHT), RawVideoCrop.snapped(4080, 3060, 0, 0, 10, 1))
+        assertEquals(RawVideoCrop(1880, 1410, 320, 240), RawVideoCrop.snapped(4080, 3060, 1880, 1410, 320, 240))
+        // A sensor under the minimum gives its own size.
+        assertEquals(RawVideoCrop(0, 0, 100, 80), RawVideoCrop.snapped(100, 80, 5, 5, 10, 10))
+        // An odd sensor height: the window stays even and inside.
+        assertEquals(RawVideoCrop(0, 0, 4000, 3000), RawVideoCrop.snapped(4000, 3001, 7, 2999, 4001, 3001))
+
+        val cases = listOf(
+            Triple(4080, 3060, intArrayOf(4079, 3059, 641, 361)),
+            Triple(4080, 3060, intArrayOf(1, 3059, 4079, 3059)),
+            Triple(4000, 3001, intArrayOf(1, 1, 1922, 1081)),
+            Triple(4000, 3001, intArrayOf(3999, 3000, 131, 97)),
+        )
+        for ((sensorWidth, sensorHeight, w) in cases) {
+            val crop = RawVideoCrop.snapped(sensorWidth, sensorHeight, w[0], w[1], w[2], w[3])
+            assertTrue("$crop", crop.left % 4 == 0 && crop.width % 4 == 0 && crop.top % 2 == 0 && crop.height % 2 == 0)
+            assertTrue("$crop", crop.left + crop.width <= sensorWidth && crop.top + crop.height <= sensorHeight)
+            assertTrue("$crop", crop.width >= RawVideoCrop.MIN_WIDTH && crop.height >= RawVideoCrop.MIN_HEIGHT)
+        }
     }
 
     @Test

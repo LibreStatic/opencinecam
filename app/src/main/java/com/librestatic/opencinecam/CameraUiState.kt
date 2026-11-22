@@ -274,6 +274,18 @@ data class CameraUiState(
      * phone when a drive is configured but the gate reads the phone's.
      */
     val rawVideoProfile: RawQualificationTarget? = null,
+    /**
+     * PLAN-076: where the selected configuration's window ([rawVideoSelectedKey]) sits in the RAW output, also for the
+     * full sensor and a fixed centre crop; null when nothing is selected.
+     */
+    val rawVideoCrop: com.librestatic.opencinecam.capture.RawVideoCropUi? = null,
+    /**
+     * PLAN-076: the frame rates a window of the operator's size can be judged at on this camera: those of the options and
+     * those only the storage left out (the custom verdict's camera check), ascending. Empty unless the gate is AVAILABLE.
+     */
+    val rawVideoCustomRates: List<Int> = emptyList(),
+    /** PLAN-076: the windows saved on this phone for the current camera's RAW output size, by name. */
+    val rawVideoSavedCrops: List<com.librestatic.opencinecam.storage.RawSavedCrop> = emptyList(),
     /** Ring occupancy (0..100) of the running RAW take; null outside one. A take stops at 90 (ADR-0019). */
     val rawVideoRingPercent: Int? = null,
     /** Frames the running RAW take has written to its file; null outside one. */

@@ -70,7 +70,8 @@ internal fun photoTakeInputs(take: LocalMediaTake, dng: Boolean): TakeDetailInpu
 
 /**
  * A RAW take's summary from a constructed frame index: [compressed] is a near-lossless 3840×2160 take at
- * 30 fps that lost two frames; otherwise a clean full-sensor RAW10 take at 24 fps.
+ * 30 fps that lost two frames, a centred window of the 4080×3060 output (a Crop row); otherwise a clean full-sensor
+ * RAW10 take at 24 fps.
  */
 internal fun rawTakeInputs(take: LocalMediaTake, compressed: Boolean): TakeDetailInputs {
     val width = if (compressed) 3840 else 4080
@@ -89,7 +90,9 @@ internal fun rawTakeInputs(take: LocalMediaTake, compressed: Boolean): TakeDetai
     val metadata = mapOf("fps" to "$fps/1", "encoding" to if (compressed) "bpq" else "raw10", "orientation" to "0", "cfa" to "RGGB",
         "blackLevel" to "64 64 64 64", "whiteLevel" to "1023", "cameraId" to "0", "model" to "motorola razr 50 ultra", "appVersion" to "1.1.0",
         "fingerprint" to "motorola/blanc_g/blanc:15/V1UUI35H.14-14-2/7c41a9:user/release-keys", "focalLength" to "6.3", "aperture" to "1.7",
-        "audioSampleRate" to "48000", "audioChannels" to "2", "audioSource" to "CAMCORDER", "audioDroppedSamples" to "0")
+        "audioSampleRate" to "48000", "audioChannels" to "2", "audioSource" to "CAMCORDER", "audioDroppedSamples" to "0",
+        // The 3840×2160 take is the centred window of the 4080×3060 RAW output, so its RAW section has a Crop row.
+        "sensorWidth" to "4080", "sensorHeight" to "3060", "crop" to "${(4080 - width) / 2 / 4 * 4} ${(3060 - height) / 2 / 2 * 2} $width $height")
     val perFrame = mapOf(0L to mapOf("iso" to "400", "exposureNs" to "20833333"), (count / 2).toLong() to mapOf("iso" to "640", "exposureNs" to "20833333"),
         (count - 1).toLong() to mapOf("iso" to "800", "exposureNs" to "16666667"))
     val index = OcrawFrameIndex(OcrawHeader(ByteArray(16)), take.primary.sizeBytes, take.primary.sizeBytes, tornTail = false, frames = frames,

@@ -145,7 +145,7 @@ class RawThroughputDeviceTest {
             // The rest reference: `rawRestReference` (bytes/s), else the one the app stored for this build.
             restReferenceBytesPerSecond = arguments.getString("rawRestReference")?.toLongOrNull()?.takeIf { it > 0 }
                 ?: runCatching { RawVideoQualificationStore.forContext(context).restReference(destinationId) }.getOrNull(),
-            ignoreStorageRest = arguments.getString("rawIgnoreRest")?.trim()?.toBoolean() ?: false,
+            stopOnUnrestedStorage = !(arguments.getString("rawIgnoreRest")?.trim()?.toBoolean() ?: false),
             privateDirectory = privateDirectory,
         )
         qualifier.estimate()?.let { Log.i(TAG, "estimate durationMs=${it.durationMs} freeBytesNeeded=${it.freeBytesNeeded} runs=${it.runCount}") }

@@ -131,8 +131,8 @@ class RawVideoQualificationOutcome(
  *    to a pending row in `Documents/OpenCineCam/RAW` ([RawVideoQualificationRows]), forced every 256 MiB,
  *    then a sustained phase that writes on until the SLC write cache's cliff and the windows after it
  *    are measured ([RawStorageCliff]); rule v2 reads only the first 60. A sweep judged unrested
- *    (`storage-not-rested`) ends the run there, after the camera work: those rows stay in the report and
- *    nothing is stored. A USB drive's run goes on regardless (PLAN-072).
+ *    is only noted in its `rest` object: the run goes on, and a storage that is slow at that moment leaves out the
+ *    configurations it cannot hold. (The device test can ask to end the run there, `storage-not-rested`.)
  * 6. Long disk runs of the uncompressed configurations, heaviest stream first: the real camera, its
  *    RAW10 rows copied into the ring and drained by one [OcrawStreamWriter] thread to its own row, then
  *    scanned back with [OcrawStreamReader]. Each is judged by [RawThroughputBenchmark.qualifyWithBuffer]
@@ -192,7 +192,9 @@ class RawVideoQualificationOutcome(
  * device test's form: TEMPLATE_RECORD, the fixed `[fps, fps]` AE range when advertised, otherwise
  * manual exposure at the frame duration. On a camera with the `QTI_RAW_FRAME_RATE_OVERRIDE` quirk, a
  * rate above the declared RAW limit follows [rawVideoFrameRatePlan] as the engine does: an AE range
- * within the limit plus the Qualcomm vendor keys at 1/fps.
+ * within the limit plus the Qualcomm vendor keys at 1/fps. A rate the camera cannot be asked for (no AE
+ * range contains it and the vendor keys do not reach it, so the engine's graph pre-check refuses it)
+ * fails as `camera-fps-limit` without opening the camera.
  *
  * Between sessions it waits [RawQualificationTiming.COOL_DOWN_MS], but not between the sweep and the
  * first long run: nothing sits between them, so that run writes past the write cache the sweep filled,
@@ -234,8 +236,12 @@ class RawVideoQualifier(
      * gets, if any. The device test passes its own.
      */
     private val restReferenceBytesPerSecond: Long? = null,
-    /** Runs on after a sweep judged unrested (testing only; a [driveTree] always does); the sweep's `rest` object still says so. */
-    private val ignoreStorageRest: Boolean = false,
+    /**
+     * Ends the run after a sweep judged unrested ([REASON_STORAGE_NOT_RESTED]) instead of running on (device-test
+     * diagnostics only; never with a [driveTree]). The app never sets it: a storage that is slow at that moment only
+     * leaves out the configurations it cannot hold, and the sweep's `rest` object still says what it found.
+     */
+    private val stopOnUnrestedStorage: Boolean = false,
     /**
      * Writes the sweep and long-run rows as plain files in this directory instead of MediaStore rows
      * (device-test diagnostics only: app-private storage bypasses FUSE). Its records and rest
@@ -275,7 +281,7 @@ class RawVideoQualifier(
     private val started = AtomicBoolean()
     private val cancelled = AtomicBoolean()
     private val rows = mutableListOf<Uri>()
-    private val restRuleIgnored = ignoreStorageRest || (driveTree != null && privateDirectory == null)
+    private val restRuleIgnored = !stopOnUnrestedStorage || (driveTree != null && privateDirectory == null)
     private val driveScratch = driveTree?.takeIf { privateDirectory == null }?.let { RawQualificationDriveScratch(context.applicationContext.contentResolver, it) }
     private val destinationId = when {
         privateDirectory != null -> DESTINATION_APP_PRIVATE
@@ -372,8 +378,8 @@ class RawVideoQualifier(
      * Runs the qualification and returns its outcome; never throws (an exception is an UNKNOWN outcome
      * with reason [REASON_EXCEPTION]). With a [store], the records are merged into it
      * ([RawVideoQualificationStore.upsertAll]) unless the run was cancelled, and a sweep judged rested
-     * raises its rest reference ([RawStorageRest]). A sweep judged unrested ends the run as UNKNOWN with
-     * [REASON_STORAGE_NOT_RESTED] and stores nothing, so the records in force stay.
+     * raises its rest reference ([RawStorageRest]). A sweep judged unrested does not end the run, unless the caller
+     * asked for it (`stopOnUnrestedStorage`): then it ends as UNKNOWN with [REASON_STORAGE_NOT_RESTED] and stores nothing.
      */
     fun run(store: RawVideoQualificationStore? = null): RawVideoQualificationOutcome {
         check(started.compareAndSet(false, true)) { "a RawVideoQualifier runs once" }
@@ -502,16 +508,20 @@ class RawVideoQualifier(
             expectedFps: Double? = null,
             evidenceKey: String? = null,
         ): JSONObject {
-            val afterSweep = kind == SessionKind.LONG && firstAfterSweep
-            if (kind == SessionKind.LONG) firstAfterSweep = false
+            // A rate the camera cannot be asked for is judged without a session, so it needs no cool-down and leaves
+            // the first long run after the sweep to the next one.
+            val unrequestable = unrequestableRateRow(camera, run, kind)
+            val afterSweep = kind == SessionKind.LONG && firstAfterSweep && unrequestable == null
+            if (kind == SessionKind.LONG && unrequestable == null) firstAfterSweep = false
             // No cool-down before the first session, nor between the sweep and the first long run.
-            if (steps.index > 0 && !afterSweep) coolDown(steps.index, steps.count)
+            if (steps.index > 0 && !afterSweep && unrequestable == null) coolDown(steps.index, steps.count)
             steps.index++
             val plannedMs = if (kind == SessionKind.LONG && !run.config.isCompressed && run.config !in plannedLong) 0L else kind.plannedMs(run.config)
             meter.startStep(kind.stepKind, plannedMs, run.spec)
             progress(kind.phase, index = steps.index, count = steps.count, spec = run.spec)
             val ring = ringPlan.ring
             val outcome = when {
+                unrequestable != null -> LiveOutcome(unrequestable, null)
                 ring == null -> LiveOutcome(skipped(run, "ring-unavailable", kind), null)
                 ringPoisoned -> LiveOutcome(skipped(run, "ring-poisoned", kind), null)
                 (kind == SessionKind.ENCODE || run.config.isCompressed) && bench == null -> LiveOutcome(skipped(run, REASON_CODEC_UNAVAILABLE, kind), null)
@@ -1395,7 +1405,7 @@ class RawVideoQualifier(
      *
      * Right after the burst windows [RawStorageRest.judge] checks them against [restReference]: a
      * write cache still flushing ends the sweep there ([RawStorageCliff.STOP_NOT_RESTED], no sustained
-     * phase) unless [ignoreStorageRest] or the run qualifies a drive. The sweep's `rest` object carries the figures either way.
+     * phase) only with [stopOnUnrestedStorage] on the phone's storage. The sweep's `rest` object carries the figures either way.
      */
     private fun storageSweep(size: Size, windows: Int, maxExtraSeconds: Int, restReference: Long?, index: Int = 0, runCount: Int = 0): SweepResult {
         val header = OcrawFrameHeader.raw10(size.width, size.height, 0, 0, 0, 0)
@@ -1627,6 +1637,51 @@ class RawVideoQualifier(
 
     private class LiveOutcome(val json: JSONObject, val record: RawVideoQualificationRecord?)
 
+    /** The viewfinder stream of [camera]'s RAW_VIDEO session ([rawQualificationPreviewSize]); 1920 x 1080 when the camera lists none. */
+    private fun previewSizeOf(camera: CameraInfo): Pair<Int, Int> =
+        camera.characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+            ?.getOutputSizes(SurfaceTexture::class.java)?.map { it.width to it.height }
+            ?.let { rawQualificationPreviewSize(it, camera.size.width, camera.size.height) } ?: (1920 to 1080)
+
+    /** The larger of the RAW10 and [previewSize] streams' declared minimum frame durations; 0 when neither declares one. */
+    private fun declaredMinFrameDurationNs(camera: CameraInfo, previewSize: Pair<Int, Int>): Long {
+        val streamMap = camera.characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+        return maxOf(
+            runCatching { streamMap?.getOutputMinFrameDuration(ImageFormat.RAW10, camera.size) ?: 0L }.getOrDefault(0L),
+            runCatching { streamMap?.getOutputMinFrameDuration(SurfaceTexture::class.java, Size(previewSize.first, previewSize.second)) ?: 0L }
+                .getOrDefault(0L),
+        )
+    }
+
+    /** [camera] has the `QTI_RAW_FRAME_RATE_OVERRIDE` quirk; false when the device profile cannot be read. */
+    private fun qtiFrameRateOverride(camera: CameraInfo): Boolean =
+        runCatching { deviceQuirks.resolve(camera.id).applies(QuirkEffect.QTI_RAW_FRAME_RATE_OVERRIDE) }
+            .onFailure { Log.w(TAG, "device quirks unavailable for camera ${camera.id}", it) }
+            .getOrDefault(false)
+
+    /** [rawVideoFrameRatePlan] of [camera] at [fps], as the engine plans it. */
+    private fun frameRatePlanOf(camera: CameraInfo, fps: Int, declaredMinFrameDurationNs: Long, qtiOverride: Boolean) =
+        rawVideoFrameRatePlan(
+            camera.characteristics.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES).orEmpty().map { it.lower to it.upper },
+            fps, declaredMinFrameDurationNs.takeIf { it > 0 }, qtiOverride,
+        )
+
+    /**
+     * PLAN-076: the row of a [kind] session of [run] the camera cannot be asked for, or null when it can. With no AE
+     * range containing the rate and no vendor override reaching it ([rawVideoFrameRatePlan] gives no AE range), the
+     * engine's graph pre-check (`rawVideoGraphDecision`) refuses it, so it fails as the camera's limit
+     * ([RawQualificationFrameRate.REASON_CAMERA_FPS_LIMIT]) without the camera being opened.
+     */
+    private fun unrequestableRateRow(camera: CameraInfo, run: RawQualificationRun, kind: SessionKind): JSONObject? {
+        val declared = declaredMinFrameDurationNs(camera, previewSizeOf(camera))
+        if (frameRatePlanOf(camera, run.config.fps, declared, qtiFrameRateOverride(camera)).aeRange != null) return null
+        val reason = RawQualificationFrameRate.REASON_CAMERA_FPS_LIMIT
+        return skipped(run, reason, kind)
+            .put("status", RawBenchmarkStatus.FAIL.name)
+            .put("fpsMode", "unrequestable")
+            .put("declaredMaxFps", RawQualificationFrameRate.declaredMaxFps(declared)?.let { Math.round(it) } ?: JSONObject.NULL)
+    }
+
     /**
      * One camera session of [kind] at [run]: a [SessionKind.LONG] run drains the ring to a row with an
      * [OcrawStreamWriter] and scans it back; a [SessionKind.CAMERA] check and a [SessionKind.ENCODE]
@@ -1685,14 +1740,8 @@ class RawVideoQualifier(
 
         val characteristics = camera.characteristics
         val size = camera.size
-        val streamMap = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
-        val previewSize = streamMap?.getOutputSizes(SurfaceTexture::class.java)?.map { it.width to it.height }
-            ?.let(::rawQualificationPreviewSize) ?: (1920 to 1080)
-        val declaredMinFrameDurationNs = maxOf(
-            runCatching { streamMap?.getOutputMinFrameDuration(ImageFormat.RAW10, size) ?: 0L }.getOrDefault(0L),
-            runCatching { streamMap?.getOutputMinFrameDuration(SurfaceTexture::class.java, Size(previewSize.first, previewSize.second)) ?: 0L }
-                .getOrDefault(0L),
-        )
+        val previewSize = previewSizeOf(camera)
+        val declaredMinFrameDurationNs = declaredMinFrameDurationNs(camera, previewSize)
         val cameraThread = HandlerThread("occ-raw-camera").apply { start() }
         val readerThread = HandlerThread("occ-raw-reader").apply { start() }
         val cameraHandler = Handler(cameraThread.looper)
@@ -1790,12 +1839,8 @@ class RawVideoQualifier(
             val aeRanges = characteristics.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES).orEmpty().toList()
             // A QTI_RAW_FRAME_RATE_OVERRIDE camera (the Razr) delivers nothing with an AE range past the
             // declared RAW limit; the plan keeps the range within it and sends 1/fps through the vendor keys.
-            val qtiQuirk = runCatching { deviceQuirks.resolve(camera.id).applies(QuirkEffect.QTI_RAW_FRAME_RATE_OVERRIDE) }
-                .onFailure { Log.w(TAG, "device quirks unavailable for camera ${camera.id}", it) }
-                .getOrDefault(false)
-            val frameRatePlan = rawVideoFrameRatePlan(
-                aeRanges.map { it.lower to it.upper }, config.fps, declaredMinFrameDurationNs.takeIf { it > 0 }, qtiQuirk,
-            )
+            val qtiQuirk = qtiFrameRateOverride(camera)
+            val frameRatePlan = frameRatePlanOf(camera, config.fps, declaredMinFrameDurationNs, qtiQuirk)
             val vendorFrameDurationNs = frameRatePlan.vendorFrameDurationNs
             val aeRange = if (vendorFrameDurationNs != null) {
                 frameRatePlan.aeRange?.let { (lower, upper) -> Range(lower, upper) }

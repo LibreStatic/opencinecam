@@ -88,6 +88,8 @@ import com.librestatic.opencinecam.settings.CaptureNameSnapshot
 import com.librestatic.opencinecam.storage.RawQualificationEvidenceStore
 import com.librestatic.opencinecam.storage.StillImageSaver
 import com.librestatic.opencinecam.capture.RawVideoConfigKeys
+import com.librestatic.opencinecam.capture.RawVideoCropPreview
+import com.librestatic.opencinecam.storage.RawCropStore
 import com.librestatic.opencinecam.camera.RawVideoConfig
 import com.librestatic.opencinecam.camera.RawVideoQualificationSet
 import com.librestatic.opencinecam.rawvideo.RawVideoRecorder
@@ -568,6 +570,7 @@ class CaptureService : Service() {
         // A drive starting, or its window closing, changes the next take's fallback wording; the first value is the refresh below.
         driveArrivalMonitor?.let { monitor -> settingsScope.launch { monitor.arriving.drop(1).collect { refreshRecordingDestination() } } }
         refreshRecordingDestination()
+        updateRawSavedCrops("load") {}
         physicalOrientationTracker = PhysicalOrientationTracker(this)
         physicalOrientationTracker.start()
         foldClosureTracker = FoldClosureTracker(this) {
@@ -803,8 +806,16 @@ class CaptureService : Service() {
     internal val rawRaw10Sizes = java.util.concurrent.ConcurrentHashMap<String, List<Pair<Int, Int>>>()
     /** Cameras that refused the RAW_VIDEO graph in this service session (gate FAILED). */
     internal val rawVideoFailedCameras = mutableSetOf<String>()
-    /** The configuration (and near-lossless noise profile) the ring was last asked to arm for; null while disarmed. */
-    internal var rawArmTarget: Pair<RawVideoConfig, com.librestatic.opencinecam.rawvideo.RawNoiseProfile?>? = null
+    /** The configuration, window (PLAN-076) and near-lossless noise profile the ring was last asked to arm for; null while disarmed. */
+    internal var rawArmTarget: Triple<RawVideoConfig, com.librestatic.opencinecam.rawvideo.RawVideoCrop, com.librestatic.opencinecam.rawvideo.RawNoiseProfile?>? = null
+    /**
+     * Main: what the last gate recompute judges windows of the operator's in (PLAN-076); null outside an AVAILABLE gate.
+     * [LocalBinder.rawVideoCropVerdict] and the selection read it, so neither reads the store again.
+     */
+    internal var rawCustomContext: RawVideoCustomContext? = null
+    /** Main: the saved RAW windows ([rawCropStore]), every sensor size; loaded on [storageExecutor], replaced on main. */
+    internal var rawSavedCrops: List<com.librestatic.opencinecam.storage.RawSavedCrop> = emptyList()
+    internal val rawCropStore by lazy { com.librestatic.opencinecam.storage.RawCropStore.forContext(this) }
     /** Set (on the control thread) when the ring for this configuration could not be planned or allocated. */
     @Volatile internal var rawArmNoMemory: RawVideoConfig? = null
     /** Why arming [rawArmNoMemory] failed: no RAM for the ring, or no encoder for a compressed configuration. */
@@ -816,10 +827,12 @@ class CaptureService : Service() {
     /**
      * [destination] is where the take writes, resolved when it was admitted (PLAN-072 Delivery 3).
      * [captureNames] and [audio] are what the take was admitted with; [continuation] is set when it continues on the phone
-     * a RAW take whose drive was lost (PLAN-072 Delivery 4), and names its file and metadata.
+     * a RAW take whose drive was lost (PLAN-072 Delivery 4), and names its file and metadata. [crop] is the window the
+     * take writes (PLAN-076).
      */
     internal class RawTakeSession(val takeId: String, val config: RawVideoConfig, val destination: ResolvedRecordingDestination,
-        val captureNames: CaptureNameSnapshot, val audio: Boolean, val continuation: ContinuationRequest? = null) {
+        val captureNames: CaptureNameSnapshot, val audio: Boolean, val continuation: ContinuationRequest? = null,
+        val crop: com.librestatic.opencinecam.rawvideo.RawVideoCrop = com.librestatic.opencinecam.rawvideo.RawVideoCrop.centred(config)) {
         var started = false
         var stopRequested = false
     }
@@ -1673,12 +1686,55 @@ class CaptureService : Service() {
         /**
          * OCC-PLAN-071: persists the RAW video configuration [key] (one of [CameraUiState.rawVideoOptions],
          * or empty for the highest data rate). Refused during a take; applySettings reopens the session.
+         * PLAN-076: also a window of the operator's on the current camera that the gate does not refuse
+         * ([rawVideoCropVerdict]). Main thread.
          */
         fun selectRawVideoConfig(key: String): Boolean {
             if (serviceDestroyed || !RawVideoConfigKeys.isValid(key) || cameraState.value.structuralSettingsFrozen) return false
-            if (key.isNotEmpty() && cameraState.value.rawVideoOptions.none { it.key == key }) return false
-            SettingsRepositories.get(this@CaptureService).update { it.copy(rawVideoConfig = key) }
+            // A window is stored by its canonical key: a centred origin written out names the plain configuration.
+            val stored = if (key.isEmpty() || cameraState.value.rawVideoOptions.any { it.key == key }) key else {
+                val judged = rawCustomContext?.takeIf { it.cameraId == cameraState.value.selectedCameraId }?.judge(key) ?: return false
+                if (judged.custom is RawVideoCustomVerdict.Refused) return false
+                judged.key
+            }
+            SettingsRepositories.get(this@CaptureService).update { it.copy(rawVideoConfig = stored) }
             return true
+        }
+
+        /**
+         * PLAN-076: the crop editor's read-out of [key] on the current camera ([rawVideoCropPreview]), from what the last
+         * gate recompute read ([rawCustomContext]): no store or file access. Null outside an AVAILABLE gate or for a key
+         * that does not parse there. Main thread.
+         */
+        fun rawVideoCropVerdict(key: String): RawVideoCropPreview? {
+            if (serviceDestroyed || cameraState.value.modeGates[CaptureMode.RAW_VIDEO] != ModeGateState.AVAILABLE) return null
+            val context = rawCustomContext?.takeIf { it.cameraId == cameraState.value.selectedCameraId } ?: return null
+            return rawVideoCropPreview(context, key)
+        }
+
+        /**
+         * PLAN-076: saves the window [key] names on the current camera under [name] (trimmed, 1 to
+         * [RawCropStore.MAX_NAME_LENGTH] characters), whatever the gate says of it; [CameraUiState.rawVideoSavedCrops]
+         * follows once written. False for a bad name, a key that does not parse there, or no AVAILABLE gate. Main thread;
+         * the store is written on [storageExecutor].
+         */
+        fun saveRawCrop(name: String, key: String): Boolean {
+            if (serviceDestroyed || RawCropStore.validName(name) == null) return false
+            val context = rawCustomContext?.takeIf { it.cameraId == cameraState.value.selectedCameraId } ?: return false
+            val selection = RawVideoConfigKeys.parse(key, context.cameraId, context.sensorWidth, context.sensorHeight) ?: return false
+            return updateRawSavedCrops("save") { it.save(name, context.sensorWidth, context.sensorHeight, selection.crop) }
+        }
+
+        /** PLAN-076: renames the saved window [id]; false for a bad name. Main thread; written on [storageExecutor]. */
+        fun renameRawCrop(id: String, name: String): Boolean {
+            if (serviceDestroyed || RawCropStore.validName(name) == null) return false
+            return updateRawSavedCrops("rename") { it.rename(id, name) }
+        }
+
+        /** PLAN-076: deletes the saved window [id]. Main thread; written on [storageExecutor]. */
+        fun deleteRawCrop(id: String): Boolean {
+            if (serviceDestroyed) return false
+            return updateRawSavedCrops("delete") { it.delete(id) }
         }
 
         /** Rereads the RAW video qualification records (after a qualification run) and updates the gate. */
@@ -1692,7 +1748,7 @@ class CaptureService : Service() {
                         rawQualifications = set
                         val before = cameraState.value.rawVideoSelectedKey
                         cameraState.value = withRawVideoGate(cameraState.value, cameraState.value.selectedCameraId)
-                        if (cameraState.value.selectedMode == CaptureMode.RAW_VIDEO && cameraState.value.rawVideoSelectedKey != before &&
+                        if (cameraState.value.selectedMode == CaptureMode.RAW_VIDEO && RawVideoConfigKeys.sessionChanged(before, cameraState.value.rawVideoSelectedKey) &&
                             !cameraState.value.structuralSettingsFrozen) {
                             attachedPreviewSurface?.takeIf { it.isValid }?.let { attachPreview(it, attachedPreviewRotationDegrees) }
                         }
@@ -2114,7 +2170,7 @@ class CaptureService : Service() {
                 if (previous.rawVideoConfig != settings.rawVideoConfig) {
                     val before = cameraState.value.rawVideoSelectedKey
                     cameraState.value = withRawVideoGate(cameraState.value, cameraState.value.selectedCameraId)
-                    if (cameraState.value.selectedMode == CaptureMode.RAW_VIDEO && cameraState.value.rawVideoSelectedKey != before) {
+                    if (cameraState.value.selectedMode == CaptureMode.RAW_VIDEO && RawVideoConfigKeys.sessionChanged(before, cameraState.value.rawVideoSelectedKey)) {
                         attachedPreviewSurface?.takeIf { it.isValid }?.let { attachPreview(it, attachedPreviewRotationDegrees) }
                     }
                     syncRawVideoArm()

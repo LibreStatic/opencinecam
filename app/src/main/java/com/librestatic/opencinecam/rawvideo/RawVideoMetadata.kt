@@ -13,7 +13,8 @@ import android.util.Rational
 import com.librestatic.opencinecam.camera.RawVideoConfig
 
 /**
- * Where every frame of a take sits in the RAW output: the configured crop, centred. RAW10 packs four
+ * Where every frame of a take sits in the RAW output: the configured crop, centred unless the operator
+ * placed it ([snapped]). RAW10 packs four
  * pixels into five bytes, so [left] and [width] are multiples of 4; [top] is even so the frame keeps
  * the sensor's CFA phase (`docs/formats/opencine-raw-v1.md`).
  */
@@ -27,13 +28,37 @@ data class RawVideoCrop(val left: Int, val top: Int, val width: Int, val height:
     /** The `crop` metadata value: `left top width height`. */
     fun metadataValue(): String = "$left $top $width $height"
 
+    /** True when this is [config]'s size at its centred origin ([centred]). */
+    fun isCentredIn(config: RawVideoConfig): Boolean = config.cropWidth % 4 == 0 && this == centred(config)
+
     companion object {
+        /** The narrowest window [snapped] keeps (the sensor's width when it is narrower). */
+        const val MIN_WIDTH = 128
+
+        /** The shortest window [snapped] keeps (the sensor's height when it is shorter). */
+        const val MIN_HEIGHT = 96
+
         /** The centred crop of [config] in its `sensorWidth x sensorHeight` RAW output. */
         fun centred(config: RawVideoConfig): RawVideoCrop {
             require(config.cropWidth % 4 == 0) { "RAW10 crop width must be a multiple of 4" }
             val left = (config.sensorWidth - config.cropWidth) / 2 / 4 * 4
             val top = (config.sensorHeight - config.cropHeight) / 2 / 2 * 2
             return RawVideoCrop(left, top, config.cropWidth, config.cropHeight)
+        }
+
+        /**
+         * The window nearest `left top width height` that a take can write in a `sensorWidth x sensorHeight`
+         * RAW output: the size clamped to [MIN_WIDTH] x [MIN_HEIGHT] (or the sensor, when smaller) and the
+         * sensor, the width rounded down to a multiple of 4 and the height to even, then the origin clamped
+         * inside the sensor with the left rounded down to a multiple of 4 and the top to even.
+         */
+        fun snapped(sensorWidth: Int, sensorHeight: Int, left: Int, top: Int, width: Int, height: Int): RawVideoCrop {
+            require(sensorWidth >= 4 && sensorHeight >= 2) { "sensor too small for a RAW10 crop" }
+            val w = width.coerceIn(minOf(MIN_WIDTH, sensorWidth), sensorWidth) / 4 * 4
+            val h = height.coerceIn(minOf(MIN_HEIGHT, sensorHeight), sensorHeight) / 2 * 2
+            val l = left.coerceIn(0, sensorWidth - w) / 4 * 4
+            val t = top.coerceIn(0, sensorHeight - h) / 2 * 2
+            return RawVideoCrop(l, t, w, h)
         }
     }
 }

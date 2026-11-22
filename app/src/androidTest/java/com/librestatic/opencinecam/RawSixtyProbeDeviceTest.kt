@@ -80,6 +80,9 @@ class RawSixtyProbeDeviceTest {
         val qualifierRing: Boolean = false,
         /** Create the repeating request only once the session is configured, as the qualifier does. */
         val requestAfterSession: Boolean = false,
+        /** The preview stream size, when not 1920x1080 or the qualifier's ([qualifierPreview]). */
+        val previewWidth: Int = 0,
+        val previewHeight: Int = 0,
     )
 
     @Test
@@ -162,7 +165,37 @@ class RawSixtyProbeDeviceTest {
                 copySlots = 40, legacySession = true, qualifierPreview = true, qualifierRing = true, requestAfterSession = true),
             Case("ae30-override60-qualRing-late-params", aeRange = Range(30, 30), request = qcom60, readerThread = true, maxImages = 8,
                 copySlots = 40, qualifierPreview = true, qualifierRing = true, requestAfterSession = true),
-        )
+            // PLAN-076: a preview with the sensor's aspect, so the viewfinder shows the whole RAW field: does 60 fps hold?
+            Case("ae30-override60-qualRing-params-preview43", aeRange = Range(30, 30), request = qcom60, readerThread = true, maxImages = 8,
+                copySlots = 40, qualifierRing = true, requestAfterSession = true, previewWidth = 1440, previewHeight = 1080),
+            Case("ae30-qualRing-params-preview43", aeRange = Range(30, 30), readerThread = true, maxImages = 8,
+                copySlots = 40, qualifierRing = true, requestAfterSession = true, previewWidth = 1440, previewHeight = 1080),
+        ) + listOf(90, 100, 120, 240).flatMap { fps ->
+            // PLAN-076: does the frame duration override reach the sensor's faster modes (4000x2252@120, 1984x1116@240)?
+            // The dumped frames (90 and 91) show which rows carry image at each rate.
+            val frame = 1_000_000_000L / fps
+            val override = mapOf<String, Any>(
+                "org.quic.camera.manualExposure.disableFPSLimits" to 1.toByte(),
+                "org.quic.camera.manualExposure.overrideSensorFrameDuration" to frame)
+            listOf(
+                Case("ae30-override$fps", aeRange = Range(30, 30), request = override),
+                Case("ae30-override$fps-rawOnly", aeRange = Range(30, 30), preview = false, request = override),
+                // A small window's copy (240 rows) with previews of the sensor's aspect at falling sizes: what throttles the rate?
+                Case("ae30-override$fps-copy240-p1440", aeRange = Range(30, 30), request = override, copyRows = 240, readerThread = true,
+                    maxImages = 8, previewWidth = 1440, previewHeight = 1080),
+                Case("ae30-override$fps-copy240-p1280", aeRange = Range(30, 30), request = override, copyRows = 240, readerThread = true,
+                    maxImages = 8, previewWidth = 1280, previewHeight = 960),
+                Case("ae30-override$fps-copy240-p640", aeRange = Range(30, 30), request = override, copyRows = 240, readerThread = true,
+                    maxImages = 8, previewWidth = 640, previewHeight = 480),
+                Case("ae30-override$fps-copy240-p720", aeRange = Range(30, 30), request = override, copyRows = 240, readerThread = true,
+                    maxImages = 8, previewWidth = 1280, previewHeight = 720),
+                // The smallest RAW10 output: does a lighter stream reach the rate the largest one misses?
+                Case("ae30-override$fps-copy240-small", width = 3840, height = 2880, aeRange = Range(30, 30), request = override,
+                    copyRows = 240, readerThread = true, maxImages = 8, previewWidth = 1440, previewHeight = 1080),
+                Case("manual$fps-override", aeRange = Range(30, 30), manualFrameNs = frame, exposureNs = frame / 4, iso = 3200,
+                    request = override),
+            )
+        }
         val only = args.getString("sixtyCases")?.split(',')?.map(String::trim)?.toSet()
         for (case in cases) {
             if (only != null && case.name !in only) continue
@@ -185,7 +218,9 @@ class RawSixtyProbeDeviceTest {
         val readerHandler = readerThread?.let { Handler(it.looper) } ?: handler
         val previewSize = if (case.qualifierPreview) {
             characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)?.getOutputSizes(SurfaceTexture::class.java)
-                ?.map { it.width to it.height }?.let { com.librestatic.opencinecam.rawvideo.rawQualificationPreviewSize(it) } ?: (1920 to 1080)
+                ?.map { it.width to it.height }?.let { com.librestatic.opencinecam.rawvideo.rawQualificationPreviewSize(it, rawW, rawH) } ?: (1920 to 1080)
+        } else if (case.previewWidth > 0) {
+            case.previewWidth to case.previewHeight
         } else {
             1920 to 1080
         }
