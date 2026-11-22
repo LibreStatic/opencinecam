@@ -304,7 +304,19 @@ internal fun CaptureService.finishCalibration(run: CalibrationRun, outcome: com.
         it.copy(targetVideoWidth = highSpeed.first, targetVideoHeight = highSpeed.second, targetFps = highSpeed.third, effectiveFps = null)
     }
     if (cameraState.value.selectedMode != restore.mode) localBinder.selectMode(restore.mode, reopen = !run.lost && !relock)
-    if (relock || (highSpeed != null && !run.lost)) attachedPreviewSurface?.takeIf { it.isValid }?.let { localBinder.attachPreview(it, attachedPreviewRotationDegrees) }
+    val surface = attachedPreviewSurface?.takeIf { it.isValid }
+    if (surface != null && highSpeed != null && !run.lost) {
+        // As in selectMode: the panel applies its high refresh-rate vote before a constrained high-speed stream
+        // starts. OPENING keeps a take off the standard-rate session meanwhile.
+        cameraState.update { it.copy(phase = CameraUiPhase.OPENING) }
+        mainHandler.postDelayed({
+            val now = cameraState.value
+            // A new run, another mode, camera or rate, or a newer surface has opened its own session since.
+            if (!serviceDestroyed && calibrationRun == null && now.selectedMode == restore.mode && now.selectedCameraId == restore.cameraId &&
+                now.activeVideoProfile?.constrainedHighSpeed == true && attachedPreviewSurface === surface && surface.isValid
+            ) localBinder.attachPreview(surface, attachedPreviewRotationDegrees)
+        }, 350L)
+    } else if (surface != null && relock) localBinder.attachPreview(surface, attachedPreviewRotationDegrees)
     localBinder.setZoomRatio(restore.zoom)
     refreshLensCorrection()
     val success = outcome as? com.librestatic.opencinecam.camera.calibration.RunOutcome.Success
