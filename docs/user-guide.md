@@ -144,7 +144,7 @@ All monitoring tools are display only. They never change the recorded file.
 - **LOG View Assist** shows LOG footage as Rec.709 while you shoot.
 - Some cameras cannot run the preview, the scopes and RAW at the same time. OpenCineCam then drops the scopes first and RAW second, and a notice under the zoom says what was lost ("Scopes unavailable with this configuration", "RAW unavailable with this configuration", or both). In RAW photo mode the shutter then fails with that reason instead of saving a different format.
 - The thermal indicator shows the device's heat load. When the device is too hot, the scopes pause ("Scopes paused: device is too hot") and come back by themselves. Recording is not affected.
-- **Gyro data for Gyroflow** (in **Video and photography**, off by default) saves the phone's motion next to each Video, LOG or HLG take as a `.gcsv` file with the same name. Turn off the camera's own stabilization for the best match. It is not used for slow motion or time lapse.
+- **Motion data** (in **Video and photography**, off by default) records the gyroscope, accelerometer and magnetometer during every video take (Video, LOG, HLG, takes with pauses, slow motion, off-speed, time lapse and RAW video), at the highest rate the phone offers, for stabilizing the take afterwards. An MP4 take gets it twice: as a `.gcsv` file with the same name next to it, which Gyroflow opens by itself, and as a camera motion (CAMM) track inside the MP4. A RAW video take keeps it inside its `.ocraw` file, and the CinemaDNG export and the desktop converter write the `.gcsv` beside the DNG sequence. The full sensor rate uses Android's `HIGH_SAMPLING_RATE_SENSORS` permission, granted at install without a prompt; the sensors are read only while a take records with the setting on, and the data stays in the take's files on the device. Turn off the camera's own stabilization for the best match.
 
 **Keyboard shortcuts** (Chromebook, DeX or a tablet keyboard):
 
@@ -243,7 +243,7 @@ WebDAV sends takes to your own server. It is off by default. Set it up in **Sett
 
 Transfers use Wi-Fi only, unless you turn on **Allow cellular and metered networks for transfers**. Transfers pause while recording.
 
-**Manual sending.** Under **Send registered takes**, choose a take and tap **Send and verify take**. OpenCineCam sends its files and then reads back the remote copy to verify it. It never overwrites a remote file that differs.
+**Manual sending.** Under **Send registered takes**, choose a take and tap **Send and verify take**. OpenCineCam sends its files and then reads back the remote copy to verify it. It never overwrites a remote file that differs. A video take's files include its Gyroflow motion log (`.gcsv`) when it has one, uploaded beside the video under the video's name so Gyroflow pairs them.
 
 **Automatic upload.** Turn on **Upload new takes automatically** to upload takes in the background. It is off by default and needs WebDAV turned on. Only takes recorded after you turn it on are uploaded. A "Transfers" notification shows while it runs.
 

@@ -15,7 +15,12 @@ Review baseline for the portable OpenCineCam release:
   manifest adds `RECEIVE_BOOT_COMPLETED` and `WAKE_LOCK`.
   `ACCESS_COARSE_LOCATION` and `ACCESS_FINE_LOCATION` are declared only for
   opt-in photo/take geotagging: off by default and requested at runtime while
-  the camera activity is resumed. No broad storage, analytics,
+  the camera activity is resumed. `HIGH_SAMPLING_RATE_SENSORS` (a normal,
+  install-time permission with no prompt) is declared only for the opt-in
+  *Motion data* setting (off by default, device-local, never in a preset): the
+  gyroscope, accelerometer and magnetometer are read at their full rate only
+  while a video take records, and the readings stay in the take's own files
+  (`MOTION_DATA` in `SecurityAudit.kt`). No broad storage, analytics,
   account, or remote-crash permission.
 - **Opt-in network/location (OCC-PRIV-001, amended 2026-09-26 and 2026-10-19;
   ADR-0027 and ADR-0034 amendments):** network and location permissions are

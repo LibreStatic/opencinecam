@@ -122,6 +122,44 @@ class RecordingSafRecoveryTest {
         assertArrayEquals(before, databaseFile.readBytes())
     }
 
+    @Test fun aLogRowTheProviderRenamedCostsOnlyTheLog() {
+        assertEquals(RecordingRecoveryReport(), journal().recover())
+        val id = UUID.randomUUID().toString()
+        database { it.execSQL("INSERT INTO captures(id, committed, tree, volume) VALUES(?, 0, ?, ?)", arrayOf(id, tree.toString(), drive.volume)) }
+        val rows = SafRecordingRows(context, tree, null) { folder ->
+            database { db -> db.execSQL("UPDATE captures SET folder = ? WHERE id = ?", arrayOf(folder.toString(), id)) }
+        }
+        // As MediaStore did with `text/csv`: the row exists under another name (`A001.gcsv.csv`), so its identity check fails.
+        val renaming = object : RecordingRowStore by rows {
+            override fun verify(id: String, row: RecordingRow, pending: Int) {
+                check(!row.auxiliary) { "Recording output identity or publication changed" }
+                rows.verify(id, row, pending)
+            }
+        }
+        val video = RecordingRecoveryGroup(journal(), id, renaming).member(RecordingMemberKind.VIDEO)
+        val mp4 = video.insert("A001.mp4", "video/mp4", metadata = false).also { write(it, ByteArray(64) { 1 }) }
+        val timing = video.insert("A001.timing.json", "application/json", metadata = true).also { write(it, "{}".toByteArray()) }
+        val clip = video.insertClipSidecar("A001.clip.json").also { write(it, "{}".toByteArray()) }
+
+        assertThrows(IllegalStateException::class.java) { video.insertAuxiliary("A001.gcsv", GyroflowLog.MIME_TYPE) }
+        assertFalse(File(takeDir(), "A001.gcsv").exists())
+
+        // The take is still whole: it prepares and publishes without the log.
+        video.prepared(listOf(PreparedCaptureArtifact(CaptureArtifactRole.VIDEO, mp4.toString(), "A001.mp4"),
+            PreparedCaptureArtifact(CaptureArtifactRole.VIDEO_METADATA, timing.toString(), "A001.timing.json"),
+            PreparedCaptureArtifact(CaptureArtifactRole.CLIP_METADATA, clip.toString(), "A001.clip.json")))
+        listOf(timing, clip, mp4).forEach { video.publish(it, "publication failed") }
+        video.published()
+        assertEquals(setOf("A001.mp4", "A001.timing.json", "A001.clip.json"), takeDir().list()!!.toSet())
+        assertTrue(entries().isEmpty())
+    }
+
+    @Test fun theLogTypeIsOneNoProviderAddsAnExtensionTo() {
+        // MediaStore and document providers append the extension of a type they know: `text/csv` published `x.gcsv.csv`.
+        assertEquals("application/octet-stream", GyroflowLog.MIME_TYPE)
+        assertEquals(SafDocuments.OCTET_STREAM, GyroflowLog.MIME_TYPE)
+    }
+
     @Test fun driveTakeCommitsByRemovingItsMarker() {
         val group = journal().start(destination)
         assertEquals(listOf(listOf(group.id, "0", tree.toString(), "FFF1-7571", null)), entries())

@@ -349,6 +349,11 @@ interface Camera2PreviewListener {
     fun onRecordingStarted(width: Int, height: Int)
     /** The sensor timestamp of the first frame that went into the recorded file (GL thread). */
     fun onRecordingFirstFrame(sensorTimestampNs: Long) = Unit
+    /**
+     * Every frame that went into the recorded file (GL thread): its sensor timestamp and the presentation time given to
+     * the encoder, nanoseconds. Called at the frame rate, so it must not block.
+     */
+    fun onRecordingFrame(sensorTimestampNs: Long, presentationTimeNs: Long) = Unit
     fun onRecordingStopped(success: Boolean)
     fun onFailure(code: String, message: String, recoverable: Boolean)
     /**
@@ -2555,6 +2560,9 @@ class Camera2PreviewEngine(
         lastLogRecordingEvidence = null
         pipeline.onFirstRecordedFrame = { timestampNs ->
             if (generation == cameraGeneration && logPipeline === pipeline) listener?.onRecordingFirstFrame(timestampNs)
+        }
+        pipeline.onRecordedFrame = { timestampNs, ptsNs ->
+            if (generation == cameraGeneration && logPipeline === pipeline) listener?.onRecordingFrame(timestampNs, ptsNs)
         }
         val accepted = pipeline.startRecording(
             output = output,

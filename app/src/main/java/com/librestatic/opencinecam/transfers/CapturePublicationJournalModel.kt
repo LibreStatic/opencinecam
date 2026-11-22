@@ -82,7 +82,7 @@ internal object CapturePublicationJournalCodec {
         require(!version.isString && version.content == "1")
         fun text(value: JsonElement): String = value.jsonPrimitive.also { require(it.isString) }.content
         val artifacts = json.getValue("artifacts").jsonArray
-        require(artifacts.size <= 5)
+        require(artifacts.size <= CaptureArtifactRole.entries.size)
         val receipt = CapturePublicationReceipt(text(json.getValue("bundleId")), CapturePublicationState.valueOf(text(json.getValue("state"))),
             artifacts.map { value ->
                 val artifact = value.jsonObject
@@ -122,7 +122,7 @@ internal fun requirePublicationUuid(value: String) {
 }
 
 private fun validatePublicationArtifacts(artifacts: List<PreparedCaptureArtifact>) {
-    require(artifacts.size in 1..5)
+    require(artifacts.size in 1..CaptureArtifactRole.entries.size)
     require(artifacts.map { it.role }.toSet().size == artifacts.size)
     require(artifacts.map { it.uri }.toSet().size == artifacts.size)
     require(artifacts.any { it.role == CaptureArtifactRole.VIDEO })

@@ -1,6 +1,39 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$defs": {
+    "motionSensor": {
+      "type": "object",
+      "required": [
+        "present",
+        "nominalMaxHz",
+        "measuredHz",
+        "samples"
+      ],
+      "properties": {
+        "present": {
+          "description": "Whether the device has the sensor and the take read it.",
+          "type": "boolean"
+        },
+        "nominalMaxHz": {
+          "description": "The fastest rate the sensor declares (1 / minDelay); null when unknown or absent.",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "measuredHz": {
+          "description": "The rate measured on the sensor clock over the take; null with fewer than two samples.",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "samples": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
     "stage": {
       "type": "string",
       "enum": [
@@ -208,7 +241,8 @@
     "schemaVersion": {
       "enum": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     "recordingId": {
@@ -290,6 +324,88 @@
           "enum": [
             "drive-disconnected",
             "drive-write-failed"
+          ]
+        }
+      }
+    },
+    "motion": {
+      "description": "Optional (schema 1.2.0); present only on a video take whose opt-in motion data was rendered. Older sidecars and takes without motion data omit it.",
+      "type": "object",
+      "required": [
+        "sensors",
+        "sync",
+        "rateScale",
+        "largestGyroGapUs",
+        "camm",
+        "log"
+      ],
+      "properties": {
+        "sensors": {
+          "type": "object",
+          "required": [
+            "gyroscope",
+            "accelerometer",
+            "magnetometer"
+          ],
+          "properties": {
+            "gyroscope": {
+              "$ref": "#/$defs/motionSensor"
+            },
+            "accelerometer": {
+              "$ref": "#/$defs/motionSensor"
+            },
+            "magnetometer": {
+              "$ref": "#/$defs/motionSensor"
+            }
+          }
+        },
+        "sync": {
+          "description": "How the sensor samples were placed on the file's timeline: measured from the frames on the sensor clock, estimated because the camera clock is not the sensor clock, or estimated because the recorder's frame timing was not measured.",
+          "enum": [
+            "measured",
+            "estimated-clock",
+            "estimated-frames"
+          ]
+        },
+        "rateScale": {
+          "description": "Real (sensor) time per file time, the median over the take's frames: 1.0 for a real-time take, below 1 for slow motion played at the project rate.",
+          "type": "number"
+        },
+        "largestGyroGapUs": {
+          "description": "The largest interval between consecutive gyroscope samples, in microseconds of the sensor clock.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "camm": {
+          "description": "The CAMM metadata track appended to the MP4.",
+          "type": "object",
+          "required": [
+            "present",
+            "packets",
+            "binUs"
+          ],
+          "properties": {
+            "present": {
+              "type": "boolean"
+            },
+            "packets": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "binUs": {
+              "description": "The interval the CAMM series was resampled to; null when no series was built.",
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          }
+        },
+        "log": {
+          "description": "The file name of the Gyroflow log (.gcsv) published beside the video; null when it was not attached.",
+          "type": [
+            "string",
+            "null"
           ]
         }
       }

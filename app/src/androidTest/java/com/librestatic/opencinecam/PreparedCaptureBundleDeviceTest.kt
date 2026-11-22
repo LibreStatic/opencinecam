@@ -187,6 +187,7 @@ class PreparedCaptureBundleDeviceTest {
                             CaptureArtifactRole.AUDIO -> if(format=="FLAC") ".flac" else ".wav"
                             CaptureArtifactRole.AUDIO_METADATA -> ".audio.json"
                             CaptureArtifactRole.CLIP_METADATA -> ".clip.json"
+                            CaptureArtifactRole.MOTION_LOG -> ".gcsv"
                         }
                         assertEquals(stem+suffix,artifact.displayName)
                     }

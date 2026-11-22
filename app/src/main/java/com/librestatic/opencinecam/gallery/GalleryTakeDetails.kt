@@ -28,7 +28,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
 /** The inspector's sections, in display order. */
-internal enum class DetailGroupKind { FILE, VIDEO, COLOUR, AUDIO, CAMERA, RAW, RECORDING }
+internal enum class DetailGroupKind { FILE, VIDEO, COLOUR, AUDIO, CAMERA, MOTION, RAW, RECORDING }
 
 /** One label and its pre-formatted value; [key] is stable per take ("path-0", "iso"), [copyable] offers a copy action. */
 internal data class DetailRow(@StringRes val label: Int, val value: String, val key: String, val copyable: Boolean = false)
@@ -53,6 +53,7 @@ internal val TakeDetailsLoad?.facts: GalleryFacts? get() = (this as? TakeDetails
     DetailGroupKind.COLOUR -> R.string.media_detail_group_colour
     DetailGroupKind.AUDIO -> R.string.media_detail_group_audio
     DetailGroupKind.CAMERA -> R.string.media_detail_group_camera
+    DetailGroupKind.MOTION -> R.string.media_detail_group_motion
     DetailGroupKind.RAW -> R.string.media_detail_group_raw
     DetailGroupKind.RECORDING -> R.string.media_detail_group_recording
 }
@@ -218,7 +219,15 @@ internal data class ClipSidecarFacts(val createdAt: String? = null, val takeStat
     val colorGamut: String? = null, val colorProfile: String? = null, val audioStorage: String? = null, val audioContainer: String? = null,
     val audioSampleRateHz: Int? = null, val audioBitDepth: Int? = null, val deviceProfileId: String? = null,
     val deviceProfileStatus: String? = null, val deviceProfileBuildCheck: String? = null, val appliedQuirks: List<String> = emptyList(),
-    val durationMs: Long? = null, val encodedFrames: Long? = null, val camera: ClipCameraFacts? = null)
+    val durationMs: Long? = null, val encodedFrames: Long? = null, val camera: ClipCameraFacts? = null,
+    val motion: ClipMotionFacts? = null)
+
+/** One sensor of the sidecar's `motion` block. */
+internal data class ClipMotionSensorFacts(val present: Boolean, val measuredHz: Double?, val samples: Long?)
+
+/** The sidecar's `motion` block (schema 1.2.0); absent from older sidecars and takes without motion data. */
+internal data class ClipMotionFacts(val gyroscope: ClipMotionSensorFacts?, val accelerometer: ClipMotionSensorFacts?,
+    val magnetometer: ClipMotionSensorFacts?, val sync: String?, val cammPresent: Boolean?, val cammPackets: Long?, val log: String?)
 
 private fun JsonElement?.known(): JsonElement? = when {
     this == null || this is JsonNull -> null
@@ -260,6 +269,13 @@ internal fun parseClipSidecarFacts(text: String): ClipSidecarFacts? = runCatchin
             processing?.str("noiseReduction"), processing?.str("edge"), processing?.str("toneMap"))
     }?.takeIf { it != ClipCameraFacts() }
     val media = document.media
+    val motion = document.motion?.let { m ->
+        val sensors = m.obj("sensors")
+        fun sensor(key: String) = sensors?.obj(key)?.let { s -> ClipMotionSensorFacts(s.bool("present") == true, s.num("measuredHz"), s.long("samples")) }
+        val camm = m.obj("camm")
+        ClipMotionFacts(sensor("gyroscope"), sensor("accelerometer"), sensor("magnetometer"), m.str("sync"),
+            camm?.bool("present"), camm?.long("packets"), m.str("log"))
+    }
     ClipSidecarFacts(
         createdAt = document.createdAt.takeIf { it.isNotBlank() }, takeStatus = document.takeStatus,
         failureReasons = document.failureReasons.orEmpty(),
@@ -280,7 +296,7 @@ internal fun parseClipSidecarFacts(text: String): ClipSidecarFacts? = runCatchin
         audioSampleRateHz = graphAudio?.int("sampleRateHz"), audioBitDepth = graphAudio?.int("bitDepth"),
         deviceProfileId = profile?.str("profileId"), deviceProfileStatus = profile?.str("status"),
         deviceProfileBuildCheck = profile?.str("buildCheck"), appliedQuirks = profile?.strings("appliedQuirkIds").orEmpty(),
-        durationMs = media?.long("durationMs"), encodedFrames = media?.long("encodedFrames"), camera = camera,
+        durationMs = media?.long("durationMs"), encodedFrames = media?.long("encodedFrames"), camera = camera, motion = motion,
     )
 }.getOrNull()
 
@@ -603,4 +619,32 @@ internal fun DetailRowsBuilder.addClipRows(clip: ClipSidecarFacts, text: DetailT
     add(recording, R.string.media_detail_device_profile,
         listOfNotNull(clip.deviceProfileId, clip.deviceProfileBuildCheck ?: clip.deviceProfileStatus).joinToString(" · "), "device-profile")
     if (clip.appliedQuirks.isNotEmpty()) add(recording, R.string.media_detail_quirks, clip.appliedQuirks.joinToString(", "), "quirks")
+
+    clip.motion?.let { addMotionRows(it, text) }
+}
+
+/** "498 Hz"; below 10 Hz with one decimal. */
+internal fun sensorRateLabel(hz: Double): String = "${decimalLabel(hz, if (hz < 10) 1 else 0)} Hz"
+
+private fun DetailRowsBuilder.addMotionRows(motion: ClipMotionFacts, text: DetailText) {
+    val g = DetailGroupKind.MOTION
+    fun sensor(@StringRes label: Int, sensor: ClipMotionSensorFacts?, key: String) {
+        if (sensor?.present != true) return
+        add(g, label, sensor.measuredHz?.takeIf { it > 0 }?.let(::sensorRateLabel) ?: text.s(R.string.media_detail_motion_no_samples), key)
+    }
+    sensor(R.string.media_detail_gyroscope, motion.gyroscope, "gyroscope")
+    sensor(R.string.media_detail_accelerometer, motion.accelerometer, "accelerometer")
+    sensor(R.string.media_detail_magnetometer, motion.magnetometer, "magnetometer")
+    when (motion.sync) {
+        "measured" -> R.string.media_detail_motion_sync_measured
+        "estimated-clock" -> R.string.media_detail_motion_sync_clock
+        "estimated-frames" -> R.string.media_detail_motion_sync_frames
+        else -> null
+    }?.let { add(g, R.string.media_detail_motion_sync, text.s(it), "sync") }
+    motion.cammPresent?.let { present ->
+        val packets = motion.cammPackets?.takeIf { present && it > 0 }
+        add(g, R.string.media_detail_motion_track, if (packets != null) text.s(R.string.media_detail_motion_track_packets, packets)
+            else text.yesNo(present), "camm")
+    }
+    add(g, R.string.media_detail_motion_log, motion.log, "gyroflow-log", copyable = true)
 }

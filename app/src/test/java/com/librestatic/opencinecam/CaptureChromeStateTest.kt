@@ -21,6 +21,10 @@ class CaptureChromeStateTest {
     @Test fun recordReadsRecOnlyOnceTheServiceConfirmsRecording() {
         assertEquals(RecordButtonState.READY, recordButtonState(video(CameraUiPhase.PREVIEWING)))
         assertEquals(RecordButtonState.PREPARING, recordButtonState(video(CameraUiPhase.CAPTURING)))
+        val pause = com.librestatic.opencinecam.camera.TimelapsePauseStatus(1, paused = true, finished = false, observedAtMs = 0,
+            activeElapsedMs = 0, pausedElapsedMs = 0, events = emptyList())
+        assertEquals(RecordButtonState.PAUSED, recordButtonState(video(CameraUiPhase.RECORDING).copy(recordingPauseStatus = pause)))
+        assertEquals(RecordButtonState.RECORDING, recordButtonState(video(CameraUiPhase.RECORDING).copy(recordingPauseStatus = pause.copy(paused = false))))
         assertEquals(RecordButtonState.RECORDING, recordButtonState(video(CameraUiPhase.RECORDING)))
     }
 
@@ -67,5 +71,18 @@ class CaptureChromeStateTest {
         listOf(ModeGateState.UNSUPPORTED, ModeGateState.FAILED, null).forEach {
             assertFalse(CameraUiState.isModeSelectable(it))
         }
+    }
+
+    @Test fun theOisNoticeNeedsMotionDataAVideoModeAndTheLensStabilising() {
+        val on = com.librestatic.opencinecam.settings.CameraSettings(gyroflowLogEnabled = true)
+        val video = CameraUiState(selectedMode = CaptureMode.VIDEO, reportedOpticalStabilization = 1)
+        assertEquals(true, com.librestatic.opencinecam.capture.motionOisNoticeShown(video, on))
+        assertEquals(false, com.librestatic.opencinecam.capture.motionOisNoticeShown(video, on.copy(gyroflowLogEnabled = false)))
+        assertEquals(false, com.librestatic.opencinecam.capture.motionOisNoticeShown(video.copy(reportedOpticalStabilization = 0), on))
+        assertEquals(false, com.librestatic.opencinecam.capture.motionOisNoticeShown(video.copy(reportedOpticalStabilization = null), on))
+        assertEquals(false, com.librestatic.opencinecam.capture.motionOisNoticeShown(video.copy(selectedMode = CaptureMode.PHOTO), on))
+        assertEquals(true, com.librestatic.opencinecam.settings.motionOisWarningShown(on))
+        assertEquals(false, com.librestatic.opencinecam.settings.motionOisWarningShown(on.copy(
+            imageProcessing = on.imageProcessing.copy(stabilization = com.librestatic.opencinecam.camera.StabilizationMode.OFF))))
     }
 }

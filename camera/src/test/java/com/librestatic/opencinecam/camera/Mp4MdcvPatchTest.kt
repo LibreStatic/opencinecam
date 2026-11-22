@@ -29,11 +29,18 @@ class Mp4MdcvPatchTest {
         .putShort(8500.toShort()).putShort(39850.toShort()).putShort(6550.toShort()).putShort(2300.toShort()).putShort(35400.toShort()).putShort(14600.toShort())
         .putShort(15635.toShort()).putShort(16450.toShort()).putInt(1000 * 10_000).putInt(minimum).array())
 
-    private fun moov(entryType: String = "hvc1", minimum: Int? = 50 * 10_000): ByteArray {
+    /** A CAMM motion metadata track, as the take's finalisation appends one. */
+    private val cammTrak = box("trak", box("tkhd", body = ByteArray(84)), box("mdia", box("mdhd", body = ByteArray(24)),
+        box("hdlr", body = ByteArray(8) + "meta".toByteArray(Charsets.US_ASCII) + ByteArray(12)),
+        box("minf", box("nmhd", body = ByteArray(4)), box("stbl",
+            box("stsd", box("camm", body = byteArrayOf(0, 0, 0, 0, 0, 0, 0, 1)), body = ByteBuffer.allocate(8).putInt(0).putInt(1).array()),
+            box("stts", body = ByteArray(8))))))
+
+    private fun moov(entryType: String = "hvc1", minimum: Int? = 50 * 10_000, leadingTrak: ByteArray? = null): ByteArray {
         val entryChildren = listOfNotNull(box("hvcC", body = ByteArray(23)), minimum?.let(::mdcv), box("clli", body = ByteArray(4)))
         val entry = box(entryType, *entryChildren.toTypedArray(), body = ByteArray(78))
         val stsd = box("stsd", entry, body = ByteBuffer.allocate(8).putInt(0).putInt(1).array())
-        return box("moov", box("mvhd", body = ByteArray(100)),
+        return box("moov", box("mvhd", body = ByteArray(100)), leadingTrak ?: ByteArray(0),
             box("trak", box("tkhd", body = ByteArray(84)), box("mdia", box("mdhd", body = ByteArray(24)),
                 box("minf", box("stbl", stsd, box("stts", body = ByteArray(8)))))))
     }
@@ -83,5 +90,11 @@ class Mp4MdcvPatchTest {
         assertEquals(Mp4MdcvPatch.Outcome.NOT_FOUND, Mp4MdcvPatch.patch(MemoryIo(file(ftyp, mdat, moov(minimum = null)))))
         assertEquals(Mp4MdcvPatch.Outcome.NOT_FOUND, Mp4MdcvPatch.patch(MemoryIo(file(ftyp, mdat))))
         assertEquals(Mp4MdcvPatch.Outcome.NOT_FOUND, Mp4MdcvPatch.patch(MemoryIo(file(ftyp, box("moov", box("trak"))).copyOf(20))))
+    }
+
+    @Test fun aCammTrackBeforeTheVideoIsWalkedPast() {
+        val bytes = file(ftyp, mdat, moov(leadingTrak = cammTrak))
+        assertEquals(Mp4MdcvPatch.Outcome.PATCHED, Mp4MdcvPatch.patch(MemoryIo(bytes)))
+        assertEquals(50, storedMinimum(bytes))
     }
 }

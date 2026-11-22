@@ -35,7 +35,8 @@ Each chunk is `header || payload`; payload length is bounded to 64 MiB.
 Time is `timestamp_ticks * numerator / denominator` seconds. Both time-base
 values are positive. Core IDs are metadata `0x0001`, RAW frame `0x0010`, video
 frame `0x0011`, PCM16 audio `0x0020`, periodic index `0x0030`, final index
-`0x0031`, frame metadata `0x0040`, and end `0x00ff`. Unknown IDs are preserved
+`0x0031`, frame metadata `0x0040`, IMU samples `0x0050` (see the section at
+the end), and end `0x00ff`. Unknown IDs are preserved
 for forward readers. Sequence numbers rise strictly through the file (the
 streaming writer starts at 0); the CRC32C covers the whole payload, including a
 RAW frame's 64-byte frame header.
@@ -337,3 +338,57 @@ This section extends the static metadata keys above.
   - `continuationReason`: `drive-disconnected` or `drive-write-failed`.
 - The drive take is not changed. Readers that do not know the keys ignore
   them, as with any unknown key.
+
+## IMU samples (added 2026-11-21)
+
+This section adds a chunk and static metadata keys. It is additive: the
+container version stays 1, and readers that do not know the chunk skip it as
+any unknown id.
+
+Why: a CinemaDNG sequence has no place for motion data, so Gyroflow cannot
+stabilise it in post the way it does an MP4 with a `.gcsv` log beside it. A
+RAW video take records the phone's gyroscope (and accelerometer and
+magnetometer) samples in the take itself, and `desktop-tools/ocraw_to_dng.py`
+writes them as a Gyroflow `.gcsv` next to the DNGs.
+
+`IMU_SAMPLES` (`0x0050`), optional and skippable. The chunk timestamp is the
+time of its first sample, in the RAW frames' time base. One chunk holds about
+one second of samples of every sensor; within a chunk each sensor's samples
+are in time order. The payload is little-endian, with no padding:
+
+| Offset | Size | Field |
+| ---: | ---: | --- |
+| 0 | 1 | `payloadVersion` (`1`) |
+| 1 | 1 | Reserved: writers write 0, readers ignore it |
+| 2 | 2 | Reserved: writers write 0, readers ignore it |
+| 4 | 4 | `recordCount` |
+| 8 | 21 × `recordCount` | records |
+
+Each record is `u8 kind`, `s64 timeNs`, then `f32 x`, `f32 y`, `f32 z`. Kinds:
+`1` gyroscope (rad/s), `2` accelerometer (m/s²), `3` magnetometer (µT). The
+values are the raw Android `SensorEvent` values, in the device frame (x right,
+y up, z out of the screen), as the sensor delivered them.
+`timeNs` is on the clock of the RAW frame ticks (`SENSOR_TIMESTAMP`): the
+writer applies any clock offset before writing.
+
+Readers skip records of an unknown kind, and ignore the whole chunk when its
+`payloadVersion` is not 1 or its length is not `8 + 21 × recordCount`. The
+codec is `OcrawImuSamples` in
+`media/src/main/java/com/librestatic/opencinecam/media/ocraw/OcrawImuSamples.kt`;
+`OcrawStreamReader.indexFrames` lists the chunks in `OcrawFrameIndex.imu` and
+`readImu` decodes one. Recovery, indexes and verification treat the chunk as
+any other.
+
+Static metadata keys, all optional text values (a closing `METADATA` chunk may
+add them; a later value wins). The constants are in `OcrawImuMetadata`:
+
+| Key | Value |
+| --- | --- |
+| `imuOrientation` | Gyroflow orientation string of the take: three letters, each of x, y and z once, uppercase when the device axis points along Gyroflow's (image right, image down, forward through the lens) and lowercase when it points against it, e.g. `yxz`. It describes the stored frames, as the take's `orientation` key leaves them |
+| `imuReadoutDirection` | Gyroflow `frame_readout_direction` of the stored frames: `0` top to bottom, `1` bottom to top, `2` left to right, `3` right to left |
+| `rollingShutterSkewNs` | `SENSOR_ROLLING_SHUTTER_SKEW`, integer ns; absent when the camera does not report it |
+| `imuClock` | `shared` when the IMU and camera timestamps were measured to share one clock, `estimated` when the writer applied an estimated offset; a reader treats an absent key as `estimated` |
+| `takeStartUnixMs` | wall-clock time of the take start, integer milliseconds since the Unix epoch |
+
+A take without motion data has none of these keys and no `IMU_SAMPLES`
+chunks.

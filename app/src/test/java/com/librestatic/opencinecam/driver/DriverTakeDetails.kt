@@ -99,7 +99,7 @@ internal fun rawTakeInputs(take: LocalMediaTake, compressed: Boolean): TakeDetai
 }
 
 private val LogClipJson = """
-    {"schemaVersion":"1.0.0","recordingId":"7f3c9a2e-41d8-4b6f-9e0a-2c5d8b1f6a43","createdAt":"2026-09-30T18:40:12Z",
+    {"schemaVersion":"1.2.0","recordingId":"7f3c9a2e-41d8-4b6f-9e0a-2c5d8b1f6a43","createdAt":"2026-09-30T18:40:12Z",
      "intent":{"recordingPolicy":{"knowledge":"known","value":"STRICT"},"captureMode":{"knowledge":"known","value":"LOG"},
        "requestedSize":{"knowledge":"known","value":{"width":3840,"height":2160}},"requestedFps":{"knowledge":"known","value":24},
        "projectRate":{"knowledge":"known","value":"24"},
@@ -121,5 +121,11 @@ private val LogClipJson = """
          "whiteBalance":{"mode":"KELVIN","kelvin":5600,"reportedCctStart":5400,"reportedCctEnd":5450,"tint":0},
          "focus":{"afMode":"CONTINUOUS_VIDEO","distanceDiopters":0.5},"zoom":{"start":1.0,"end":2.0},
          "stabilization":{"ois":"ON","eis":"OFF"},"processing":{"noiseReduction":"FAST","edge":"FAST","toneMap":"FAST"}}}},
-     "events":[],"validation":[],"media":{"displayName":"OCC_TAKE_A001_S12_T03.mp4","durationMs":83000,"encodedFrames":1992}}
+     "events":[],"validation":[],"media":{"displayName":"OCC_TAKE_A001_S12_T03.mp4","durationMs":83000,"encodedFrames":1992,
+       "sidecars":["OCC_TAKE_A001_S12_T03.oclog.json","OCC_TAKE_A001_S12_T03.gcsv"]},
+     "motion":{"sensors":{"gyroscope":{"present":true,"nominalMaxHz":500.0,"measuredHz":498.2,"samples":41351},
+         "accelerometer":{"present":true,"nominalMaxHz":500.0,"measuredHz":498.1,"samples":41342},
+         "magnetometer":{"present":true,"nominalMaxHz":100.0,"measuredHz":99.8,"samples":8283}},
+       "sync":"measured","rateScale":1.0,"largestGyroGapUs":4180,"camm":{"present":true,"packets":41500,"binUs":2000},
+       "log":"OCC_TAKE_A001_S12_T03.gcsv"}}
 """.trimIndent()

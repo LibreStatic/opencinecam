@@ -41,6 +41,11 @@ class GalleryTakeDetailsTest {
             R.string.media_detail_audio_separate_wav -> "Separate file (WAV)"
             R.string.recording_policy_adaptive -> "Adaptive"
             R.string.video_mode -> "Video"
+            R.string.media_detail_motion_sync_measured -> "Measured"
+            R.string.media_detail_motion_sync_clock -> "Estimated: camera clock"
+            R.string.media_detail_motion_sync_frames -> "Estimated: recorder timing"
+            R.string.media_detail_motion_track_packets -> "Yes, ${args[0]} packets"
+            R.string.media_detail_motion_no_samples -> "No samples"
             else -> "#$id"
         }
     }, { "$it B" }, { "t$it" })
@@ -313,7 +318,53 @@ class GalleryTakeDetailsTest {
         assertEquals(store, store.mergedWith(null))
     }
 
-    private fun clipJson(camera: String?, fps: Int = 30, requestedFps: Int = 30, incomplete: Boolean = false): String = """
+    private fun motionJson(sync: String, camm: Boolean = true, log: String? = "A001.gcsv", magnetometer: Boolean = true) = """
+        {"sensors":{"gyroscope":{"present":true,"nominalMaxHz":500.0,"measuredHz":498.2,"samples":4982},
+          "accelerometer":{"present":true,"nominalMaxHz":500.0,"measuredHz":497.6,"samples":4976},
+          "magnetometer":{"present":$magnetometer,"nominalMaxHz":${if (magnetometer) "100.0" else "null"},
+            "measuredHz":${if (magnetometer) "99.8" else "null"},"samples":${if (magnetometer) 998 else 0}}},
+         "sync":"$sync","rateScale":1.0,"largestGyroGapUs":4180,
+         "camm":{"present":$camm,"packets":${if (camm) 5000 else 0},"binUs":${if (camm) 2000 else "null"}},
+         "log":${log?.let { "\"$it\"" } ?: "null"}}
+    """.trimIndent()
+
+    private fun motionDetails(motion: String?) = buildTakeDetails(TakeDetailInputs(LocalMediaKind.VIDEO,
+        clip = known(parseClipSidecarFacts(clipJson(camera = null, motion = motion)))), text)
+
+    @Test fun motionGroupShowsSensorsSyncTrackAndLog() {
+        val details = motionDetails(motionJson("measured"))
+        val motion = details.group(DetailGroupKind.MOTION)!!.rows
+        assertEquals(listOf("gyroscope", "accelerometer", "magnetometer", "sync", "camm", "gyroflow-log"), motion.map { it.key })
+        assertEquals("498 Hz", details.value("gyroscope"))
+        assertEquals("498 Hz", details.value("accelerometer"))
+        assertEquals("100 Hz", details.value("magnetometer"))
+        assertEquals("Measured", details.value("sync"))
+        assertEquals("Yes, 5000 packets", details.value("camm"))
+        assertEquals("A001.gcsv", details.value("gyroflow-log"))
+        assertTrue(motion.first { it.key == "gyroflow-log" }.copyable)
+        // After the camera, before the recording.
+        val kinds = details.groups.map { it.kind }
+        assertTrue(kinds.indexOf(DetailGroupKind.MOTION) < kinds.indexOf(DetailGroupKind.RECORDING))
+    }
+
+    @Test fun motionGroupNamesEachSyncAndLeavesOutWhatIsMissing() {
+        assertEquals("Estimated: camera clock", motionDetails(motionJson("estimated-clock")).value("sync"))
+        assertEquals("Estimated: recorder timing", motionDetails(motionJson("estimated-frames")).value("sync"))
+        assertNull(motionDetails(motionJson("something-new")).value("sync"))
+        val bare = motionDetails(motionJson("measured", camm = false, log = null, magnetometer = false))
+        assertEquals("No", bare.value("camm"))
+        assertNull(bare.value("gyroflow-log"))
+        assertNull(bare.value("magnetometer"))
+        assertEquals("498 Hz", bare.value("gyroscope"))
+    }
+
+    @Test fun noMotionGroupWithoutTheBlock() {
+        val details = motionDetails(null)
+        assertNull(details.group(DetailGroupKind.MOTION))
+        assertNull(known(parseClipSidecarFacts(clipJson(camera = null))).motion)
+    }
+
+    private fun clipJson(camera: String?, fps: Int = 30, requestedFps: Int = 30, incomplete: Boolean = false, motion: String? = null): String = """
         {"schemaVersion":"1.0.0","recordingId":"r1","createdAt":"2025-11-08T11:06:40Z",
          "intent":{"recordingPolicy":{"knowledge":"known","value":"ADAPTIVE"},"captureMode":{"knowledge":"known","value":"VIDEO"},
            "requestedSize":{"knowledge":"known","value":{"width":3840,"height":2160}},"requestedFps":{"knowledge":"known","value":$requestedFps},
@@ -331,6 +382,7 @@ class GalleryTakeDetailsTest {
            "deviceProfile":{"knowledge":"known","value":{"profileId":"blanc","status":"ACTIVE","appliedQuirkIds":[],"buildCheck":"VERIFIED"}}
            ${if (camera != null) ",\"camera\":$camera" else ""}},
          "events":[],"validation":[],"media":{"displayName":"A001.mp4","durationMs":10000,"encodedFrames":299}
-         ${if (incomplete) ",\"takeStatus\":\"incomplete\",\"failureReasons\":[\"native-not-retired\"]" else ""}}
+         ${if (incomplete) ",\"takeStatus\":\"incomplete\",\"failureReasons\":[\"native-not-retired\"]" else ""}
+         ${if (motion != null) ",\"motion\":$motion" else ""}}
     """.trimIndent()
 }

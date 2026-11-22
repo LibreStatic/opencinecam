@@ -606,6 +606,7 @@
     <string name="webdav_transfer_audio">Audio</string>
     <string name="webdav_transfer_audio_metadata">Métadonnées audio</string>
     <string name="webdav_transfer_clip_metadata">Sidecar du clip</string>
+    <string name="webdav_transfer_motion_log">Journal Gyroflow</string>
     <string name="webdav_transfer_preparing_capture">Arrêt des transferts avant l\'enregistrement…</string>
     <string name="webdav_transfer_prepare_failed">Le nettoyage des transferts est toujours en attente. L\'enregistrement n\'a pas démarré.</string>
     <string name="webdav_transfer_cancel_capture">Annuler la préparation de l\'enregistrement</string>
@@ -883,9 +884,11 @@
     <string name="lut_disable_title">Désactiver les LUT</string>
     <string name="permission_open_settings">Ouvrir les paramètres</string>
     <string name="permission_blocked_explanation">Android n\'affiche plus la demande d\'autorisation. Autorisez-la dans les paramètres système de l\'app.</string>
-    <string name="gyroflow_log_title">Données gyroscopiques pour Gyroflow</string>
-    <string name="gyroflow_log_enabled">Enregistrer les données gyroscopiques pour Gyroflow</string>
-    <string name="gyroflow_log_help">Enregistre le mouvement du téléphone (gyroscope et accéléromètre) à côté de chaque prise vidéo, LOG ou HLG dans un fichier .gcsv du même nom, pour la stabiliser dans Gyroflow. Les données de mouvement ne sont enregistrées que lorsque cette option est activée et restent dans ce fichier sur votre appareil. Non utilisé pour le ralenti ni l\'accéléré. Désactivez la stabilisation propre à l\'appareil photo pour un meilleur résultat.</string>
+    <string name="gyroflow_log_title">Données de mouvement</string>
+    <string name="gyroflow_log_enabled">Enregistrer les données de mouvement</string>
+    <string name="motion_ois_notice">OIS actif : mouvement peut-être mal enregistré</string>
+    <string name="gyroflow_log_ois_warning">La stabilisation optique (OIS) est peut-être active. L’objectif bouge alors de lui-même : les données du gyroscope ne correspondent plus à l’image et la prise se stabilise mal ensuite. Réglez la stabilisation sur Désactivée pour les prises à stabiliser.</string>
+    <string name="gyroflow_log_help">Enregistre le mouvement du téléphone (gyroscope, accéléromètre et magnétomètre) pendant chaque prise vidéo, y compris en LOG, HLG, ralenti, accéléré et vidéo RAW, pour la stabiliser ensuite. Pour une prise MP4, il est enregistré à côté de la prise dans un fichier .gcsv du même nom, que Gyroflow ouvre de lui-même, et dans le MP4 sous forme de piste de mouvement de caméra. La vidéo RAW le conserve dans la prise, et l\'export CinemaDNG écrit le .gcsv à côté des images. Les données de mouvement ne sont enregistrées que lorsque cette option est activée et restent dans ces fichiers sur votre appareil. Désactivez la stabilisation propre à l\'appareil photo pour un meilleur résultat.</string>
     <string name="night_photo_title">Photo de nuit</string>
     <string name="night_photo_help">Prend les photos du mode PHOTO via l\'extension nuit de l\'appareil, qui fusionne plusieurs images pour la faible luminosité. Gardez l\'appareil immobile jusqu\'à la fin de l\'enregistrement. Quand Nuit est activé, l\'exposition, la balance des blancs et la mise au point manuelles, le RAW, le HEIC, le flash, le bracketing et les scopes sont indisponibles.</string>
     <string name="night_photo_unavailable">L\'extension nuit n\'a pas pu démarrer sur cet appareil ; la photo normale est active.</string>
@@ -1047,6 +1050,16 @@
     <string name="caps_feature_apv">APV (Advanced Professional Video)</string>
     <string name="caps_usage_apv">Non pris en charge : l\'app n\'a pas de chaîne d\'enregistrement APV. Indique ce que propose ce téléphone et pourquoi il n\'est pas utilisé.</string>
     <string name="caps_warnings">Avertissements de capture</string>
+    <string name="caps_section_motion">Capteurs de mouvement</string>
+    <string name="caps_motion_summary">%1$d sur %2$d présents</string>
+    <string name="caps_motion_gyroscope">Gyroscope</string>
+    <string name="caps_motion_accelerometer">Accéléromètre</string>
+    <string name="caps_motion_magnetometer">Magnétomètre</string>
+    <string name="caps_motion_not_available">Non disponible</string>
+    <string name="caps_motion_rate">Jusqu’à %1$s Hz</string>
+    <string name="caps_motion_rate_unknown">Fréquence non déclarée</string>
+    <string name="caps_motion_resolution">Résolution %1$s</string>
+    <string name="caps_motion_capped">Limité à %1$s Hz par Android</string>
     <!-- Lens calibration (PLAN-070) -->
     <string name="lens_cal_title">Calibration des objectifs</string>
     <string name="lens_cal_settings_summary">Harmonise la couleur et le cadrage entre les objectifs lors du zoom</string>

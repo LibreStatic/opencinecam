@@ -78,6 +78,40 @@ class CapabilityReportTest {
         assertTrue(full.toString().contains("secret"))
     }
 
+    private val motion = listOf(
+        MotionSensorFact(MotionSensorKind.GYROSCOPE, true, "LSM6DSO Gyroscope", "STMicro", 2000, 500.0, 0.0012f, 34.9f, 3000, false),
+        MotionSensorFact(MotionSensorKind.ACCELEROMETER, true, "LSM6DSO Accelerometer", "STMicro", 2000, 500.0, 0.0024f, 78.4f, 3000, false),
+        MotionSensorFact.absent(MotionSensorKind.MAGNETOMETER),
+    )
+
+    @Test fun motionSensorsSitInTheDeviceBlockOnlyOnceRead() {
+        assertFalse(report().device.containsKey("motionSensors"))
+        val document = buildCapabilityReport(facts, inventory(), emptyList(), motionSensors = motion)
+        val sensors = document.device["motionSensors"]!!.jsonObject
+        assertEquals(listOf("gyroscope", "accelerometer", "magnetometer"), sensors.keys.toList())
+        assertEquals("500.0", (sensors["gyroscope"]!!.jsonObject["maxRateHz"] as JsonPrimitive).content)
+        assertEquals("false", (sensors["magnetometer"]!!.jsonObject["present"] as JsonPrimitive).content)
+    }
+
+    @Test fun redactedReportKeepsTheMotionSensorsLikeTheCodecNames() {
+        val redacted = JsonReportRedactor.redact(capabilityReportJson(buildCapabilityReport(facts, inventory(), emptyList(), motionSensors = motion)))
+        // The block is additive: a redacted report with it still decodes as the schema document.
+        val document = Json.decodeFromJsonElement(CapabilityReportDocument.serializer(), redacted)
+        val gyro = document.device["motionSensors"]!!.jsonObject["gyroscope"]!!.jsonObject
+        assertEquals("LSM6DSO Gyroscope", (gyro["name"] as JsonPrimitive).content)
+        assertEquals("STMicro", (gyro["vendor"] as JsonPrimitive).content)
+        assertEquals("3000", (gyro["fifoMaxEventCount"] as JsonPrimitive).content)
+        assertEquals(JsonReportRedactor.REDACTED, (document.device["model"] as JsonPrimitive).content)
+    }
+
+    @Test fun plainTextCopyListsTheMotionSensorsAfterTheDevice() {
+        val text = capabilityReportText("Acme Phone X", inventory(), emptyList(), { "L$it" }, motionSensors = motion)
+        assertTrue(text.contains("gyroscope: 500 Hz"))
+        assertTrue(text.contains("magnetometer: L${com.librestatic.opencinecam.R.string.caps_motion_not_available}"))
+        assertTrue(text.indexOf("gyroscope") < text.indexOf("== camera 0"))
+        assertFalse(capabilityReportText("Acme Phone X", inventory(), emptyList(), { "L$it" }).contains("gyroscope"))
+    }
+
     @Test fun fullExportIsGatedOnConsentAndRedactedIsTheDefault() {
         assertFalse(canExport(ReportExportMode.FULL, fullConsent = false))
         assertTrue(canExport(ReportExportMode.REDACTED, fullConsent = false))

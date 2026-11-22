@@ -12,7 +12,9 @@ import android.os.storage.StorageManager
 import android.provider.DocumentsContract
 import android.provider.MediaStore
 import androidx.core.database.sqlite.transaction
+import com.librestatic.opencinecam.media.storage.ClipRecoveryDecision
 import com.librestatic.opencinecam.media.storage.ClipRows
+import com.librestatic.opencinecam.media.storage.decideClipRecovery
 import com.librestatic.opencinecam.media.storage.ContentResolverClipRows
 import com.librestatic.opencinecam.rawvideo.RawTakeFileDecision
 import com.librestatic.opencinecam.rawvideo.recoverRawTakeFile
@@ -95,6 +97,10 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
     private val sidecarBackups = FileRecoveredSidecarBackups(File(this.context.noBackupFilesDir, "recovered-sidecars"))
     /** PLAN-072: the side index of a drive take, kept for recovery's moov rebuild until the entry is resolved. */
     private val takeIndexes = TakeIndexFiles(this.context)
+    /** The motion spools of interrupted video takes: rendered and attached to the take recovery keeps, deleted once it is resolved. */
+    private val motionLogs = MotionRecoveryFiles(this.context)
+    /** Where an interrupted phone take's rows are recovered ([decide]); tests replace it, Robolectric having no MediaStore volume. */
+    internal var phoneRows: RecordingRowStore = mediaStore
     /** Repairs a drive RAW take's `.ocraw` in place and says whether to keep it ([finishDriveRawTake]); tests replace it. */
     internal var repairRaw: (Uri, RawRepairScan) -> RawTakeFileDecision = { uri, scan ->
         // The repair scans and checks the whole take: registered, so a drive that leaves ends it with an I/O error and
@@ -140,7 +146,9 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
     /**
      * The recovery pass runs before the lock is taken for the new take. A take starts on the main thread, where a drive
      * that stopped answering would hold up even a phone take, so this pass resolves phone takes only: an interrupted
-     * drive take waits for a pass off it ([recover], at a mount, at service start and before a RAW take).
+     * drive take waits for a pass off it ([recover], at a mount, at service start and before a RAW take). A phone take
+     * whose motion spool was not rendered yet waits too, for the pass [onMotionRenderDue] queues: resolved here, it would
+     * lose its Gyroflow log.
      */
     internal fun start(destination: RecordingDestination = RecordingDestination.Phone): RecordingRecoveryGroup {
         recover(driveTakes = false)
@@ -258,16 +266,46 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
      *
      * No RAW take is scanned while a take records to a drive, and a take that starts on one cancels a scan in flight: the
      * entry is deferred, and [onRawRepairDue] is called when the last such take ends.
+     *
+     * Interrupted takes' motion spools are rendered first ([renderMotionLogs]), so a phone take this pass resolves keeps
+     * its log when it has one; a take released after that render is rendered and resolved in the same pass.
      */
     fun recover(): RecordingRecoveryReport = recover(driveTakes = true)
 
-    /** [recover]; without [driveTakes] every drive entry is deferred unread, and no drive is asked anything. */
+    /**
+     * [recover]; without [driveTakes] (the take-start pass, on the main thread) every drive entry is deferred unread, no
+     * drive is asked anything, nothing is rendered, and a phone entry whose spool awaits its render is deferred, with
+     * [onMotionRenderDue] called to queue the pass that renders it.
+     */
     private fun recover(driveTakes: Boolean): RecordingRecoveryReport {
         val claims = mutableListOf<JournalRow>()
         val released = HashSet<String>()
         val repairs = mutableListOf<RawRepair>()
         try {
-            val decided = synchronized(recordingRecoveryLock) { open().use { db -> decide(db, claims.takeIf { driveTakes }).also { sweepTakeIndexes(db) } } }
+            // Off the take-start pass, which runs on the main thread: a long take's spool takes a while to render.
+            if (driveTakes) renderMotionLogs()
+            // After that render a full pass finds a spool waiting only for a take released after it listed the journal.
+            val awaiting = mutableListOf<String>()
+            var decided = synchronized(recordingRecoveryLock) {
+                open().use { db -> decide(db, claims.takeIf { driveTakes }, motionLogs::awaitsRender, awaiting).also { sweepTakeIndexes(db) } }
+            }
+            if (awaiting.isNotEmpty() && driveTakes) {
+                // Rendered with the lock released, then resolved, log or not: a full pass never leaves them waiting.
+                awaiting.forEach { motionLogs.render(it) }
+                val late = try {
+                    synchronized(recordingRecoveryLock) { open().use { db -> decide(db, null, { false }, mutableListOf(), awaiting.toSet()) } }
+                } catch (failure: Exception) {
+                    // The drive entries this pass claimed still go on; these stay journalled for the next pass.
+                    android.util.Log.e("RecordingRecovery", "Retained unresolved takes ${awaiting.joinToString()}", failure)
+                    RecordingRecoveryReport(unresolvedGroups = awaiting.size)
+                }
+                decided = decided.copy(discardedGroups = decided.discardedGroups + late.discardedGroups,
+                    unresolvedGroups = decided.unresolvedGroups + late.unresolvedGroups, incompleteGroups = decided.incompleteGroups + late.incompleteGroups)
+            } else if (awaiting.isNotEmpty()) {
+                decided = decided.copy(deferredGroups = decided.deferredGroups + awaiting.size)
+                android.util.Log.i("RecordingRecovery", "Takes ${awaiting.joinToString()} wait for their motion logs to render")
+                onMotionRenderDue?.invoke()
+            }
             var rawPublished = 0; var rawDeleted = 0; var unresolved = 0; var waiting = 0
             var discarded = 0; var incomplete = 0; var deferred = 0
             // The drive is asked with the lock released, each journal step taking it: a provider that stalls must not hold
@@ -286,6 +324,7 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
                     // Resolved: nothing will rebuild this take's moov again. A deferred or failed entry keeps its index.
                     if (outcome == DriveRecovery.INCOMPLETE || outcome == DriveRecovery.DISCARDED || outcome == DriveRecovery.COMMITTED) {
                         runCatching { takeIndexes.delete(record.id) }
+                        motionLogs.delete(record.id)
                     }
                 } catch (failure: Exception) {
                     unresolved++
@@ -345,24 +384,33 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
      * The locked part of [recover]: every entry no live group owns and no pass is repairing. An uncommitted drive take is
      * only marked repairing and added to [claims]; the caller resolves it with the lock released. Without [claims] every
      * drive entry is deferred unread.
+     *
+     * An uncommitted phone entry [waits] picks (its motion spool awaits its render) is left as it is and added to
+     * [awaiting], uncounted, unless the phone bound is full: then it is resolved without its log, so the new take still
+     * fits. [only] restricts the pass to those entries.
      */
-    private fun decide(db: SQLiteDatabase, claims: MutableList<JournalRow>?): RecordingRecoveryReport {
+    private fun decide(db: SQLiteDatabase, claims: MutableList<JournalRow>?, waits: (String) -> Boolean, awaiting: MutableList<String>,
+        only: Set<String>? = null): RecordingRecoveryReport {
         val records = db.rawQuery("SELECT id, committed, tree, volume, folder FROM captures ORDER BY id LIMIT ?",
             arrayOf((MAX_PHONE_TAKES + MAX_DRIVE_TAKES + 1).toString())).use { c ->
             buildList { while (c.moveToNext()) add(JournalRow(c.getString(0), c.getType(1), c.getLong(1), c.getString(2), c.getString(3), c.getString(4))) }
         }
         check(records.size <= MAX_PHONE_TAKES + MAX_DRIVE_TAKES)
+        // A deferred phone entry still counts against the bound [journal] checks for the take starting next.
+        val phoneRoom = records.count { it.tree == null } < MAX_PHONE_TAKES
         var discarded = 0; var unresolved = 0; var incomplete = 0; var deferred = 0
-        records.forEach { record ->
+        records.filter { only == null || it.id in only }.forEach { record ->
             val id = record.id
             try {
                 requireId(id); check(record.type == Cursor.FIELD_TYPE_INTEGER && record.state in 0L..1L)
                 if (key(id) !in liveRecordingGroups && key(id) !in repairingRecordingGroups) {
-                    if (record.state == 1L) db.delete("captures", "id = ? AND committed = 1", arrayOf(id))
+                    if (record.state == 1L) { db.delete("captures", "id = ? AND committed = 1", arrayOf(id)); motionLogs.delete(id) }
+                    else if (record.tree == null && phoneRoom && waits(id)) awaiting += id
                     else if (record.tree == null) {
                         val journal = HeldJournal(db)
-                        if (publishIncomplete(journal, id, mediaStore) > 0) incomplete++
-                        else { discardRows(journal, id, mediaStore); discarded++ }
+                        if (publishIncomplete(journal, id, phoneRows) > 0) incomplete++
+                        else { discardRows(journal, id, phoneRows); discarded++ }
+                        motionLogs.delete(id)
                     } else if (claims == null) deferred++
                     else { claims += record; repairingRecordingGroups.add(key(id)) }
                 }
@@ -471,7 +519,59 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
         runCatching {
             val known = db.rawQuery("SELECT id FROM captures", null).use { c -> buildSet { while (c.moveToNext()) add(c.getString(0)) } }
             takeIndexes.sweepOrphans(known, TakeIndexFiles.ORPHAN_AGE_MS)
+            motionLogs.sweepOrphans(known, TakeIndexFiles.ORPHAN_AGE_MS)
         }.onFailure { android.util.Log.w("RecordingRecovery", "Take index sweep failed", it) }
+    }
+
+    /**
+     * Renders the motion spool of every interrupted take no live group owns and no pass is repairing, with the journal
+     * unlocked: a long take's spool is read whole, which must not hold up a take starting meanwhile. [publishIncomplete]
+     * then only copies the log. Best effort; cheap when no spool is left (one folder listing). The list is taken once:
+     * a take released after it, or one this failed to list, is rendered by [recover] after its [decide].
+     */
+    private fun renderMotionLogs() {
+        try {
+            val spooled = motionLogs.spooledTakes().toSet()
+            if (spooled.isEmpty()) return
+            val pending = synchronized(recordingRecoveryLock) {
+                open().use { db -> db.rawQuery("SELECT id FROM captures WHERE committed = 0", null).use { c -> buildList { while (c.moveToNext()) add(c.getString(0)) } } }
+                    .filter { it in spooled && key(it) !in liveRecordingGroups && key(it) !in repairingRecordingGroups }
+            }
+            pending.forEach { motionLogs.render(it) }
+        } catch (failure: Exception) {
+            android.util.Log.w("RecordingRecovery", "Motion logs of interrupted takes not rendered", failure)
+        }
+    }
+
+    /**
+     * Attaches the log [renderMotionLogs] made for take [id] as its `<video stem>.gcsv` Download row, as the stop does
+     * ([VideoOutput]): only when the take keeps its video, written through [writeMotionLogRow] (on a drive with the journal
+     * unlocked, like the rest of a drive take's recovery), and the row removed when the write fails. A row left by an
+     * earlier attempt is rewritten. [recoverIncompleteTake] then publishes it with the video. Returns the take's rows,
+     * read again when a row was touched. Every failure costs only the log.
+     */
+    private fun withRecoveredMotionLog(id: String, store: RecordingRowStore, rows: List<RecoveredRow<Uri>>): List<RecoveredRow<Uri>> {
+        val log = motionLogs.rendered(id) ?: return rows
+        val video = rows.firstOrNull {
+            it.root == "DCIM" && decideClipRecovery(muxerFinalized = false, bytesWritten = bytesForDecision(it.bytes)) != ClipRecoveryDecision.DELETE
+        } ?: return rows
+        val name = motionLogName(video.name)
+        var touched = false
+        try {
+            val existing = rows.firstOrNull { it.root == "Download" && it.name == name }?.handle
+            val uri = existing ?: store.insert(id, "Download", name, GyroflowLog.MIME_TYPE)
+            touched = true
+            try {
+                writeMotionLogRow(resolver, uri, log, mode = "wt")
+            } catch (failure: Throwable) {
+                if (existing == null) try { store.delete(uri) } catch (cleanup: Throwable) { failure.addSuppressed(cleanup) }
+                throw failure
+            }
+            android.util.Log.i("RecordingRecovery", "Take $id: Gyroflow log $name attached from the motion spool")
+        } catch (failure: Exception) {
+            android.util.Log.w("RecordingRecovery", "Take $id: Gyroflow log skipped", failure)
+        }
+        return if (touched) store.recovered(id) else rows
     }
 
     /**
@@ -512,7 +612,7 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
         requireId(id)
         check(journal.step { state(it, id) } == 0L) { "Only an uncommitted take can be recovered" }
         val reason = journal.step { db -> db.rawQuery("SELECT reason FROM captures WHERE id = ?", arrayOf(id)).use { c -> if (c.moveToFirst()) c.getString(0) else null } }
-        val published = recoverIncompleteTake(id, store.recovered(id), store.clipRows,
+        val published = recoverIncompleteTake(id, withRecoveredMotionLog(id, store, store.recovered(id)), store.clipRows,
             insertSidecar = { name -> store.insert(id, "Download", name, "application/json") },
             readText = ::readRecoveredSidecar, backups = sidecarBackups, reason = reason, moovRebuilds = moovRebuilds)
         if (published == 0) return 0
@@ -593,6 +693,12 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
          * journal's locks, so it must only hand the pass to another thread. The capture service sets it while it lives.
          */
         @Volatile internal var onDriveTakeReleased: (() -> Unit)? = null
+        /**
+         * Called when a take-start pass left an interrupted phone take waiting for its motion log ([start]): the owner
+         * queues a [recover] pass, which renders the log and resolves the take without leaving it waiting again. Runs
+         * on the starting take's thread, the main one, so it must only hand the pass to another thread.
+         */
+        @Volatile internal var onMotionRenderDue: (() -> Unit)? = null
         /** Phone takes (NULL `tree`) journalled at once; a phone take beyond it is refused. */
         internal const val MAX_PHONE_TAKES = 128
         /** Drive takes journalled at once; a drive take beyond it forgets the oldest deferred one ([journal]). */
@@ -1045,7 +1151,10 @@ class RecordingRecoveryGroup internal constructor(private val journal: Recording
         require(name.isNotBlank() && '/' !in name && name.length <= 180 && mime == GyroflowLog.MIME_TYPE)
         val uri = store.insert(id, "Download", name, mime)
         try {
-            member.rows += RecordingRow(uri, name, store.allocatedMime(uri, mime), "Download", metadata = false, auxiliary = true)
+            val row = RecordingRow(uri, name, store.allocatedMime(uri, mime), "Download", metadata = false, auxiliary = true)
+            // Checked now, while it costs only the log: at preparation a renamed row would fail the whole take.
+            store.verify(id, row, 1)
+            member.rows += row
         } catch (failure: Throwable) {
             try { store.delete(uri) } catch (problem: Throwable) { failure.addSuppressed(problem) }
             throw failure

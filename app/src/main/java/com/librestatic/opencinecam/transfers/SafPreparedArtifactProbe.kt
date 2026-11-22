@@ -162,6 +162,7 @@ internal fun safPreparedObservation(resolver: ContentResolver, artifact: Prepare
         }
         CaptureArtifactRole.VIDEO_METADATA, CaptureArtifactRole.AUDIO_METADATA, CaptureArtifactRole.CLIP_METADATA ->
             if (extension == "json") setOf("application/json") else emptySet()
+        CaptureArtifactRole.MOTION_LOG -> motionLogMimeTypes(extension)
     }
     val mime = driveMime(name, driveFileRole(name, recording = true), document.mime)
     check(mime.lowercase(Locale.ROOT) in allowed) { "Prepared artifact MIME does not match its role and name" }

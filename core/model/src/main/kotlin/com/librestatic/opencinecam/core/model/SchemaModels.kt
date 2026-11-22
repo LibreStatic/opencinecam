@@ -49,6 +49,8 @@ data class ClipSidecarDocument(
     val failureReasons: List<String>? = null,
     /** PLAN-072 Delivery 4: on a take that continues on the phone a drive take whose drive was lost; absent otherwise. */
     val continuation: JsonObject? = null,
+    /** Schema 1.2.0: the take's motion data (sensors, sync, CAMM track, Gyroflow log); absent when it has none. */
+    val motion: JsonObject? = null,
 )
 
 @Serializable

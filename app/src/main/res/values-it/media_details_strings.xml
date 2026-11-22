@@ -7,6 +7,7 @@
     <string name="media_detail_group_colour">Colore</string>
     <string name="media_detail_group_audio">Audio</string>
     <string name="media_detail_group_camera">Fotocamera ed esposizione</string>
+    <string name="media_detail_group_motion">Dati di movimento</string>
     <string name="media_detail_group_raw">RAW</string>
     <string name="media_detail_group_recording">Registrazione</string>
     <string name="media_detail_loading">Lettura dei dettagli del file…</string>
@@ -117,4 +118,15 @@
     <string name="media_detail_audio_separate_wav">File separato (WAV)</string>
     <string name="media_detail_audio_separate_flac">File separato (FLAC)</string>
     <string name="media_detail_eis_preview">Stabilizzazione dell’anteprima</string>
+    <string name="media_detail_gyroscope">Giroscopio</string>
+    <string name="media_detail_accelerometer">Accelerometro</string>
+    <string name="media_detail_magnetometer">Magnetometro</string>
+    <string name="media_detail_motion_no_samples">Nessun campione</string>
+    <string name="media_detail_motion_sync">Sincronizzazione</string>
+    <string name="media_detail_motion_sync_measured">Misurata</string>
+    <string name="media_detail_motion_sync_clock">Stimata: orologio della fotocamera</string>
+    <string name="media_detail_motion_sync_frames">Stimata: tempi del registratore</string>
+    <string name="media_detail_motion_track">Traccia incorporata (CAMM)</string>
+    <string name="media_detail_motion_track_packets">Sì, %1$d pacchetti</string>
+    <string name="media_detail_motion_log">Log di Gyroflow</string>
 </resources>

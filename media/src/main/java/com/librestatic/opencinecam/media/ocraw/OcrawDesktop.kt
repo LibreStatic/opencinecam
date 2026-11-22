@@ -85,6 +85,25 @@ class OcrawDesktopReader(private val encoded: ByteArray) {
         return ShortArray(payload.size / 2) { buffer.short }
     }
 
+    /** Every readable `IMU_SAMPLES` record in file order; chunks of an unknown payload version are skipped. */
+    fun extractImu(): OcrawImuSamplesData {
+        val batches = scan().chunks
+            .filter { it.knownId() == OcrawChunkId.IMU_SAMPLES }
+            .mapNotNull { OcrawImuSamples.decode(it.payload) }
+        val count = batches.sumOf { it.count }
+        val kinds = ByteArray(count)
+        val times = LongArray(count)
+        val xyz = FloatArray(count * 3)
+        var at = 0
+        batches.forEach { batch ->
+            batch.kinds.copyInto(kinds, at, 0, batch.count)
+            batch.timesNs.copyInto(times, at, 0, batch.count)
+            batch.xyz.copyInto(xyz, at * 3, 0, batch.count * 3)
+            at += batch.count
+        }
+        return OcrawImuSamplesData(count, kinds, times, xyz)
+    }
+
     fun exportDng(frame: RawFrame): DngFixture = RawStillDng.createFixture(frame)
 }
 

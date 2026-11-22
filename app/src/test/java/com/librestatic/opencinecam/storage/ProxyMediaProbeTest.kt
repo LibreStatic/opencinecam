@@ -40,4 +40,14 @@ class ProxyMediaProbeTest {
         verifyProxyCorrespondence(silent,silent,geometry)
         assertThrows(IllegalArgumentException::class.java) { verifyProxyCorrespondence(silent,source,geometry) }
     }
+    @Test fun motionMetadataTracksAreLeftOutWhateverTheExtractorCallsThem() {
+        assertEquals(0 to 1, proxyTrackIndices(listOf("video/hevc", "audio/mp4a-latm")))
+        assertEquals(0 to null, proxyTrackIndices(listOf("video/hevc")))
+        // A CAMM track may be reported under a non-audio, non-video MIME type, without one, or not at all.
+        assertEquals(1 to 2, proxyTrackIndices(listOf("application/camm", "video/hevc", "audio/mp4a-latm")))
+        assertEquals(0 to null, proxyTrackIndices(listOf("video/avc", null)))
+        for (refused in listOf(emptyList(), listOf("audio/raw"), listOf("video/avc", "video/avc"), listOf("video/avc", "audio/raw", "audio/raw"))) {
+            assertThrows(IllegalArgumentException::class.java) { proxyTrackIndices(refused) }
+        }
+    }
 }

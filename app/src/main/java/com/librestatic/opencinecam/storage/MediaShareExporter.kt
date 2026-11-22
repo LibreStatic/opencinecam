@@ -91,6 +91,7 @@ class MediaShareExporter(context: Context) {
                 files += PreparedMediaShareFile(uri.toString(), name, mime, role)
             }
             plan.originals.forEach { files += PreparedMediaShareFile(it.uri, it.name, it.mimeType, MediaShareRole.ORIGINAL) }
+            plan.motionLogs.forEach { files += PreparedMediaShareFile(it.uri, it.name, it.mimeType, MediaShareRole.MOTION_LOG) }
             plan.generated.forEach { generate(it.name, "application/json", it.role, it.text.toByteArray(Charsets.UTF_8)) }
             var lutBytes = 0L
             val library = if (settings.includeReferencedLut && plan.referencedLuts.isNotEmpty()) LutLibrary(context) else null

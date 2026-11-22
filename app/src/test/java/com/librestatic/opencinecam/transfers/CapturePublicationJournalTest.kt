@@ -45,6 +45,23 @@ class CapturePublicationJournalTest {
         assertEquals(withClip, CapturePublicationJournalCodec.decode(CapturePublicationJournalCodec.encode(withClip)))
     }
 
+    @Test fun theGyroflowLogIsTheSixthArtifactAndReceiptsWithoutItStillDecode() {
+        val clip = PreparedCaptureArtifact(CaptureArtifactRole.CLIP_METADATA, "content://media/external/downloads/5", "take.clip.json")
+        val audio = PreparedCaptureArtifact(CaptureArtifactRole.AUDIO, "content://media/external/audio/media/3", "take.wav")
+        val audioMeta = PreparedCaptureArtifact(CaptureArtifactRole.AUDIO_METADATA, "content://media/external/downloads/4", "take.audio.json")
+        val log = PreparedCaptureArtifact(CaptureArtifactRole.MOTION_LOG, "content://media/external/downloads/6", "take.gcsv")
+        val all = listOf(video, metadata, clip, audio, audioMeta, log)
+        val committed = CapturePublicationTransitions.published(id, CapturePublicationTransitions.prepared(id, null, all), all.reversed())
+        assertEquals(6, committed.artifacts.size)
+        assertEquals(committed, CapturePublicationJournalCodec.decode(CapturePublicationJournalCodec.encode(committed)))
+        // A five-artifact receipt written before the log existed decodes as it was.
+        val old = CapturePublicationReceipt(id, CapturePublicationState.COMMITTED, all - log)
+        assertEquals(old, CapturePublicationJournalCodec.decode(CapturePublicationJournalCodec.encode(old)))
+        assertThrows(IllegalArgumentException::class.java) {
+            CapturePublicationReceipt(id, CapturePublicationState.PREPARED, all + log.copy(uri = "content://media/external/downloads/7"))
+        }
+    }
+
     @Test fun publicationWithoutPreparationCannotInventACommittedReceipt() {
         assertThrows(IllegalArgumentException::class.java) { CapturePublicationTransitions.published(id, null, listOf(video)) }
     }

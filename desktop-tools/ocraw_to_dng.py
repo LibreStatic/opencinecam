@@ -33,6 +33,16 @@ metadata. Sample zero is the first RAW frame's capture time, so the WAV lines up
 with the DNG sequence (`--wav-from-audio` starts it at the first audio sample
 instead); gaps between chunks, such as audio the recorder dropped, are filled
 with silence.
+
+`--gcsv out.gcsv` also (or, without `-o`, only) writes the take's IMU_SAMPLES
+chunks as a Gyroflow 1.3 `.gcsv` motion log, for stabilisation in post. With an
+output folder (`-o` or `--cinemadng`) it is written by default as
+`<folder>/<folder name>.gcsv` when the take has gyroscope samples; `--no-gcsv`
+turns that off. t = 0 is the first RAW frame (DNG number 0); gyroscope samples
+before it or after the last frame plus one frame interval are dropped, and each
+row pairs the gyroscope sample with the nearest accelerometer and magnetometer
+samples. The header and rows follow app/.../storage/GyroflowLog.kt, which
+writes the same log for ordinary video.
 """
 
 # SPDX-License-Identifier: Apache-2.0
@@ -41,11 +51,15 @@ with silence.
 from __future__ import annotations
 
 import argparse
+import bisect
+import math
 import os
+import re
 import struct
 import sys
 import time
 from dataclasses import dataclass, field
+from decimal import ROUND_HALF_UP, Decimal
 from fractions import Fraction
 from pathlib import Path
 from typing import BinaryIO, Callable
@@ -1137,6 +1151,201 @@ def export_wav(path: Path, target: Path, align_to_video: bool = True) -> dict[st
     }
 
 
+# Gyroflow .gcsv motion log, written as app/.../storage/GyroflowLog.kt writes it for ordinary video so the
+# two produce the same text for the same samples (header order, scales, Java rounding, %.4f readout time).
+GCSV_TIME_SCALE = "0.000001"
+GCSV_GYRO_SCALE = 0.00001
+GCSV_ACCEL_SCALE = 0.00001
+GCSV_MAG_SCALE = 0.00001
+STANDARD_GRAVITY = 9.80665
+GCSV_SYNCED_NOTE = "t=0 at first recorded frame"
+# The app's note for a take whose camera clock is not the sensor clock (MotionTake.NOTE_CLOCK_ESTIMATED).
+GCSV_UNSYNCED_NOTE = "sync estimated: camera clock is not the sensor clock"
+IMU_ORIENTATION_KEY = "imuOrientation"
+IMU_READOUT_DIRECTION_KEY = "imuReadoutDirection"
+ROLLING_SHUTTER_SKEW_KEY = "rollingShutterSkewNs"
+IMU_CLOCK_KEY = "imuClock"
+TAKE_START_UNIX_MS_KEY = "takeStartUnixMs"
+
+
+def java_round(value: float) -> int:
+    """Java's Math.round: the nearest integer, ties toward positive infinity (Python's round is half-even).
+
+    `value - floor(value)` is exact for every double, so the tie test is exact too.
+    """
+    if value != value:
+        return 0
+    floor = math.floor(value)
+    return floor + 1 if value - floor >= 0.5 else floor
+
+
+def _gcsv_clean(value: str) -> str:
+    """GyroflowLog.clean: runs of CR, LF and commas become one space, then Java's trim (code points <= 32)."""
+    return re.sub(r"[\r\n,]+", " ", value).strip("".join(chr(code) for code in range(33)))
+
+
+def _java_fixed4(value: float) -> str:
+    """Java's `%.4f`: the shortest decimal of the double rounded half up."""
+    return str(Decimal(repr(value)).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP))
+
+
+def _nearest(times: list[int], target: int) -> int:
+    """Index of the sample nearest [target]; a tie goes to the later one, as GyroflowLog.Pairer pairs them."""
+    after = bisect.bisect_left(times, target)
+    if after == len(times):
+        return after - 1
+    if after == 0:
+        return 0
+    return after - 1 if target - times[after - 1] < times[after] - target else after
+
+
+def _ns(chunk: ocraw.Chunk) -> Fraction:
+    return _ticks_seconds(chunk) * 1_000_000_000
+
+
+def imu_samples(chunks: tuple[ocraw.Chunk, ...] | list[ocraw.Chunk]) -> dict[int, list[tuple[int, float, float, float]]]:
+    """`(timeNs, x, y, z)` by sensor kind, time-ordered, from every readable IMU_SAMPLES chunk."""
+    by_kind: dict[int, list[tuple[int, float, float, float]]] = {kind: [] for kind in ocraw.IMU_KINDS}
+    for chunk in chunks:
+        if chunk.wire_id != ocraw.IMU_SAMPLES:
+            continue
+        records = ocraw.decode_imu_samples(chunk.payload)
+        for kind, time_ns, x, y, z in records or ():
+            by_kind[kind].append((time_ns, x, y, z))
+    for samples in by_kind.values():
+        samples.sort(key=lambda sample: sample[0])  # stable: equal times keep file order
+    return by_kind
+
+
+def gcsv_text(chunks: tuple[ocraw.Chunk, ...] | list[ocraw.Chunk], metadata: dict[str, str],
+              video_file_name: str) -> tuple[str, dict[str, object]]:
+    """The Gyroflow log text and a report; raises ValueError without RAW frames or gyroscope samples.
+
+    t = 0 is the first RAW_FRAME (DNG number 0). Gyroscope samples before it, or after the last frame plus
+    one frame interval, are dropped. Accelerometer and magnetometer columns pair each gyroscope sample with
+    the nearest sample of that sensor; the magnetometer needs the accelerometer (gcsv column order).
+    """
+    frames = [chunk for chunk in chunks if chunk.wire_id == ocraw.RAW_FRAME]
+    if not frames:
+        raise ValueError("take has no RAW frames to align the motion log with")
+    samples = imu_samples(chunks)
+    gyro = samples[ocraw.IMU_GYROSCOPE]
+    if not gyro:
+        raise ValueError("take has no IMU gyroscope samples")
+    accel = samples[ocraw.IMU_ACCELEROMETER]
+    mag = samples[ocraw.IMU_MAGNETOMETER] if accel else []
+    anchor = _ns(frames[0])
+    fps = parse_fps(metadata.get("fps"))
+    if fps is not None:
+        interval = Fraction(1_000_000_000) / fps
+    elif len(frames) > 1:
+        interval = _ns(frames[-1]) - _ns(frames[-2])
+    else:
+        interval = Fraction(0)
+    end = _ns(frames[-1]) + interval
+    # Integer nanoseconds (the usual 1/1000000000 time base) keep the per-row arithmetic off Fraction.
+    anchor = int(anchor) if anchor.denominator == 1 else anchor
+
+    lines = ["GYROFLOW IMU LOG"]
+
+    def line(key: str, value: str) -> None:
+        lines.append(f"{key},{_gcsv_clean(value)}")
+
+    line("version", "1.3")
+    line("id", "opencinecam")
+    orientation = metadata.get(IMU_ORIENTATION_KEY, "")
+    if len(orientation) == 3 and set(orientation.lower()) == {"x", "y", "z"}:
+        line("orientation", orientation)
+    line("note", GCSV_SYNCED_NOTE if metadata.get(IMU_CLOCK_KEY) == "shared" else GCSV_UNSYNCED_NOTE)
+    if metadata.get("appVersion"):
+        line("fwversion", metadata["appVersion"])
+    start_ms = metadata.get(TAKE_START_UNIX_MS_KEY, "")
+    if start_ms.isdigit():
+        line("timestamp", str(int(start_ms) // 1000))
+    line("vendor", "OpenCineCam")
+    line("videofilename", video_file_name)
+    skew = metadata.get(ROLLING_SHUTTER_SKEW_KEY, "")
+    if skew.isdigit() and int(skew) > 0:
+        direction = metadata.get(IMU_READOUT_DIRECTION_KEY, "")
+        line("frame_readout_time", _java_fixed4(int(skew) / 1e6))
+        line("frame_readout_direction", direction if direction in ("0", "1", "2", "3") else "0")
+    line("tscale", GCSV_TIME_SCALE)
+    line("gscale", "0.00001")
+    if accel:
+        line("ascale", "0.00001")
+    if mag:
+        line("mscale", "0.00001")
+    lines.append("t,gx,gy,gz" + (",ax,ay,az" if accel else "") + (",mx,my,mz" if mag else ""))
+
+    accel_times = [sample[0] for sample in accel]
+    mag_times = [sample[0] for sample in mag]
+    rows = dropped = 0
+    for time_ns, gx, gy, gz in gyro:
+        delta = time_ns - anchor
+        if delta < 0 or time_ns > end:
+            dropped += 1
+            continue
+        fields = [str(delta // 1000),  # GyroflowLog.relativeMicros: integer division (delta >= 0)
+                  *(str(java_round(value / GCSV_GYRO_SCALE)) for value in (gx, gy, gz))]
+        if accel:
+            _, ax, ay, az = accel[_nearest(accel_times, time_ns)]
+            fields += [str(java_round(value / STANDARD_GRAVITY / GCSV_ACCEL_SCALE)) for value in (ax, ay, az)]
+        if mag:
+            _, mx, my, mz = mag[_nearest(mag_times, time_ns)]
+            # µT to gauss.
+            fields += [str(java_round(value / 100.0 / GCSV_MAG_SCALE)) for value in (mx, my, mz)]
+        lines.append(",".join(fields))
+        rows += 1
+    report = {
+        "rows": rows,
+        "droppedRows": dropped,
+        "accelerometer": bool(accel),
+        "magnetometer": bool(mag),
+        "magnetometerWithoutAccelerometer": bool(samples[ocraw.IMU_MAGNETOMETER]) and not accel,
+        "synced": metadata.get(IMU_CLOCK_KEY) == "shared",
+    }
+    return "\n".join(lines) + "\n", report
+
+
+def _scan_take(path: Path) -> tuple[ocraw.Scan, dict[str, str]]:
+    with path.open("rb") as stream:
+        # RAW frame CRCs are not needed for motion data; every other chunk's CRC is still checked.
+        result = ocraw.scan_stream(stream, verify_raw_crc=False)
+    if result.header is None:
+        raise ValueError("invalid or truncated OpenCine RAW v1 file header")
+    metadata: dict[str, str] = {}
+    for chunk in result.chunks:
+        if chunk.wire_id == ocraw.METADATA:
+            try:
+                metadata.update(ocraw.decode_text_map(chunk.payload))
+            except (ValueError, UnicodeDecodeError):
+                continue
+    return result, metadata
+
+
+def export_gcsv(path: Path, target: Path) -> dict[str, object]:
+    """Writes the take's motion log to [target]; raises ValueError when it has no gyroscope samples."""
+    result, metadata = _scan_take(path)
+    text, report = gcsv_text(result.chunks, metadata, path.name)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("w", encoding="utf-8", newline="\n") as out:
+        out.write(text)
+    report["staleTail"] = result.stale_evidence
+    return report
+
+
+def take_has_imu(path: Path) -> bool:
+    """True when the take holds a readable IMU_SAMPLES chunk with at least one gyroscope sample."""
+    try:
+        result, _ = _scan_take(path)
+    except ValueError:
+        return False
+    return any(
+        chunk.wire_id == ocraw.IMU_SAMPLES
+        and any(record[0] == ocraw.IMU_GYROSCOPE for record in ocraw.decode_imu_samples(chunk.payload) or ())
+        for chunk in result.chunks)
+
+
 def use_numpy_by_default() -> bool:
     return _np is not None and os.environ.get(PURE_ENV, "") in ("", "0")
 
@@ -1151,6 +1360,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--wav", type=Path, help="also write the take's audio as a 16-bit PCM WAV")
     parser.add_argument("--wav-from-audio", action="store_true",
                         help="start the WAV at the first audio sample instead of the first RAW frame")
+    parser.add_argument("--gcsv", type=Path, metavar="PATH",
+                        help="also write the take's IMU samples as a Gyroflow .gcsv motion log (with -o, by default "
+                             "<output>/<output name>.gcsv when the take has them)")
+    parser.add_argument("--no-gcsv", action="store_true", help="never write the motion log")
     parser.add_argument("--frames", help="0-based frame indices in file order, e.g. 0-99 or 5,7 or 10-")
     parser.add_argument("--every", type=int, default=1, help="keep every Nth selected frame")
     parser.add_argument("--no-crc", action="store_true", help="skip CRC32C verification of RAW frames")
@@ -1165,10 +1378,13 @@ def main(argv: list[str] | None = None) -> int:
         take = args.prefix or args.input.stem
         args.output = args.cinemadng / take
         args.prefix = take
-    if args.output is None and args.wav is None:
-        parser.error("give -o/--output, --wav, both, or --cinemadng")
+    if args.gcsv is not None and args.no_gcsv:
+        parser.error("--gcsv and --no-gcsv exclude each other")
+    if args.output is None and args.wav is None and args.gcsv is None:
+        parser.error("give -o/--output, --wav, --gcsv, several of them, or --cinemadng")
     if args.output is None:
-        return _main_wav(args)
+        code = _main_wav(args) if args.wav is not None else 0
+        return max(code, _main_gcsv(args)) if args.gcsv is not None else code
     job = Conversion(output=args.output, prefix=args.prefix or args.input.stem,
                      use_numpy=not args.pure and use_numpy_by_default(), take=args.input.stem)
     started = time.monotonic()
@@ -1193,8 +1409,10 @@ def main(argv: list[str] | None = None) -> int:
     for warning in job.warnings:
         print(f"warning: {warning}")
     if args.cinemadng is not None:
-        return _main_cinemadng_wav(args)
-    return _main_wav(args) if args.wav is not None else 0
+        code = _main_cinemadng_wav(args)
+    else:
+        code = _main_wav(args) if args.wav is not None else 0
+    return max(code, _main_gcsv(args))
 
 
 def _main_cinemadng_wav(args: argparse.Namespace) -> int:
@@ -1204,6 +1422,33 @@ def _main_cinemadng_wav(args: argparse.Namespace) -> int:
         return 0
     args.wav = args.output / f"{args.prefix}.wav"
     return _main_wav(args)
+
+
+def _main_gcsv(args: argparse.Namespace) -> int:
+    """`--gcsv PATH`, or with an output folder `<folder>/<folder name>.gcsv` when the take has IMU samples."""
+    if args.no_gcsv:
+        return 0
+    if args.gcsv is None:
+        if not take_has_imu(args.input):
+            print("motion log: none (the take has no IMU samples)")
+            return 0
+        args.gcsv = args.output / f"{args.output.name}.gcsv"
+    try:
+        report = export_gcsv(args.input, args.gcsv)
+    except ValueError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 2
+    sensors = "gyroscope" + (", accelerometer" if report["accelerometer"] else "") + \
+        (", magnetometer" if report["magnetometer"] else "")
+    print(f"motion log written: {args.gcsv} ({report['rows']} rows; {sensors}; "
+          f"{'synced' if report['synced'] else 'estimated'} clock)")
+    if report["droppedRows"]:
+        print(f"motion log: dropped {report['droppedRows']} gyroscope samples outside the frames")
+    if report["magnetometerWithoutAccelerometer"]:
+        print("warning: magnetometer samples without accelerometer samples were left out")
+    if report["staleTail"]:
+        print("truncated or damaged tail: wrote the complete IMU chunks before it")
+    return 0
 
 
 def take_has_audio(path: Path) -> bool:

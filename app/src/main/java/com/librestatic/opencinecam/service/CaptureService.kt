@@ -92,6 +92,7 @@ import com.librestatic.opencinecam.camera.RawVideoQualificationSet
 import com.librestatic.opencinecam.rawvideo.RawVideoRecorder
 import com.librestatic.opencinecam.storage.RawVideoQualificationStore
 import com.librestatic.opencinecam.storage.VideoOutput
+import com.librestatic.opencinecam.motion.MotionTakeRoute
 import com.librestatic.opencinecam.storage.RecordingDestination
 import com.librestatic.opencinecam.storage.RecordingVolumeEvent
 import com.librestatic.opencinecam.storage.RecordingVolumeMonitor
@@ -187,7 +188,9 @@ class CaptureService : Service() {
     internal val stillSaver by lazy { StillImageSaver(this) }
     // Take-owned fields are written on main before dispatch and detached by engine callbacks.
     @Volatile internal var videoOutput: VideoOutput? = null
-    @Volatile internal var latestRollingShutterSkewNs: Long? = null
+    // The recording take's motion data, fed from engine callbacks without the ownership lock: the recorder ignores
+    // calls after its stop, so a late frame or metadata callback is harmless.
+    @Volatile internal var activeMotionRecorder: com.librestatic.opencinecam.motion.MotionTakeRecorder? = null
     internal val takeOwnershipLock = Any()
     internal val recordingRecoveryGuards = java.util.concurrent.ConcurrentHashMap<VideoOutput, AutoCloseable>()
 
@@ -387,10 +390,18 @@ class CaptureService : Service() {
     /** A drive take left pending was released only when its last native writer closed: queue the pass [relinquishTake] could not. */
     private val driveTakeReleased: () -> Unit = { if (!serviceDestroyed) queueRecordingRecovery("a drive take was left pending") }
 
+    /** A take started before an interrupted phone take's motion log was rendered: the pass that renders it, unannounced. */
+    private val motionRenderDue: () -> Unit = {
+        if (!serviceDestroyed) queueRecordingRecovery("an interrupted take's motion log awaits its render", announce = false)
+    }
+
     /** What a still recovery pass was asked for: the startup report published, or a mounted drive's scratch purged. */
     internal data class StillRecoveryRequest(val publishReport: Boolean = false, val scratchVolume: String? = null)
-    /** What a journal pass was asked for: [cause] for the log; [startup] also runs the phone's RAW recovery and always publishes. */
-    internal data class JournalRecoveryRequest(val cause: String, val startup: Boolean = false)
+    /**
+     * What a journal pass was asked for: [cause] for the log; [startup] also runs the phone's RAW recovery and always
+     * publishes. Without [announce] the pass does not say what it recovered (its takes are not the drive's).
+     */
+    internal data class JournalRecoveryRequest(val cause: String, val startup: Boolean = false, val announce: Boolean = true)
 
     /*
      * PLAN-072: [recoveryExecutor] runs one thread over a short queue, and a RAW repair can hold it for minutes, so its
@@ -527,6 +538,7 @@ class CaptureService : Service() {
         super.onCreate()
         com.librestatic.opencinecam.storage.RecordingCaptureRecovery.onRawRepairDue = rawRepairDue
         com.librestatic.opencinecam.storage.RecordingCaptureRecovery.onDriveTakeReleased = driveTakeReleased
+        com.librestatic.opencinecam.storage.RecordingCaptureRecovery.onMotionRenderDue = motionRenderDue
         audioInputMonitor = AudioInputMonitor(this, ::onAudioInputsChanged).also { it.register() }
         mainHandler.postDelayed(previewStartWatchdog, PREVIEW_WATCHDOG_INTERVAL_MS)
         audioListeningController = AudioListeningController(this, onStatus = { status ->
@@ -2811,8 +2823,8 @@ class CaptureService : Service() {
                         val projectFps = settings.videoProjectRate.let { rate ->
                             kotlin.math.round(rate.numerator.toDouble() / rate.denominator).toInt().coerceAtLeast(1)
                         }
-                        attachMotionLog(output, settings.gyroflowLogEnabled && !directHighSpeed && !settings.videoOffSpeed &&
-                            current.activeVideoProfile?.constrainedHighSpeed != true, descriptor, takeGeometry)
+                        attachMotionLog(output, settings.gyroflowLogEnabled, descriptor, takeGeometry,
+                            if (directHighSpeed) MotionTakeRoute.MEDIA_RECORDER else MotionTakeRoute.GPU, current.targetFps.toDouble())
                         previewEngine.startVideo(
                             output.descriptor,
                             embeddedAudio,
@@ -2961,8 +2973,8 @@ class CaptureService : Service() {
                         ) }
                         dispatchTransferCapture()
                         reserveRecordingRecoveryGuard(output)
-                        attachMotionLog(output, settings.gyroflowLogEnabled && current.activeVideoProfile?.constrainedHighSpeed != true,
-                            descriptor, geometry)
+                        attachMotionLog(output, settings.gyroflowLogEnabled, descriptor, geometry, MotionTakeRoute.GPU,
+                            current.targetFps.toDouble())
                         previewEngine.startOpenCineLogVideo(
                             output.descriptor,
                             recordingGeometry = geometry,
@@ -3042,6 +3054,7 @@ class CaptureService : Service() {
                         )
                         dispatchTransferCapture()
                         reserveRecordingRecoveryGuard(output)
+                        attachMotionLog(output, settings.gyroflowLogEnabled, descriptor, geometry, MotionTakeRoute.GPU, captureRate)
                         previewEngine.startVideo(
                             output.descriptor,
                             null,
@@ -3111,6 +3124,7 @@ class CaptureService : Service() {
         com.librestatic.opencinecam.storage.RecordingCaptureRecovery.run {
             if (onRawRepairDue === rawRepairDue) onRawRepairDue = null
             if (onDriveTakeReleased === driveTakeReleased) onDriveTakeReleased = null
+            if (onMotionRenderDue === motionRenderDue) onMotionRenderDue = null
         }
         // A drive take's continuation never outlives the service (PLAN-072 Delivery 4).
         driveContinuation.veto()

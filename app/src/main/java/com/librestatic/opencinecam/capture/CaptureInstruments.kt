@@ -90,7 +90,9 @@ internal fun InstrumentStack(
     val showContinued = captureDestinationContinued(state)
     // And what the microphone input says (PLAN-074): it overloads, or the low-latency input fell back.
     val audioNotices = audioInputNotices(state, settings)
-    val showNotice = showSuspension || showLensNotice || graphNotice != null || showRawRisk || destinationNotice != null || showContinued ||
+    // And that the motion data is being recorded with the lens' optical stabilisation on.
+    val showMotionOis = motionOisNoticeShown(state, settings)
+    val showNotice = showMotionOis || showSuspension || showLensNotice || graphNotice != null || showRawRisk || destinationNotice != null || showContinued ||
         audioNotices.isNotEmpty()
     if (!showAudio && !showLogSource && !showZoom && !showHistogram && !showNotice && !showLowLight) return
     BoxWithConstraints(modifier) {
@@ -112,6 +114,7 @@ internal fun InstrumentStack(
             if (destinationNotice != null) CaptureDestinationFallbackNotice(destinationNotice, width)
             if (showContinued) CaptureDestinationContinuedNotice(width)
             audioNotices.forEach { AudioInputNoticeView(it, width) }
+            if (showMotionOis) MotionOisNotice(width)
         }
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             FittingStack(horizontal, spacing = 8.dp, fillLast = stretchHistogram,

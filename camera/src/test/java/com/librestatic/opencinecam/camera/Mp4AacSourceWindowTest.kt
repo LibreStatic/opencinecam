@@ -52,8 +52,10 @@ class Mp4AacSourceWindowTest {
     private fun payloads(data: ByteArray): List<Pair<String, ByteArray>> {
         val result = mutableListOf<Pair<String, ByteArray>>(); var at = 0
         while (at < data.size) {
-            val size = ByteBuffer.wrap(data, at, 4).int
-            result += String(data, at + 4, 4) to data.copyOfRange(at + 8, at + size)
+            // An appended track's mdat uses a 64-bit size.
+            val wide = ByteBuffer.wrap(data, at, 4).int == 1
+            val size = if (wide) ByteBuffer.wrap(data, at + 8, 8).long.toInt() else ByteBuffer.wrap(data, at, 4).int
+            result += String(data, at + 4, 4) to data.copyOfRange(at + if (wide) 16 else 8, at + size)
             at += size
         }
         return result
@@ -221,5 +223,34 @@ class Mp4AacSourceWindowTest {
         assertThrows(IllegalArgumentException::class.java) { window.copy(primingFrames = -1) }
         assertThrows(IllegalArgumentException::class.java) { window.copy(presentationOffsetUs = -1) }
         assertThrows(ArithmeticException::class.java) { window.copy(sourceFrames = Long.MAX_VALUE) }
+    }
+
+    @Test fun aCammTrackKeepsItsMediaAndFollowsTheNewMovieClock() {
+        // 8 packets from 20 ms: an empty edit of 200 and a media edit of 400 ticks at the fixture's 10 000 movie timescale.
+        val input = withCammTrack(fixture(video = true), startUs = 20_000)
+        val oldCamm = trakPayload(payloads(input).last { it.first == "moov" }.second, "meta")
+        val file = Memory(input)
+        val requested = window.copy(presentationOffsetUs = 250123)
+
+        finalizeAacSourceWindow(file, requested)
+
+        val camm = trakPayload(moov(file), "meta")
+        assertArrayEquals(child(oldCamm, "mdia"), child(camm, "mdia"))
+        // The 60 ms presentation at 6 MHz, version 1.
+        val tkhd = ByteBuffer.wrap(child(camm, "tkhd"))
+        assertEquals(1, tkhd.get(0).toInt()); assertEquals(360_000L, tkhd.getLong(28))
+        val edit = ByteBuffer.wrap(child(child(camm, "edts"), "elst"))
+        assertEquals(2, edit.getInt(4))
+        assertEquals(120_000L, edit.getLong(8)); assertEquals(-1L, edit.getLong(16))
+        assertEquals(240_000L, edit.getLong(28)); assertEquals(0L, edit.getLong(36))
+        assertEquals(requested, inspectAacSourceWindow(file))
+    }
+
+    @Test fun aSecondVideoTrackIsStillRejected() {
+        val original = fixture(video = true); val movie = child(original, "moov")
+        val video = payloads(movie).last { it.first == "trak" }.second
+        val file = Memory(box("mdat", byteArrayOf(1)) + box("moov", movie + box("trak", video)))
+        assertThrows(IllegalArgumentException::class.java) { finalizeAacSourceWindow(file, window) }
+        assertEquals(0, file.writes)
     }
 }

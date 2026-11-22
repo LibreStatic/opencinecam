@@ -991,3 +991,17 @@ plans:
     risks: [RISK-006, RISK-020]
     conditional_gates: []
     intended_executor: Claude Code
+
+  - id: OCC-PLAN-075
+    title: "IMU motion data and gyro stabilisation"
+    status: InProgress
+    revision: 1
+    milestone: H3
+    path: docs/plans/PLAN-075-imu-motion-data-and-gyro-stabilisation.md
+    depends_on: [OCC-PLAN-066, OCC-PLAN-071]
+    blocks: []
+    requirements: [OCC-PRO-006, OCC-PRO-007, OCC-PRIV-001, OCC-RAW-001]
+    adrs: [ADR-0019, ADR-0027, ADR-0033]
+    risks: [RISK-010, RISK-018, RISK-019]
+    conditional_gates: []
+    intended_executor: Claude Code

@@ -14,8 +14,8 @@ data class AuditFinding(
 
 /**
  * Explicit, off-by-default features that justify network or location permissions
- * (OCC-PRIV-001 as amended 2026-09-26, ADR-0027 amendment) or an exported component besides
- * the launcher. A permission or component listed here is only acceptable when its feature is
+ * (OCC-PRIV-001 as amended 2026-09-26, ADR-0027 amendment), another permission outside the
+ * capture baseline, or an exported component besides the launcher. A permission or component listed here is only acceptable when its feature is
  * declared in the audit input.
  */
 enum class OptInFeature(
@@ -46,6 +46,14 @@ enum class OptInFeature(
      * and enabled only while a USB folder is the recording destination.
      */
     USB_DRIVE_RECORDING(emptySet(), setOf(".UsbDriveAttachAlias")),
+
+    /**
+     * Motion data for stabilization (Settings > Motion data, off by default): the gyroscope,
+     * accelerometer and magnetometer are read at the highest rate the phone offers, only while a
+     * video take records, and saved in the take's own files. The permission is a normal,
+     * install-time one; without it Android caps the rate at 200 Hz.
+     */
+    MOTION_DATA(setOf("android.permission.HIGH_SAMPLING_RATE_SENSORS")),
 }
 
 data class SecurityAuditInput(

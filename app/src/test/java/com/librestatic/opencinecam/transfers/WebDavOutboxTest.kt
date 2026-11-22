@@ -161,6 +161,26 @@ class WebDavOutboxTest {
         assertThrows(IllegalArgumentException::class.java) { plan.copy(artifacts = plan.artifacts + clip.copy(id = id(5)) + clip.copy(id = id(6), sourceUri = "content://media/external/downloads/6", remoteName = "x.clip.json")) }
     }
 
+    @Test fun theGyroflowLogIsAnAcceptedSixthArtifactAndEarlierRoleSetsStillValidate() {
+        val plan = plan(withMetadata = true)
+        val others = listOf(
+            WebDavArtifactSpec(id(4), WebDavArtifactRole.CLIP_METADATA, "content://media/external/downloads/5", "take.clip.json", 40),
+            WebDavArtifactSpec(id(5), WebDavArtifactRole.AUDIO, "content://media/external/audio/media/6", "take.wav", 40),
+            WebDavArtifactSpec(id(6), WebDavArtifactRole.AUDIO_METADATA, "content://media/external/downloads/7", "take.wav.json", 40))
+        val log = WebDavArtifactSpec(id(7), WebDavArtifactRole.MOTION_LOG, "content://media/external/downloads/8", "take (1).gcsv", 40, "take.gcsv")
+        // Every role at once, and each earlier set (persisted before the log existed) as it was.
+        val six = plan.copy(artifacts = plan.artifacts + others + log)
+        assertEquals(6, six.artifacts.size)
+        assertEquals(5, plan.copy(artifacts = plan.artifacts + others).artifacts.size)
+        assertEquals(WebDavArtifactRole.MOTION_LOG, WebDavArtifactRole.valueOf("MOTION_LOG"))
+        assertEquals(listOf("VIDEO", "VIDEO_METADATA", "AUDIO", "AUDIO_METADATA", "CLIP_METADATA"),
+            WebDavArtifactRole.entries.take(5).map { it.name })
+        // The log is optional, but never twice and never under the video's remote name.
+        assertThrows(IllegalArgumentException::class.java) { six.copy(artifacts = six.artifacts + log.copy(id = id(8), sourceUri = "content://media/external/downloads/9", remoteName = "x.gcsv")) }
+        assertThrows(IllegalArgumentException::class.java) { plan.copy(artifacts = plan.artifacts + log.copy(remoteName = plan.artifacts[0].remoteName)) }
+        assertThrows(IllegalArgumentException::class.java) { plan.copy(artifacts = listOf(log)) }
+    }
+
     @Test fun validationRejectsSecretsAsIdsUnsafeNamesUrisAndNoncanonicalHashes() {
         val plan = plan()
         assertThrows(IllegalArgumentException::class.java) { plan.copy(endpointId = "https://user:secret@example/") }

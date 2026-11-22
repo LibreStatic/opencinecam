@@ -170,15 +170,14 @@ internal fun CaptureService.newPreviewListener(): Camera2PreviewListener = objec
         }
     }
 
-    override fun onRecordingFirstFrame(sensorTimestampNs: Long) {
-        synchronized(takeOwnershipLock) { videoOutput?.motionRecorder() }?.onFirstFrame(sensorTimestampNs)
+    override fun onRecordingFrame(sensorTimestampNs: Long, presentationTimeNs: Long) {
+        activeMotionRecorder?.onFrame(sensorTimestampNs, presentationTimeNs)
     }
 
     override fun onMetadata(metadata: Camera2PreviewMetadata) {
         metadata.awbGains?.let { noteLiveIlluminant(it) }
-        metadata.rollingShutterSkewNs?.let { skew ->
-            latestRollingShutterSkewNs = skew
-            synchronized(takeOwnershipLock) { videoOutput?.motionRecorder() }?.updateRollingShutterSkew(skew)
+        metadata.sensorTimestampNs?.let { from ->
+            activeMotionRecorder?.onExposure(from, metadata.exposureTimeNs, metadata.rollingShutterSkewNs)
         }
         // Judge the scene only from regular results: the extension session reports none, so the
         // verdict (and the quick toggle with it) stays put while Night is engaged.
@@ -645,6 +644,8 @@ internal fun CaptureService.newPreviewListener(): Camera2PreviewListener = objec
         }
         val transferPublication = take.publication
         var avTiming = previewEngine.consumeCaptureEpochReport()
+        // Read before the audio steps below replace the report; no report means the muxer added nothing.
+        val videoMuxOffsetUs = avTiming?.videoMuxOffsetUs ?: 0L
         lastSeparateAudioAvDrift = null
         val timing = previewEngine.consumeTimelapsePauseStatus()
         val durationMs = timing?.activeElapsedMs ?: activeRecordingElapsedMs()
@@ -755,6 +756,12 @@ internal fun CaptureService.newPreviewListener(): Camera2PreviewListener = objec
                 } catch (failure: Throwable) {
                     android.util.Log.e("CaptureService", "Take audio not appended; the WAV stays beside the video", failure)
                 }
+                // After the audio, which also rewrites the moov: a complete take gets its CAMM track, an incomplete one
+                // only a Gyroflow log, and only when it spooled at least two frames. Never under a live native writer.
+                if (output != null && nativeRetired) {
+                    output.sealMotion(motionTakeTiming(output, directTiming, videoMuxOffsetUs, finalizedSuccess),
+                        appendCamm = finalizedSuccess)
+                }
                 val audioOutput = take.audio.takeUnless { audioWithdrawn }
                 var registrationCreationFailed = transferPublication == null || transferPublication.registrationFailed
                 val publicationObserver = transferPublication?.observer ?: try { CapturePublicationJournal(this@newPreviewListener) }
@@ -834,7 +841,8 @@ internal fun CaptureService.newPreviewListener(): Camera2PreviewListener = objec
                     reasons = reasons,
                     prepareAudio = audioOutput?.let { sidecar -> { r -> noteAudioPrepared(sidecar, sidecar.prepareIncompleteCompletion(r)) } },
                     prepareVideo = { r ->
-                        output?.sealMotionLog(keep = false)
+                        // Sealed above unless retirement was pending; then it runs once the writer is proven gone.
+                        output?.sealMotion(motionTakeTiming(output, directTiming, videoMuxOffsetUs, complete = false), appendCamm = false)
                         output?.prepareIncomplete(r, buildSidecarJson(), timingSidecarFlag(), muxerFinalized, encodedFrames, clipSidecar)
                     },
                 )
@@ -878,8 +886,6 @@ internal fun CaptureService.newPreviewListener(): Camera2PreviewListener = objec
                     publishAudio = { _ -> audioOutput?.publishPrepared() },
                     publishVideo = { _ -> output?.publishPrepared() },
                     prepareVideo = {
-                        // A pause removes spans from the file timeline, so sensor time can no longer be mapped to it.
-                        output?.sealMotionLog(keep = finalizedSuccess && avTiming?.sharedPause?.windows.isNullOrEmpty())
                         output?.prepareCompletion(
                         buildSidecarJson(),
                         expectedGeometry = geometry,

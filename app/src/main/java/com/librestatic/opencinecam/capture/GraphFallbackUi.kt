@@ -6,6 +6,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.librestatic.opencinecam.camera.PreviewGraphLoss
 import com.librestatic.opencinecam.camera.StillPhotoFormat
+import com.librestatic.opencinecam.CameraUiState
 import com.librestatic.opencinecam.CaptureMode
 import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.settings.CameraSettings
@@ -46,3 +47,16 @@ internal fun graphFallbackNoticeText(mode: CaptureMode, settings: CameraSettings
 @Composable
 internal fun GraphFallbackNotice(text: Int, modifier: Modifier = Modifier) =
     InstrumentNotice(stringResource(text), CineIcon.WARNING, LocalCineColors.current.pending, "graph-fallback-notice", modifier)
+
+/**
+ * True while motion data would be recorded with the lens' optical stabilisation on, as the camera reports it: the lens
+ * then moves on its own, the gyroscope does not see it, and the take stabilises badly in post.
+ */
+internal fun motionOisNoticeShown(state: CameraUiState, settings: CameraSettings): Boolean =
+    settings.gyroflowLogEnabled && !state.selectedMode.isStillMode() &&
+        state.reportedOpticalStabilization == android.hardware.camera2.CameraMetadata.LENS_OPTICAL_STABILIZATION_MODE_ON
+
+/** Placed with the other notices, in the instrument stack under the zoom. */
+@Composable
+internal fun MotionOisNotice(modifier: Modifier = Modifier) =
+    InstrumentNotice(stringResource(R.string.motion_ois_notice), CineIcon.WARNING, LocalCineColors.current.pending, "motion-ois-notice", modifier)
