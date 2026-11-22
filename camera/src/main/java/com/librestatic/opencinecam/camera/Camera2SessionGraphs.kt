@@ -884,7 +884,8 @@ internal fun Camera2PreviewEngine.previewCaptureCallback(
     // Constrained high-speed bursts report every frame (240/s), and a RAW video session at 90 or 120 fps nearly as
     // many; the full per-result work below runs on about one per preview period so the camera executor, which also
     // carries the analysis delivery and the RAW take's results, does not fall behind.
-    val highSpeedGate = if (HighSpeedResultGate.needed(isHighSpeedSession(), requestedTargetFps)) HighSpeedResultGate() else null
+    val constrainedHighSpeed = isHighSpeedSession()
+    val highSpeedGate = if (HighSpeedResultGate.needed(constrainedHighSpeed, requestedTargetFps)) HighSpeedResultGate() else null
     if (notifyStarted && descriptor != null && !disposed.get()) {
         armedSession?.let { pendingPreviewStartedReceipt = PreviewStartedReceipt(it, callbackGeneration, descriptor) }
     }
@@ -929,10 +930,11 @@ internal fun Camera2PreviewEngine.previewCaptureCallback(
                 reportTapFocusResult(request, result)
                 reportAfLockResult(request, result)
                 reportRecordingWhiteBalance(request, result)
+                // Every result of a regular session is audited, coalesced or not: the audit is cheap, and it feeds the
+                // sustained-cadence guard (Strict / Adaptive policy) with the frame-number gaps between delivered results.
+                // Its constrained high-speed count was an artefact (the file had every frame): skipped there.
+                if (!constrainedHighSpeed) auditCaptureResult(armedSession, result, sensorTimestamp)
                 if (!processFully) return
-                // The audit counts frame-number gaps as dropped frames, which coalescing would fake, and its
-                // high-speed count was already an artefact (the file had every frame): skipped whenever results are coalesced.
-                if (highSpeedGate == null) auditCaptureResult(armedSession, result, sensorTimestamp)
                 driveCadenceGuard(result, sensorTimestamp)
                 reportEffectiveZoom(result)
                 reportActiveLens(result)
