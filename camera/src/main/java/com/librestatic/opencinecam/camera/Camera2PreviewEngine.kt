@@ -387,6 +387,8 @@ interface Camera2PreviewListener {
     fun onZoomRangeAvailable(min: Float, max: Float, anchors: List<ZoomAnchor>) = Unit
     fun onZoomEffective(ratio: Float) = Unit
     fun onZoomRejected(requested: Float, accepted: Float) = Unit
+    /** A zoom request was dropped because a RAW take was admitted first; the take keeps [kept] (UI scale). */
+    fun onZoomHeldForRawTake(kept: Float) = Unit
     fun onAeLockChanged(active: Boolean) = Unit
     /**
      * The physical camera the compressed still is routed to ([requestedPhysicalId], null on the
@@ -2361,7 +2363,11 @@ class Camera2PreviewEngine(
             cameraExecutor.execute {
                 // The same admission check as the HAL path below: a take admitted meanwhile keeps its framing.
                 synchronized(rawZoomAdmissionLock) {
-                    if (lensLockCrop !== crop || rawTake.get() != null) return@execute
+                    if (lensLockCrop !== crop) return@execute
+                    if (rawTake.get() != null) {
+                        listener?.onZoomHeldForRawTake(effectiveZoomRatio)
+                        return@execute
+                    }
                     crop.factor = factor
                     logPipeline?.setCropZoom(factor)
                 }
@@ -2373,7 +2379,10 @@ class Camera2PreviewEngine(
         cameraExecutor.execute {
             // Held with startRawVideo's admission: a zoom queued before a take never reaches the request after it.
             synchronized(rawZoomAdmissionLock) {
-                if (rawTake.get() != null) return@execute
+                if (rawTake.get() != null) {
+                    listener?.onZoomHeldForRawTake(effectiveZoomRatio)
+                    return@execute
+                }
                 val previousRatio = requestedZoomRatio
                 requestedZoomRatio = ZoomMath.coerce(target, range)
                 if (ZoomSettingsOverride.shouldArm(zoomOverrideEligible(descriptor), previousRatio, requestedZoomRatio)) {
