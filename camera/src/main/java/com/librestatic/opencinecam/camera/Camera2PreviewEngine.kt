@@ -2365,7 +2365,7 @@ class Camera2PreviewEngine(
                 synchronized(rawZoomAdmissionLock) {
                     if (lensLockCrop !== crop) return@execute
                     if (rawTake.get() != null) {
-                        listener?.onZoomHeldForRawTake(effectiveZoomRatio)
+                        listener?.onZoomHeldForRawTake(heldRawTakeZoom())
                         return@execute
                     }
                     crop.factor = factor
@@ -2380,7 +2380,7 @@ class Camera2PreviewEngine(
             // Held with startRawVideo's admission: a zoom queued before a take never reaches the request after it.
             synchronized(rawZoomAdmissionLock) {
                 if (rawTake.get() != null) {
-                    listener?.onZoomHeldForRawTake(effectiveZoomRatio)
+                    listener?.onZoomHeldForRawTake(heldRawTakeZoom())
                     return@execute
                 }
                 val previousRatio = requestedZoomRatio
