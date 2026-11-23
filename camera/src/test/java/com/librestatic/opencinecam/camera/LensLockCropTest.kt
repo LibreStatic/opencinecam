@@ -177,4 +177,20 @@ class LensLockCropTest {
         debounce.reset()
         assertFalse(debounce.switched)
     }
+
+    @Test
+    fun rawTakeHoldsTheRetainedCropNotTheLastResult() {
+        // Crop moved 1x -> 2x before admission; the last throttled result still read 1x; a queued 3x is dropped.
+        val pinned = 1f
+        val retainedFactor = LensLockCrop.cropFactor(2f, pinned, 1f..8f)
+        assertEquals(2f, heldRawTakeZoom(pinned, retainedFactor) { it }, 1e-6f)
+        // Pinned away from the anchor: the crop scales the pinned HAL ratio.
+        assertEquals(3f, heldRawTakeZoom(1.5f, 2f) { it }, 1e-6f)
+    }
+
+    @Test
+    fun rawTakeHoldsTheRequestedHalRatioOnTheLogicalScale() {
+        assertEquals(4.5f, heldRawTakeZoom(1.5f, null) { it * 3f }, 1e-6f)
+        assertEquals(2f, heldRawTakeZoom(2f, null) { it }, 1e-6f)
+    }
 }

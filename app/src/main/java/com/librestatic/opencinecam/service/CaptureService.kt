@@ -2268,6 +2268,23 @@ class CaptureService : Service() {
             cameraState.value = cameraState.value.copy(pendingPresetName = null)
         }
 
+        /**
+         * A RAW take keeps the zoom it started with: a zoom change or a lens switch mid-take can stall the RAW
+         * stream on the HAL, which tears the camera down. Pinch, anchors, the rocker and the volume keys all
+         * land here; they do nothing until the take ends and say why.
+         */
+        private fun rejectRawTakeZoom(): Boolean {
+            if (rawTake == null) return false
+            cameraState.update {
+                it.copy(
+                    message = getString(R.string.capture_zoom_locked_raw_take),
+                    messageTransient = true,
+                    rawTakeZoomHeldAtMs = android.os.SystemClock.elapsedRealtime(),
+                )
+            }
+            return true
+        }
+
         private fun rejectLockedControl(): Boolean {
             if (!cameraState.value.captureControlsLocked) return false
             cameraState.value = cameraState.value.copy(message = getString(R.string.operator_locked))
@@ -2431,7 +2448,7 @@ class CaptureService : Service() {
         }
 
         fun setZoomRatio(ratio: Float) {
-            if (rejectLockedControl()) return
+            if (rejectLockedControl() || rejectRawTakeZoom()) return
             val current = cameraState.value
             if (!current.zoomSupported) return
             val min = current.zoomMinRatio

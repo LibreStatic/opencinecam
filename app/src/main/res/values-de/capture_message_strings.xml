@@ -30,6 +30,7 @@
     <string name="capture_source_depth_not_claimed">Quell-Bittiefe nicht zugesichert</string>
     <string name="capture_high_speed">HIGH SPEED</string>
     <string name="capture_zoom_rejected">Zoom %1$s× nicht angenommen; %2$s× beibehalten</string>
+    <string name="capture_zoom_locked_raw_take">Der Zoom bleibt während einer RAW-Aufnahme fest</string>
     <string name="capture_no_public_camera">Keine öffentliche Camera2-Kamera verfügbar.</string>
     <string name="capture_camera_selected">Kamera %1$s gewählt</string>
     <string name="capture_target_fps">Ziel-FPS %1$d · fester Camera2-Bereich %1$d–%1$d</string>

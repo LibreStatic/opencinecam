@@ -387,6 +387,11 @@ interface Camera2PreviewListener {
     fun onZoomRangeAvailable(min: Float, max: Float, anchors: List<ZoomAnchor>) = Unit
     fun onZoomEffective(ratio: Float) = Unit
     fun onZoomRejected(requested: Float, accepted: Float) = Unit
+    /**
+     * A zoom request was dropped because a RAW take on [cameraId] was admitted first; the take keeps [kept] (UI scale).
+     * [takeToken] is the token [startRawVideo] was given for that take.
+     */
+    fun onZoomHeldForRawTake(takeToken: Any?, cameraId: String, kept: Float) = Unit
     fun onAeLockChanged(active: Boolean) = Unit
     /**
      * The physical camera the compressed still is routed to ([requestedPhysicalId], null on the
@@ -545,7 +550,8 @@ class Camera2PreviewEngine(
         /** True once the repeating request (with [surface]) runs; takes are admitted only then. */
         @Volatile var live = false
     }
-    internal class RawTake(val stream: RawVideoStream, val consumer: RawVideoFrameConsumer) {
+    /** [token] is the caller's identity for this take, handed back by [Listener.onZoomHeldForRawTake]. */
+    internal class RawTake(val stream: RawVideoStream, val consumer: RawVideoFrameConsumer, val token: Any? = null) {
         /** RAW thread only. */
         val state = RawVideoTakeState()
     }
@@ -553,6 +559,8 @@ class Camera2PreviewEngine(
     @Volatile internal var activeRawVideo: RawVideoSessionConfig? = null
     @Volatile internal var rawVideoStream: RawVideoStream? = null
     internal val rawTake = java.util.concurrent.atomic.AtomicReference<RawTake?>(null)
+    /** Serializes a queued zoom request with RAW take admission, so the zoom never changes after a take starts. */
+    private val rawZoomAdmissionLock = Any()
     @Volatile internal var generation = 0L
     internal var camera: CameraDevice? = null
     internal var session: CameraCaptureSession? = null
@@ -740,7 +748,7 @@ class Camera2PreviewEngine(
     internal var tapAeRegion: MeteringRectangle? = null
     internal var tapFocusResultReported = false
     internal var requestedZoomRatio: Float = 1f
-    private var lastAcceptedZoomRatio: Float = 1f
+    internal var lastAcceptedZoomRatio: Float = 1f
     internal var zoomOverrideArmed = false
     internal var lastZoomChangeAtMs = 0L
     internal var effectiveZoomRatio: Float = 1f
@@ -1780,12 +1788,13 @@ class Camera2PreviewEngine(
      * camera keeps running (stop, full ring) first drains the results of its delivered frames, up to
      * [RAW_TAKE_RESULT_DRAIN_TIMEOUT_MS]; until it stopped, this returns false.
      */
-    fun startRawVideo(consumer: RawVideoFrameConsumer): Boolean {
+    fun startRawVideo(consumer: RawVideoFrameConsumer, token: Any? = null): Boolean {
         if (disposed.get() || recording) return false
         val stream = rawVideoStream ?: return false
         if (!stream.live) return false
-        val take = RawTake(stream, consumer)
-        if (!rawTake.compareAndSet(null, take)) return false
+        val take = RawTake(stream, consumer, token)
+        // A queued zoom change either lands before this take is admitted or sees it and drops (see setZoomRatio).
+        if (!synchronized(rawZoomAdmissionLock) { rawTake.compareAndSet(null, take) }) return false
         val begin = Runnable {
             if (rawTake.get() !== take) return@Runnable
             if (!stream.live || rawVideoStream !== stream) {
@@ -1862,6 +1871,7 @@ class Camera2PreviewEngine(
         // built by createHighSpeedRequestList (zoom/lock reissues land here too).
         if (this is CameraConstrainedHighSpeedCaptureSession) {
             setRepeatingBurstRequests(createHighSpeedRequestList(request), executor, callback)
+            noteSubmittedZoom(request)
             return
         }
         val burst = burstRequest.get()
@@ -1889,6 +1899,7 @@ class Camera2PreviewEngine(
             return
         }
         setSingleRepeatingRequest(request, executor, callback)
+        noteSubmittedZoom(request)
     }
 
     /** Under [stillAdmissionLock]: the still owner was built on the camera still open (onError clears it under the lock). */
@@ -2471,31 +2482,52 @@ class Camera2PreviewEngine(
 
     /**
      * Applies the requested zoom ratio to the active repeating request. Returns false when no
-     * descriptor/session is active or the descriptor advertises no zoom range; in those cases the
+     * descriptor/session is active, the descriptor advertises no zoom range or a RAW take is running; in those cases the
      * internal state is left untouched. Coerces [ratio] into the active descriptor's range.
      */
     fun setZoomRatio(ratio: Float): Boolean {
+        // A RAW take keeps its zoom: a change mid-take can stall the RAW stream (the service refuses it first).
+        if (rawTake.get() != null) return false
         val descriptor = activeDescriptor ?: return false
         val range = descriptor.effectiveZoomRange ?: return false
         // The GPU-crop route keeps the HAL zoom pinned at the anchor; the ratio moves the crop only.
         lensLockCrop?.let { crop ->
             val factor = LensLockCrop.cropFactor(ratio, crop.pinnedRatio, crop.uiRange)
-            crop.factor = factor
-            cameraExecutor.execute { if (lensLockCrop === crop) logPipeline?.setCropZoom(factor) }
+            cameraExecutor.execute {
+                // The same admission check as the HAL path below: a take admitted meanwhile keeps its framing.
+                synchronized(rawZoomAdmissionLock) {
+                    if (lensLockCrop !== crop) return@execute
+                    val take = rawTake.get()
+                    if (take != null) {
+                        listener?.onZoomHeldForRawTake(take.token, descriptor.cameraId, heldRawTakeZoom())
+                        return@execute
+                    }
+                    crop.factor = factor
+                    logPipeline?.setCropZoom(factor)
+                }
+            }
             return true
         }
         // A lens-locked session takes the ratio on the logical scale; the physical camera gets its own.
         val target = descriptor.lensLock?.let { LensLockZoom.toPhysical(ratio, it.anchorRatio, range) } ?: ratio
         cameraExecutor.execute {
-            val previousRatio = requestedZoomRatio
-            requestedZoomRatio = ZoomMath.coerce(target, range)
-            if (ZoomSettingsOverride.shouldArm(zoomOverrideEligible(descriptor), previousRatio, requestedZoomRatio)) {
-                zoomOverrideArmed = true
-                lastZoomChangeAtMs = SystemClock.elapsedRealtime()
+            // Held with startRawVideo's admission: a zoom queued before a take never reaches the request after it.
+            synchronized(rawZoomAdmissionLock) {
+                val take = rawTake.get()
+                if (take != null) {
+                    listener?.onZoomHeldForRawTake(take.token, descriptor.cameraId, heldRawTakeZoom())
+                    return@execute
+                }
+                val previousRatio = requestedZoomRatio
+                requestedZoomRatio = ZoomMath.coerce(target, range)
+                if (ZoomSettingsOverride.shouldArm(zoomOverrideEligible(descriptor), previousRatio, requestedZoomRatio)) {
+                    zoomOverrideArmed = true
+                    lastZoomChangeAtMs = SystemClock.elapsedRealtime()
+                }
+                val builder = repeatingBuilder ?: return@execute
+                val configured = session ?: return@execute
+                reissueRepeating(builder, configured, descriptor)
             }
-            val builder = repeatingBuilder ?: return@execute
-            val configured = session ?: return@execute
-            reissueRepeating(builder, configured, descriptor)
         }
         return true
     }
@@ -2511,14 +2543,17 @@ class Camera2PreviewEngine(
         applyManualControls(builder)
         try {
             configured.setPhotoAwareRepeatingRequest(builder.build(), cameraExecutor, previewCaptureCallback(descriptor, false))
-            lastAcceptedZoomRatio = requestedZoomRatio
         } catch (failure: Throwable) {
             if (isZoomRejection(failure, zoomChanged = requestedZoomRatio != lastAcceptedZoomRatio)) {
                 requestedZoomRatio = lastAcceptedZoomRatio
                 listener?.onZoomRejected(uiZoom(requestedZoomRatio), uiZoom(lastAcceptedZoomRatio))
             } else {
+                // Not left pending: the next manual-control submission would otherwise send it (even in a RAW take).
+                requestedZoomRatio = lastAcceptedZoomRatio
                 listener?.onControlRejected("zoom-request-failed", failure.message ?: "Zoom update failed.")
             }
+            // The builder still carries the refused ratio; a direct submission (the torch) would send it otherwise.
+            applyZoom(builder)
         }
     }
 

@@ -50,7 +50,9 @@ import com.librestatic.opencinecam.ui.windowWidthClass
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.platform.testTag
@@ -326,6 +328,7 @@ internal fun RecordingOverlay(
                     .padding(horizontal = 10.dp, vertical = 5.dp),
             )
         }
+        RawTakeZoomHeldNotice(state.rawTakeZoomHeldAtMs)
         }
     }
     if (showMonitors) {
@@ -453,6 +456,38 @@ internal fun audioMeterModeLabel(mode: AudioMeterMode): Int = when (mode) {
     AudioMeterMode.VU -> R.string.audio_meter_vu
     AudioMeterMode.PPM -> R.string.audio_meter_ppm
 }
+
+/**
+ * Says briefly that a RAW take holds its zoom, after a pinch, anchor, rocker or volume key was refused: like the
+ * recording warning, it sits in the take's HUD because CaptureStatus is hidden while a take runs. Each refusal
+ * stamps [heldAtMs] anew, so a repeated attempt shows it again.
+ */
+@Composable
+private fun RawTakeZoomHeldNotice(heldAtMs: Long?) {
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(heldAtMs) {
+        // A stamp left from an earlier take (or before this HUD was composed) shows only what is left of it.
+        val remaining = heldAtMs?.let { RAW_TAKE_ZOOM_NOTICE_MS - (android.os.SystemClock.elapsedRealtime() - it) } ?: 0L
+        visible = remaining > 0
+        if (!visible) return@LaunchedEffect
+        delay(remaining)
+        visible = false
+    }
+    if (!visible) return
+    FitText(
+        stringResource(R.string.capture_zoom_locked_raw_take),
+        color = MaterialTheme.colorScheme.onSurface,
+        fontSize = 12.sp,
+        lineHeight = 15.sp,
+        maxLines = 2,
+        modifier = Modifier.testTag("raw-take-zoom-held")
+            .semantics { liveRegion = LiveRegionMode.Polite }
+            .background(Panel, RoundedCornerShape(8.dp))
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+    )
+}
+
+private const val RAW_TAKE_ZOOM_NOTICE_MS = 2_500L
 
 @Composable
 internal fun CaptureStatus(state: CameraUiState, modifier: Modifier = Modifier, chip: Boolean = false) {

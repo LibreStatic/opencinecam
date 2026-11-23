@@ -525,7 +525,8 @@ internal fun Camera2PreviewEngine.retirePhoto(owner: PhotoRequest, restore: Bool
         attempt {
             val builder = requireNotNull(repeatingBuilder)
             applyManualControls(builder)
-            owner.session.setSingleRepeatingRequest(builder.build(), cameraExecutor, previewCaptureCallback(owner.descriptor, false))
+            builder.build().also { owner.session.setSingleRepeatingRequest(it, cameraExecutor, previewCaptureCallback(owner.descriptor, false)) }
+                .let(::noteSubmittedZoom)
         }
     }
     photoRequest.compareAndSet(owner, null)
@@ -682,7 +683,8 @@ internal fun Camera2PreviewEngine.retireBracket(owner: BracketRequest, restore: 
         try {
             val builder = requireNotNull(repeatingBuilder)
             applyManualControls(builder)
-            owner.session.setSingleRepeatingRequest(builder.build(), cameraExecutor, previewCaptureCallback(owner.descriptor, false))
+            builder.build().also { owner.session.setSingleRepeatingRequest(it, cameraExecutor, previewCaptureCallback(owner.descriptor, false)) }
+                .let(::noteSubmittedZoom)
         } catch (problem: Exception) { failure = problem }
     }
     owner.frames.clear()
@@ -791,7 +793,8 @@ internal fun Camera2PreviewEngine.retireAccumulation(owner: AccumulationRequest,
         try {
             val builder = requireNotNull(repeatingBuilder)
             applyManualControls(builder)
-            owner.session.setSingleRepeatingRequest(builder.build(), cameraExecutor, previewCaptureCallback(owner.descriptor, false))
+            builder.build().also { owner.session.setSingleRepeatingRequest(it, cameraExecutor, previewCaptureCallback(owner.descriptor, false)) }
+                .let(::noteSubmittedZoom)
         } catch (problem: Exception) { failure = problem }
     }
     owner.processor?.close()
@@ -861,7 +864,8 @@ internal fun Camera2PreviewEngine.retireBurst(owner: BurstRequest, restore: Bool
         try {
             val builder = requireNotNull(repeatingBuilder)
             applyManualControls(builder)
-            owner.session.setSingleRepeatingRequest(builder.build(), cameraExecutor, previewCaptureCallback(owner.descriptor, false))
+            builder.build().also { owner.session.setSingleRepeatingRequest(it, cameraExecutor, previewCaptureCallback(owner.descriptor, false)) }
+                .let(::noteSubmittedZoom)
         } catch (problem: Exception) { failure = problem }
     }
     owner.frames.clear()

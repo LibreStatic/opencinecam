@@ -1187,6 +1187,25 @@ internal fun CaptureService.newPreviewListener(): Camera2PreviewListener = objec
         cameraState.update { it.copy(subjectFraming = status) }
     }
 
+    override fun onZoomHeldForRawTake(takeToken: Any?, cameraId: String, kept: Float) {
+        // The service had already shown and remembered the dropped ratio; the take keeps its framing.
+        mainHandler.post {
+            val state = cameraState.value
+            // Only while the take that held it still runs on this camera: after it ends (even if another take
+            // started), or on another camera, a newer zoom stands.
+            val take = rawTake
+            if (serviceDestroyed || take == null || take !== takeToken || state.selectedCameraId != cameraId) return@post
+            perCameraZoom[cameraId] = kept
+            cameraState.value = state.copy(
+                zoomRatio = kept,
+                zoomEffectiveRatio = kept,
+                message = getString(R.string.capture_zoom_locked_raw_take),
+                messageTransient = true,
+                rawTakeZoomHeldAtMs = android.os.SystemClock.elapsedRealtime(),
+            )
+        }
+    }
+
     override fun onZoomRejected(requested: Float, accepted: Float) {
         cameraState.value = cameraState.value.copy(
             zoomRatio = accepted,
