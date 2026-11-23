@@ -809,8 +809,8 @@ internal fun Camera2PreviewEngine.failAccumulation(owner: AccumulationRequest, c
     if (retireAccumulation(owner, restore = true) && notify) owner.listener.onFailure(code, message, true)
 }
 
-internal fun Camera2PreviewEngine.reserveLegacyStill(): Any? = synchronized(stillAdmissionLock) {
-    if (disposed.get() || bracketRequest.get() != null || accumulationRequest.get() != null || burstRequest.get() != null || photoRequest.get() != null ||
+internal fun Camera2PreviewEngine.reserveLegacyStill(device: CameraDevice, ownerGeneration: Long): Any? = synchronized(stillAdmissionLock) {
+    if (disposed.get() || !stillOwnerCurrent(device, ownerGeneration) || bracketRequest.get() != null || accumulationRequest.get() != null || burstRequest.get() != null || photoRequest.get() != null ||
         recording || recorderRequest.get() != null) null
     else Any().takeIf { legacyStillRequest.compareAndSet(null, it) }
 }

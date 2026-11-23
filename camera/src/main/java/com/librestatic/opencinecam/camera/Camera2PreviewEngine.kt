@@ -1445,8 +1445,7 @@ class Camera2PreviewEngine(
                                 // the camera cleared under the admission lock, so a still is either seen here or refused there.
                                 val stillInFlight = synchronized(stillAdmissionLock) {
                                     camera = null
-                                    photoRequest.get() != null || bracketRequest.get() != null || accumulationRequest.get() != null ||
-                                        burstRequest.get() != null || legacyStillRequest.get() != null
+                                    stillInFlightLocked()
                                 }
                                 // An accepted take that has not started yet (a queued recorder request) counts: its failure path ends it.
                                 val queuedTake = !recording && recorderRequest.get() != null
@@ -1888,7 +1887,18 @@ class Camera2PreviewEngine(
 
     /** Under [stillAdmissionLock]: the still owner was built on the camera still open (onError clears it under the lock). */
     internal fun stillOwnerCurrent(device: CameraDevice, ownerGeneration: Long): Boolean =
-        device === camera && ownerGeneration == generation
+        device === camera && device !== stillAdmissionRetired && ownerGeneration == generation
+
+    /** Under [stillAdmissionLock]: an accepted still owns the camera; only its failure path releases it in the app. */
+    internal fun stillInFlightLocked(): Boolean =
+        photoRequest.get() != null || bracketRequest.get() != null || accumulationRequest.get() != null ||
+            burstRequest.get() != null || legacyStillRequest.get() != null
+
+    /**
+     * Under [stillAdmissionLock]: a camera being restarted in place (a lens-lock fallback) admits no new still,
+     * so none is retired by the restart without a result. A new open is a new device, so no reset is needed.
+     */
+    @Volatile internal var stillAdmissionRetired: CameraDevice? = null
 
     fun captureDng(): Boolean =
         captureStillInternal(StillPhotoFormat.DNG, PhotoFlashSelection(), 95, LegacyPhotoDelivery.DNG)
@@ -2021,7 +2031,7 @@ class Camera2PreviewEngine(
         val reader = jpegReader?.takeIf { it.imageFormat == ImageFormat.JPEG } ?: return false
         val descriptor = activeDescriptor ?: return false
         val readerGeneration = generation
-        val admission = reserveLegacyStill() ?: return false
+        val admission = reserveLegacyStill(device, readerGeneration) ?: return false
         cameraExecutor.execute {
             if (disposed.get() || generation != readerGeneration || device !== camera || currentSession !== session || reader !== jpegReader) {
                 legacyStillRequest.compareAndSet(admission, null)
