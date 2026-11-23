@@ -77,6 +77,8 @@ internal class NightExtensionSession(
     private val ids = AtomicLong()
     @Volatile private var session: CameraExtensionSession? = null
     @Volatile private var started = false
+    /** Set by [retireAdmission]: the camera is being restarted, so no new capture is accepted. */
+    private var admissionRetired = false
     private var reader: ImageReader? = null
     private var pending: Pending? = null
     private var availableKeys: Set<CaptureRequest.Key<*>>? = null
@@ -131,11 +133,19 @@ internal class NightExtensionSession(
     fun capture(quality: Int, aspect: PhotoAspectSelection, legacy: Boolean): Boolean {
         val active = session ?: return false
         val request = synchronized(lock) {
-            if (closed.get() || pending != null || !started) return false
+            if (closed.get() || admissionRetired || pending != null || !started) return false
             Pending(ids.incrementAndGet(), quality, aspect, legacy).also { pending = it }
         }
         cameraExecutor.execute { submit(request, active) }
         return true
+    }
+
+    /**
+     * For a camera restarted in place: true when a capture was already accepted (its failure path must end it);
+     * otherwise no capture is accepted from here on, so the restart retires none without a result.
+     */
+    fun retireAdmission(): Boolean = synchronized(lock) {
+        (pending != null).also { busy -> if (!busy) admissionRetired = true }
     }
 
     /** A capture cannot be aborted inside the extension; its image is dropped when it arrives. */
