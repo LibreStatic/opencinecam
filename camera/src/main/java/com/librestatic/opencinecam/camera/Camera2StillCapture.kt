@@ -121,7 +121,8 @@ internal fun Camera2PreviewEngine.captureStillInternal(format: StillPhotoFormat,
     synchronized(stillAdmissionLock) {
         if (bracketRequest.get() !== bracket || accumulationRequest.get() !== accumulation || burstRequest.get() !== burst || legacyStillRequest.get() != null || recording || recorderRequest.get() != null ||
             bracket != null && !ownsBracket(bracket) || accumulation != null && !ownsAccumulation(accumulation) ||
-            burst != null && !ownsBurst(burst) || !photoRequest.compareAndSet(null, request)) return false
+            burst != null && !ownsBurst(burst) || !stillOwnerCurrent(request.device, request.generation) ||
+            !photoRequest.compareAndSet(null, request)) return false
     }
     if (!ownsPhoto(request)) {
         photoRequest.compareAndSet(request, null)
@@ -808,8 +809,8 @@ internal fun Camera2PreviewEngine.failAccumulation(owner: AccumulationRequest, c
     if (retireAccumulation(owner, restore = true) && notify) owner.listener.onFailure(code, message, true)
 }
 
-internal fun Camera2PreviewEngine.reserveLegacyStill(): Any? = synchronized(stillAdmissionLock) {
-    if (disposed.get() || bracketRequest.get() != null || accumulationRequest.get() != null || burstRequest.get() != null || photoRequest.get() != null ||
+internal fun Camera2PreviewEngine.reserveLegacyStill(device: CameraDevice, ownerGeneration: Long): Any? = synchronized(stillAdmissionLock) {
+    if (disposed.get() || !stillOwnerCurrent(device, ownerGeneration) || bracketRequest.get() != null || accumulationRequest.get() != null || burstRequest.get() != null || photoRequest.get() != null ||
         recording || recorderRequest.get() != null) null
     else Any().takeIf { legacyStillRequest.compareAndSet(null, it) }
 }
