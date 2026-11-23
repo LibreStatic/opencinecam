@@ -121,7 +121,8 @@ internal fun Camera2PreviewEngine.captureStillInternal(format: StillPhotoFormat,
     synchronized(stillAdmissionLock) {
         if (bracketRequest.get() !== bracket || accumulationRequest.get() !== accumulation || burstRequest.get() !== burst || legacyStillRequest.get() != null || recording || recorderRequest.get() != null ||
             bracket != null && !ownsBracket(bracket) || accumulation != null && !ownsAccumulation(accumulation) ||
-            burst != null && !ownsBurst(burst) || !photoRequest.compareAndSet(null, request)) return false
+            burst != null && !ownsBurst(burst) || !stillOwnerCurrent(request.device, request.generation) ||
+            !photoRequest.compareAndSet(null, request)) return false
     }
     if (!ownsPhoto(request)) {
         photoRequest.compareAndSet(request, null)

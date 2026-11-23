@@ -1441,12 +1441,15 @@ class Camera2PreviewEngine(
                             cameraOpening = false
                             closeCameraDevice(device)
                             if (currentGeneration == generation) {
-                                camera = null
+                                // An accepted still counts too: only the failure path releases its owner in the app. Read with
+                                // the camera cleared under the admission lock, so a still is either seen here or refused there.
+                                val stillInFlight = synchronized(stillAdmissionLock) {
+                                    camera = null
+                                    photoRequest.get() != null || bracketRequest.get() != null || accumulationRequest.get() != null ||
+                                        burstRequest.get() != null || legacyStillRequest.get() != null
+                                }
                                 // An accepted take that has not started yet (a queued recorder request) counts: its failure path ends it.
                                 val queuedTake = !recording && recorderRequest.get() != null
-                                // An accepted still too: only the failure path releases its owner in the app.
-                                val stillInFlight = photoRequest.get() != null || bracketRequest.get() != null ||
-                                    accumulationRequest.get() != null || burstRequest.get() != null || legacyStillRequest.get() != null
                                 val takeInProgress = recording || rawTake.get() != null || queuedTake || stillInFlight
                                 endTakeOnCameraLoss(RawVideoReasons.CAMERA_ERROR)
                                 // An accepted take that has not started gets its terminal failure below: the lens-lock
@@ -1499,6 +1502,10 @@ class Camera2PreviewEngine(
         Log.w(TAG, "Camera ${descriptor.cameraId} failed (error $error); reopening it once it is available again")
         closeResources()
         this.listener = listener
+        // As in startPreview: closeResources released both locks, so the UI must not keep showing them.
+        listener.onAeLockChanged(false)
+        listener.onCadenceGuardChanged(false)
+        listener.onAfLockChanged(LockState.OFF)
         listener.onOpening(descriptor)
         val retry = PendingReopen(descriptor.cameraId) { how ->
             if (!disposed.get() && startGeneration == generation) {
@@ -1879,6 +1886,10 @@ class Camera2PreviewEngine(
         setSingleRepeatingRequest(request, executor, callback)
     }
 
+    /** Under [stillAdmissionLock]: the still owner was built on the camera still open (onError clears it under the lock). */
+    internal fun stillOwnerCurrent(device: CameraDevice, ownerGeneration: Long): Boolean =
+        device === camera && ownerGeneration == generation
+
     fun captureDng(): Boolean =
         captureStillInternal(StillPhotoFormat.DNG, PhotoFlashSelection(), 95, LegacyPhotoDelivery.DNG)
 
@@ -1892,7 +1903,7 @@ class Camera2PreviewEngine(
         synchronized(stillAdmissionLock) {
             if (disposed.get() || recording || recorderRequest.get() != null || photoRequest.get() != null ||
                 accumulationRequest.get() != null || burstRequest.get() != null || legacyStillRequest.get() != null || (gpuPreviewEnabled && !gpuPhotoPreviewEnabled) || logPreviewEnabled ||
-                !bracketRequest.compareAndSet(null, owner)) return false
+                !stillOwnerCurrent(owner.device, owner.generation) || !bracketRequest.compareAndSet(null, owner)) return false
         }
         cameraExecutor.execute {
             if (!ownsBracket(owner)) { retireBracket(owner, restore = false); return@execute }
@@ -1936,7 +1947,7 @@ class Camera2PreviewEngine(
         synchronized(stillAdmissionLock) {
             if (disposed.get() || recording || recorderRequest.get() != null || photoRequest.get() != null ||
                 bracketRequest.get() != null || burstRequest.get() != null || legacyStillRequest.get() != null || (gpuPreviewEnabled && !gpuPhotoPreviewEnabled) || logPreviewEnabled ||
-                !accumulationRequest.compareAndSet(null, owner)) return false
+                !stillOwnerCurrent(owner.device, owner.generation) || !accumulationRequest.compareAndSet(null, owner)) return false
         }
         cameraExecutor.execute {
             if (!ownsAccumulation(owner)) { retireAccumulation(owner, restore = false); return@execute }
@@ -1978,7 +1989,7 @@ class Camera2PreviewEngine(
         synchronized(stillAdmissionLock) {
             if (disposed.get() || recording || recorderRequest.get() != null || photoRequest.get() != null ||
                 bracketRequest.get() != null || accumulationRequest.get() != null || legacyStillRequest.get() != null ||
-                (gpuPreviewEnabled && !gpuPhotoPreviewEnabled) || logPreviewEnabled || !burstRequest.compareAndSet(null, owner)) return false
+                (gpuPreviewEnabled && !gpuPhotoPreviewEnabled) || logPreviewEnabled || !stillOwnerCurrent(owner.device, owner.generation) || !burstRequest.compareAndSet(null, owner)) return false
         }
         cameraExecutor.execute {
             if (!ownsBurst(owner)) { retireBurst(owner, restore = false); return@execute }
