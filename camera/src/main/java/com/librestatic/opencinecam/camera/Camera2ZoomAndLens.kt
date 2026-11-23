@@ -228,7 +228,7 @@ internal fun Camera2PreviewEngine.uiZoom(physical: Float): Float =
 
 /**
  * The zoom a RAW take keeps, on the operator's scale, from the request it retained rather than the last
- * (throttled) capture result: [requestedHal] is the HAL ratio last requested and [cropFactor] the GPU crop on the
+ * (throttled) capture result: [requestedHal] is the HAL ratio last submitted successfully and [cropFactor] the GPU crop on the
  * lens-lock crop route (null otherwise), whose HAL ratio stays pinned. [toUi] maps a physical ratio to the
  * logical scale while lens-locked.
  */
@@ -237,7 +237,7 @@ internal fun heldRawTakeZoom(requestedHal: Float, cropFactor: Float?, toUi: (Flo
 
 /** cameraExecutor, under the RAW admission lock: see [heldRawTakeZoom]. */
 internal fun Camera2PreviewEngine.heldRawTakeZoom(): Float =
-    heldRawTakeZoom(requestedZoomRatio, lensLockCrop?.factor) { uiZoom(it) }
+    heldRawTakeZoom(lastAcceptedZoomRatio, lensLockCrop?.factor) { uiZoom(it) }
 
 internal fun Camera2PreviewEngine.zoomOverrideEligible(descriptor: Camera2CameraDescriptor): Boolean =
     ZoomSettingsOverride.eligible(

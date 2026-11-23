@@ -740,7 +740,7 @@ class Camera2PreviewEngine(
     internal var tapAeRegion: MeteringRectangle? = null
     internal var tapFocusResultReported = false
     internal var requestedZoomRatio: Float = 1f
-    private var lastAcceptedZoomRatio: Float = 1f
+    internal var lastAcceptedZoomRatio: Float = 1f
     internal var zoomOverrideArmed = false
     internal var lastZoomChangeAtMs = 0L
     internal var effectiveZoomRatio: Float = 1f
