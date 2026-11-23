@@ -2415,6 +2415,8 @@ class Camera2PreviewEngine(
                 requestedZoomRatio = lastAcceptedZoomRatio
                 listener?.onZoomRejected(uiZoom(requestedZoomRatio), uiZoom(lastAcceptedZoomRatio))
             } else {
+                // Not left pending: the next manual-control submission would otherwise send it (even in a RAW take).
+                requestedZoomRatio = lastAcceptedZoomRatio
                 listener?.onControlRejected("zoom-request-failed", failure.message ?: "Zoom update failed.")
             }
         }
