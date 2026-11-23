@@ -1187,11 +1187,13 @@ internal fun CaptureService.newPreviewListener(): Camera2PreviewListener = objec
         cameraState.update { it.copy(subjectFraming = status) }
     }
 
-    override fun onZoomHeldForRawTake(kept: Float) {
+    override fun onZoomHeldForRawTake(cameraId: String, kept: Float) {
         // The service had already shown and remembered the dropped ratio; the take keeps its framing.
         mainHandler.post {
             val state = cameraState.value
-            state.selectedCameraId?.let { perCameraZoom[it] = kept }
+            // Only while a take still holds this camera: after it ends, or on another camera, a newer zoom stands.
+            if (serviceDestroyed || rawTake == null || state.selectedCameraId != cameraId) return@post
+            perCameraZoom[cameraId] = kept
             cameraState.value = state.copy(
                 zoomRatio = kept,
                 zoomEffectiveRatio = kept,

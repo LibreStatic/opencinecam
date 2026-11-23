@@ -387,8 +387,8 @@ interface Camera2PreviewListener {
     fun onZoomRangeAvailable(min: Float, max: Float, anchors: List<ZoomAnchor>) = Unit
     fun onZoomEffective(ratio: Float) = Unit
     fun onZoomRejected(requested: Float, accepted: Float) = Unit
-    /** A zoom request was dropped because a RAW take was admitted first; the take keeps [kept] (UI scale). */
-    fun onZoomHeldForRawTake(kept: Float) = Unit
+    /** A zoom request was dropped because a RAW take on [cameraId] was admitted first; the take keeps [kept] (UI scale). */
+    fun onZoomHeldForRawTake(cameraId: String, kept: Float) = Unit
     fun onAeLockChanged(active: Boolean) = Unit
     /**
      * The physical camera the compressed still is routed to ([requestedPhysicalId], null on the
@@ -2494,7 +2494,7 @@ class Camera2PreviewEngine(
                 synchronized(rawZoomAdmissionLock) {
                     if (lensLockCrop !== crop) return@execute
                     if (rawTake.get() != null) {
-                        listener?.onZoomHeldForRawTake(heldRawTakeZoom())
+                        listener?.onZoomHeldForRawTake(descriptor.cameraId, heldRawTakeZoom())
                         return@execute
                     }
                     crop.factor = factor
@@ -2509,7 +2509,7 @@ class Camera2PreviewEngine(
             // Held with startRawVideo's admission: a zoom queued before a take never reaches the request after it.
             synchronized(rawZoomAdmissionLock) {
                 if (rawTake.get() != null) {
-                    listener?.onZoomHeldForRawTake(heldRawTakeZoom())
+                    listener?.onZoomHeldForRawTake(descriptor.cameraId, heldRawTakeZoom())
                     return@execute
                 }
                 val previousRatio = requestedZoomRatio
@@ -2546,6 +2546,8 @@ class Camera2PreviewEngine(
                 requestedZoomRatio = lastAcceptedZoomRatio
                 listener?.onControlRejected("zoom-request-failed", failure.message ?: "Zoom update failed.")
             }
+            // The builder still carries the refused ratio; a direct submission (the torch) would send it otherwise.
+            applyZoom(builder)
         }
     }
 
