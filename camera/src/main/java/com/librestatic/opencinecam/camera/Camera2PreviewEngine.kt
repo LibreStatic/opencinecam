@@ -387,8 +387,11 @@ interface Camera2PreviewListener {
     fun onZoomRangeAvailable(min: Float, max: Float, anchors: List<ZoomAnchor>) = Unit
     fun onZoomEffective(ratio: Float) = Unit
     fun onZoomRejected(requested: Float, accepted: Float) = Unit
-    /** A zoom request was dropped because a RAW take on [cameraId] was admitted first; the take keeps [kept] (UI scale). */
-    fun onZoomHeldForRawTake(cameraId: String, kept: Float) = Unit
+    /**
+     * A zoom request was dropped because a RAW take on [cameraId] was admitted first; the take keeps [kept] (UI scale).
+     * [takeToken] is the token [startRawVideo] was given for that take.
+     */
+    fun onZoomHeldForRawTake(takeToken: Any?, cameraId: String, kept: Float) = Unit
     fun onAeLockChanged(active: Boolean) = Unit
     /**
      * The physical camera the compressed still is routed to ([requestedPhysicalId], null on the
@@ -547,7 +550,8 @@ class Camera2PreviewEngine(
         /** True once the repeating request (with [surface]) runs; takes are admitted only then. */
         @Volatile var live = false
     }
-    internal class RawTake(val stream: RawVideoStream, val consumer: RawVideoFrameConsumer) {
+    /** [token] is the caller's identity for this take, handed back by [Listener.onZoomHeldForRawTake]. */
+    internal class RawTake(val stream: RawVideoStream, val consumer: RawVideoFrameConsumer, val token: Any? = null) {
         /** RAW thread only. */
         val state = RawVideoTakeState()
     }
@@ -1784,11 +1788,11 @@ class Camera2PreviewEngine(
      * camera keeps running (stop, full ring) first drains the results of its delivered frames, up to
      * [RAW_TAKE_RESULT_DRAIN_TIMEOUT_MS]; until it stopped, this returns false.
      */
-    fun startRawVideo(consumer: RawVideoFrameConsumer): Boolean {
+    fun startRawVideo(consumer: RawVideoFrameConsumer, token: Any? = null): Boolean {
         if (disposed.get() || recording) return false
         val stream = rawVideoStream ?: return false
         if (!stream.live) return false
-        val take = RawTake(stream, consumer)
+        val take = RawTake(stream, consumer, token)
         // A queued zoom change either lands before this take is admitted or sees it and drops (see setZoomRatio).
         if (!synchronized(rawZoomAdmissionLock) { rawTake.compareAndSet(null, take) }) return false
         val begin = Runnable {
@@ -2493,8 +2497,9 @@ class Camera2PreviewEngine(
                 // The same admission check as the HAL path below: a take admitted meanwhile keeps its framing.
                 synchronized(rawZoomAdmissionLock) {
                     if (lensLockCrop !== crop) return@execute
-                    if (rawTake.get() != null) {
-                        listener?.onZoomHeldForRawTake(descriptor.cameraId, heldRawTakeZoom())
+                    val take = rawTake.get()
+                    if (take != null) {
+                        listener?.onZoomHeldForRawTake(take.token, descriptor.cameraId, heldRawTakeZoom())
                         return@execute
                     }
                     crop.factor = factor
@@ -2508,8 +2513,9 @@ class Camera2PreviewEngine(
         cameraExecutor.execute {
             // Held with startRawVideo's admission: a zoom queued before a take never reaches the request after it.
             synchronized(rawZoomAdmissionLock) {
-                if (rawTake.get() != null) {
-                    listener?.onZoomHeldForRawTake(descriptor.cameraId, heldRawTakeZoom())
+                val take = rawTake.get()
+                if (take != null) {
+                    listener?.onZoomHeldForRawTake(take.token, descriptor.cameraId, heldRawTakeZoom())
                     return@execute
                 }
                 val previousRatio = requestedZoomRatio

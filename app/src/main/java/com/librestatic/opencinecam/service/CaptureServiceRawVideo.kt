@@ -894,7 +894,8 @@ internal fun CaptureService.startRawTakeOnControl(
         refuse(RawVideoServiceReasons.START_FAILED)
         return
     }
-    if (!previewEngine.startRawVideo(rawRecorder)) {
+    // The session is the take's token: a zoom the engine held for it is applied only while it is the active take.
+    if (!previewEngine.startRawVideo(rawRecorder, session)) {
         // Nothing reached the file: stop() discards the empty output.
         runCatching { rawRecorder.stop() }.onFailure { android.util.Log.e("CaptureService", "Refused RAW take did not close", it) }
         refuse(RawVideoServiceReasons.START_FAILED)
