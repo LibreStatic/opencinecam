@@ -214,6 +214,12 @@ internal fun Camera2PreviewEngine.lensLockPlan(
 /** Hands a failed lens-locked open or configuration to the fallback; false when the session is not a pending lock. */
 internal fun Camera2PreviewEngine.withdrawLensLock(reason: String): Boolean {
     val withdraw = lensLockWithdraw ?: return false
+    // A still accepted on the session being withdrawn would be retired by the restart without a result: let the
+    // ordinary failure path end it instead. Otherwise no new still is admitted on this camera from here on.
+    val stillAccepted = synchronized(stillAdmissionLock) {
+        stillInFlightLocked().also { busy -> if (!busy) stillAdmissionRetired = camera }
+    }
+    if (stillAccepted) return false
     withdraw(reason)
     return true
 }

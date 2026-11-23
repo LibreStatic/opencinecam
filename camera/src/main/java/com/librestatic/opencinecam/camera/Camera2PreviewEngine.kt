@@ -561,7 +561,11 @@ class Camera2PreviewEngine(
     internal var camera: CameraDevice? = null
     internal var session: CameraCaptureSession? = null
         set(value) {
-            if (field !== value) pendingPreviewStartedReceipt = null
+            if (field !== value) {
+                pendingPreviewStartedReceipt = null
+                // captureDiagnostics() describes the current graph only: null until the new one is audited.
+                latestCaptureDiagnostics = null
+            }
             field = value
         }
     internal data class PreviewStartedReceipt(val session: CameraCaptureSession, val generation: Long,
@@ -999,6 +1003,10 @@ class Camera2PreviewEngine(
     internal val faceDetectDefaults = java.util.WeakHashMap<CaptureRequest.Builder, Int?>()
     internal var professionalExposure: ExposureSelection? = null
     internal var requestedTargetFps = DEFAULT_TARGET_FPS
+    /** cameraExecutor: reopens after a camera provider death, see [reopenWhenAvailable]. */
+    private val reopenPolicy = CameraReopenPolicy()
+    /** cameraExecutor: the reopen waiting for the camera to come back, cancelled by [closeResources]. */
+    private var pendingReopen: PendingReopen? = null
     /** Low-light auto frame rate is on for the active graph; every other graph sends an explicit 0. */
     @Volatile internal var dynamicFpsOn = false
     /** FPS LOCK is wanted for the active graph (the service only asks in VIDEO, LOG and HLG). */
@@ -1234,9 +1242,12 @@ class Camera2PreviewEngine(
             var lockResolved = requestedLock == null
             var lockPlan: LensLockPlan? = null
             var cropRoute: LensLockCropRoute? = null
+            // The viewfinder the start draws to; a reopen after a camera death retargets it to the current one.
+            var startSurface = surface
+            var startRotation = displayRotationDegrees
             lateinit var start: Runnable
             start = Runnable {
-                if (disposed.get() || currentGeneration != generation || !surface.isValid) return@Runnable
+                if (disposed.get() || currentGeneration != generation || !startSurface.isValid) return@Runnable
                 this.listener = listener
                 if (!lockResolved) {
                     lockResolved = true
@@ -1285,9 +1296,9 @@ class Camera2PreviewEngine(
                 this.activeStillFormat = stillFormat
                 this.activeStillSize = stillSize
                 this.physicalStillFallbackTaken = false
-                this.previewSurface = surface
+                this.previewSurface = startSurface
                 this.activeDescriptor = descriptor
-                this.displayRotationDegrees = displayRotationDegrees
+                this.displayRotationDegrees = startRotation
                 this.logPreviewEnabled = openCineLog
                 this.logViewAssistEnabled = viewAssist
                 if (rawVideo != null && openCineLog) {
@@ -1354,9 +1365,9 @@ class Camera2PreviewEngine(
                         logPipeline = OpenCineLogGpuPipeline(
                             selectedLogProfile.size,
                             selectedLogProfile.sourcePath,
-                            surface,
+                            startSurface,
                             descriptor.sensorOrientation,
-                            displayRotationDegrees,
+                            startRotation,
                             descriptor.lensFacing == CameraCharacteristics.LENS_FACING_FRONT,
                             viewAssist,
                             requestedTargetFps,
@@ -1377,7 +1388,7 @@ class Camera2PreviewEngine(
                     try {
                         val size = activeVideoProfile?.size ?: baseViewfinderSize(descriptor)
                         logPipeline = OpenCineLogGpuPipeline(size, OpenCineLogSourcePath.SDR_BT709_ISP,
-                            surface, descriptor.sensorOrientation, displayRotationDegrees,
+                            startSurface, descriptor.sensorOrientation, startRotation,
                             descriptor.lensFacing == CameraCharacteristics.LENS_FACING_FRONT,
                             false, requestedTargetFps, passthroughSdr = true, appContext = appContext,
                             cameraTimestampRealtime = descriptor.timestampSourceRealtime,
@@ -1403,7 +1414,7 @@ class Camera2PreviewEngine(
                                 return
                             }
                             camera = device
-                            if (nightRequested && startNightExtension(device, descriptor, surface, currentGeneration)) return
+                            if (nightRequested && startNightExtension(device, descriptor, startSurface, currentGeneration)) return
                             if (openCineLog) configureLogSession(device, descriptor, currentGeneration)
                             else if (gpuPhotoPreviewEnabled) configureSession(device, descriptor,
                                 requireNotNull(logPipeline).cameraInputSurface, currentGeneration)
@@ -1412,10 +1423,10 @@ class Camera2PreviewEngine(
                                 configureHighSpeedPreviewSession(
                                     device,
                                     descriptor,
-                                    surface,
+                                    startSurface,
                                     currentGeneration,
                                 )
-                            } else configureSession(device, descriptor, surface, currentGeneration)
+                            } else configureSession(device, descriptor, startSurface, currentGeneration)
                         }
 
                         override fun onClosed(device: CameraDevice) {
@@ -1438,9 +1449,30 @@ class Camera2PreviewEngine(
                             cameraOpening = false
                             closeCameraDevice(device)
                             if (currentGeneration == generation) {
-                                camera = null
+                                // An accepted still counts too: only the failure path releases its owner in the app. Read with
+                                // the camera cleared under the admission lock, so a still is either seen here or refused there.
+                                val stillInFlight = synchronized(stillAdmissionLock) {
+                                    camera = null
+                                    stillInFlightLocked()
+                                }
+                                // An accepted take that has not started yet (a queued recorder request) counts: its failure path ends it.
+                                val queuedTake = !recording && recorderRequest.get() != null
+                                // A night capture is admitted by its extension session, not under the still lock.
+                                val nightInFlight = nightSession?.retireAdmission() == true
+                                val takeInProgress = recording || rawTake.get() != null || queuedTake || stillInFlight || nightInFlight
                                 endTakeOnCameraLoss(RawVideoReasons.CAMERA_ERROR)
-                                if (withdrawLensLock(LensLockUnavailable.OPEN_FAILED)) return
+                                // An accepted take that has not started gets its terminal failure below: the lens-lock
+                                // withdrawal would restart the preview and leave it without one.
+                                if (!queuedTake && withdrawLensLock(LensLockUnavailable.OPEN_FAILED)) return
+                                if (reopenPolicy.shouldReopen(error, takeInProgress, SystemClock.elapsedRealtime())) {
+                                    // The viewfinder may have moved to another surface since this start was queued.
+                                    previewSurface?.takeIf { it.isValid }?.let {
+                                        startSurface = it
+                                        startRotation = this@Camera2PreviewEngine.displayRotationDegrees
+                                    }
+                                    reopenWhenAvailable(logicalDescriptor, error, listener, currentGeneration, start)
+                                    return
+                                }
                                 listener.onFailure("camera-open-$error", "The selected camera could not be opened.", true)
                             }
                         }
@@ -1465,6 +1497,86 @@ class Camera2PreviewEngine(
             }
             pendingPreviewStart = start
             runPendingPreviewStart()
+        }
+    }
+
+    /**
+     * cameraExecutor: the camera of this generation's [start] died with a retryable [error] (see [CameraReopenPolicy]).
+     * The session is released, the UI goes back to preparing, and once the camera service reports [descriptor]'s
+     * camera available again (or [CameraReopenPolicy.AVAILABILITY_TIMEOUT_MS] passes) [start] runs again in the same
+     * generation, as a lens-lock withdrawal does. A newer start, stopPreview or close in the meantime cancels it.
+     */
+    private fun reopenWhenAvailable(descriptor: Camera2CameraDescriptor, error: Int, listener: Camera2PreviewListener,
+        startGeneration: Long, start: Runnable) {
+        Log.w(TAG, "Camera ${descriptor.cameraId} failed (error $error); reopening it once it is available again")
+        closeResources()
+        this.listener = listener
+        // As in startPreview: closeResources released both locks, so the UI must not keep showing them.
+        listener.onAeLockChanged(false)
+        listener.onCadenceGuardChanged(false)
+        listener.onAfLockChanged(LockState.OFF)
+        listener.onOpening(descriptor)
+        val retry = PendingReopen(descriptor.cameraId) { how ->
+            if (!disposed.get() && startGeneration == generation) {
+                Log.i(TAG, "Reopening camera ${descriptor.cameraId} ($how)")
+                this.listener = listener
+                pendingPreviewStart = start
+                runPendingPreviewStart()
+            }
+        }
+        pendingReopen = retry
+        imageHandler.postDelayed({
+            // Registered on the camera executor, like the cancellation in closeResources, so a close never misses it.
+            runCatching {
+                cameraExecutor.execute {
+                    if (retry.finished || pendingReopen !== retry || disposed.get() || startGeneration != generation) {
+                        cancelPendingReopen(retry)
+                        return@execute
+                    }
+                    // Reported at once when the camera is already available again.
+                    runCatching { manager.registerAvailabilityCallback(cameraExecutor, retry) }
+                        .onFailure { retry.finish("availability unknown") }
+                    imageHandler.postDelayed({ retry.finish("timed out waiting") }, CameraReopenPolicy.AVAILABILITY_TIMEOUT_MS)
+                }
+            }
+        }, CameraReopenPolicy.SETTLE_MS)
+    }
+
+    /** cameraExecutor: drops a reopen that is still waiting (a newer start, a stop or the engine closing). */
+    private fun cancelPendingReopen(only: PendingReopen? = null) {
+        val retry = pendingReopen ?: return
+        if (only != null && retry !== only) return
+        pendingReopen = null
+        retry.cancel()
+    }
+
+    /**
+     * A reopen waiting for [cameraId] to be available again. [finish] or [cancel] runs once: it unregisters the
+     * availability callback; [finish] then hands [onReady] to the camera executor.
+     */
+    private inner class PendingReopen(private val cameraId: String, private val onReady: (String) -> Unit) :
+        CameraManager.AvailabilityCallback() {
+        private val done = java.util.concurrent.atomic.AtomicBoolean(false)
+        val finished: Boolean get() = done.get()
+
+        override fun onCameraAvailable(cameraId: String) {
+            if (cameraId == this.cameraId) finish("available")
+        }
+
+        fun finish(how: String) {
+            if (!done.compareAndSet(false, true)) return
+            runCatching { manager.unregisterAvailabilityCallback(this) }
+            runCatching {
+                cameraExecutor.execute {
+                    if (pendingReopen === this) pendingReopen = null
+                    onReady(how)
+                }
+            }
+        }
+
+        fun cancel() {
+            if (!done.compareAndSet(false, true)) return
+            runCatching { manager.unregisterAvailabilityCallback(this) }
         }
     }
 
@@ -1786,6 +1898,21 @@ class Camera2PreviewEngine(
         noteSubmittedZoom(request)
     }
 
+    /** Under [stillAdmissionLock]: the still owner was built on the camera still open (onError clears it under the lock). */
+    internal fun stillOwnerCurrent(device: CameraDevice, ownerGeneration: Long): Boolean =
+        device === camera && device !== stillAdmissionRetired && ownerGeneration == generation
+
+    /** Under [stillAdmissionLock]: an accepted still owns the camera; only its failure path releases it in the app. */
+    internal fun stillInFlightLocked(): Boolean =
+        photoRequest.get() != null || bracketRequest.get() != null || accumulationRequest.get() != null ||
+            burstRequest.get() != null || legacyStillRequest.get() != null
+
+    /**
+     * Under [stillAdmissionLock]: a camera being restarted in place (a lens-lock fallback) admits no new still,
+     * so none is retired by the restart without a result. A new open is a new device, so no reset is needed.
+     */
+    @Volatile internal var stillAdmissionRetired: CameraDevice? = null
+
     fun captureDng(): Boolean =
         captureStillInternal(StillPhotoFormat.DNG, PhotoFlashSelection(), 95, LegacyPhotoDelivery.DNG)
 
@@ -1799,7 +1926,7 @@ class Camera2PreviewEngine(
         synchronized(stillAdmissionLock) {
             if (disposed.get() || recording || recorderRequest.get() != null || photoRequest.get() != null ||
                 accumulationRequest.get() != null || burstRequest.get() != null || legacyStillRequest.get() != null || (gpuPreviewEnabled && !gpuPhotoPreviewEnabled) || logPreviewEnabled ||
-                !bracketRequest.compareAndSet(null, owner)) return false
+                !stillOwnerCurrent(owner.device, owner.generation) || !bracketRequest.compareAndSet(null, owner)) return false
         }
         cameraExecutor.execute {
             if (!ownsBracket(owner)) { retireBracket(owner, restore = false); return@execute }
@@ -1843,7 +1970,7 @@ class Camera2PreviewEngine(
         synchronized(stillAdmissionLock) {
             if (disposed.get() || recording || recorderRequest.get() != null || photoRequest.get() != null ||
                 bracketRequest.get() != null || burstRequest.get() != null || legacyStillRequest.get() != null || (gpuPreviewEnabled && !gpuPhotoPreviewEnabled) || logPreviewEnabled ||
-                !accumulationRequest.compareAndSet(null, owner)) return false
+                !stillOwnerCurrent(owner.device, owner.generation) || !accumulationRequest.compareAndSet(null, owner)) return false
         }
         cameraExecutor.execute {
             if (!ownsAccumulation(owner)) { retireAccumulation(owner, restore = false); return@execute }
@@ -1885,7 +2012,7 @@ class Camera2PreviewEngine(
         synchronized(stillAdmissionLock) {
             if (disposed.get() || recording || recorderRequest.get() != null || photoRequest.get() != null ||
                 bracketRequest.get() != null || accumulationRequest.get() != null || legacyStillRequest.get() != null ||
-                (gpuPreviewEnabled && !gpuPhotoPreviewEnabled) || logPreviewEnabled || !burstRequest.compareAndSet(null, owner)) return false
+                (gpuPreviewEnabled && !gpuPhotoPreviewEnabled) || logPreviewEnabled || !stillOwnerCurrent(owner.device, owner.generation) || !burstRequest.compareAndSet(null, owner)) return false
         }
         cameraExecutor.execute {
             if (!ownsBurst(owner)) { retireBurst(owner, restore = false); return@execute }
@@ -1917,7 +2044,7 @@ class Camera2PreviewEngine(
         val reader = jpegReader?.takeIf { it.imageFormat == ImageFormat.JPEG } ?: return false
         val descriptor = activeDescriptor ?: return false
         val readerGeneration = generation
-        val admission = reserveLegacyStill() ?: return false
+        val admission = reserveLegacyStill(device, readerGeneration) ?: return false
         cameraExecutor.execute {
             if (disposed.get() || generation != readerGeneration || device !== camera || currentSession !== session || reader !== jpegReader) {
                 legacyStillRequest.compareAndSet(admission, null)
@@ -3039,6 +3166,7 @@ class Camera2PreviewEngine(
     }
 
     private fun closeResources(keepWarm: Boolean = false) {
+        cancelPendingReopen()
         if (!keepWarm) retireWarm("the camera was released")
         pendingPreviewStartedReceipt = null
         cadenceGuard.reset()

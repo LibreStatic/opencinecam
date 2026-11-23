@@ -35,4 +35,13 @@ class HighSpeedResultGateTest {
         assertTrue(gate.shouldProcessFully(100 * ms))
         assertFalse(gate.shouldProcessFully(104 * ms))
     }
+
+    @Test fun neededForHighSpeedAndForRegularSessionsAboveSixtyFps() {
+        assertTrue(HighSpeedResultGate.needed(highSpeed = true, targetFps = 30))
+        assertFalse(HighSpeedResultGate.needed(highSpeed = false, targetFps = 30))
+        assertFalse(HighSpeedResultGate.needed(highSpeed = false, targetFps = 60))
+        // RAW video at 90 and 120 fps runs in a regular session.
+        assertTrue(HighSpeedResultGate.needed(highSpeed = false, targetFps = 90))
+        assertTrue(HighSpeedResultGate.needed(highSpeed = false, targetFps = 120))
+    }
 }
