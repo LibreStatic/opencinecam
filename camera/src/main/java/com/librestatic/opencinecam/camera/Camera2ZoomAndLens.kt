@@ -286,11 +286,17 @@ internal fun Camera2PreviewEngine.releaseZoomOverrideIfIdle(result: TotalCapture
  * zoom follows the request that went out, and a failed submission leaves it unchanged.
  */
 internal fun Camera2PreviewEngine.noteSubmittedZoom(request: CaptureRequest) =
-    noteSubmittedZoom(request.get(CaptureRequest.CONTROL_ZOOM_RATIO), request.get(CaptureRequest.SCALER_CROP_REGION))
+    noteSubmittedZoom(
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) request.get(CaptureRequest.CONTROL_ZOOM_RATIO) else null,
+        request.get(CaptureRequest.SCALER_CROP_REGION),
+    )
 
 /** As above, for a burst built from [builder] and submitted as is. */
 internal fun Camera2PreviewEngine.noteSubmittedZoom(builder: CaptureRequest.Builder) =
-    noteSubmittedZoom(builder.get(CaptureRequest.CONTROL_ZOOM_RATIO), builder.get(CaptureRequest.SCALER_CROP_REGION))
+    noteSubmittedZoom(
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) builder.get(CaptureRequest.CONTROL_ZOOM_RATIO) else null,
+        builder.get(CaptureRequest.SCALER_CROP_REGION),
+    )
 
 private fun Camera2PreviewEngine.noteSubmittedZoom(zoomRatio: Float?, cropRegion: android.graphics.Rect?) {
     val descriptor = activeDescriptor ?: return
