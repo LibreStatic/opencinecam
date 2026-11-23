@@ -280,6 +280,24 @@ internal fun Camera2PreviewEngine.releaseZoomOverrideIfIdle(result: TotalCapture
     reissueRepeating(builder, configured, descriptor)
 }
 
+/**
+ * cameraExecutor, after [request] was submitted as the repeating request: its zoom is now the one the HAL holds.
+ * Every repeating submission carries [applyZoom]'s ratio (manual controls, locks and restores too), so the accepted
+ * zoom follows the request that went out, and a failed submission leaves it unchanged.
+ */
+internal fun Camera2PreviewEngine.noteSubmittedZoom(request: CaptureRequest) {
+    val descriptor = activeDescriptor ?: return
+    val range = descriptor.effectiveZoomRange ?: return
+    val ratio = if (descriptor.supportsZoomRatioApi && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        request.get(CaptureRequest.CONTROL_ZOOM_RATIO)
+    } else {
+        // applyZoom clears the crop region at the wide end.
+        request.get(CaptureRequest.SCALER_CROP_REGION)?.let { ZoomMath.ratioFromCropRegion(descriptor.sensorActiveArray, it) }
+            ?: range.start
+    } ?: return
+    if (ratio.isFinite() && ratio > 0f) lastAcceptedZoomRatio = ZoomMath.coerce(ratio, range)
+}
+
 internal fun Camera2PreviewEngine.applyZoom(builder: CaptureRequest.Builder) {
     val descriptor = activeDescriptor ?: return
     val range = descriptor.effectiveZoomRange ?: return

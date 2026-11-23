@@ -1755,6 +1755,7 @@ class Camera2PreviewEngine(
         // built by createHighSpeedRequestList (zoom/lock reissues land here too).
         if (this is CameraConstrainedHighSpeedCaptureSession) {
             setRepeatingBurstRequests(createHighSpeedRequestList(request), executor, callback)
+            noteSubmittedZoom(request)
             return
         }
         val burst = burstRequest.get()
@@ -1782,6 +1783,7 @@ class Camera2PreviewEngine(
             return
         }
         setSingleRepeatingRequest(request, executor, callback)
+        noteSubmittedZoom(request)
     }
 
     fun captureDng(): Boolean =
