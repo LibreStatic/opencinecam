@@ -2275,7 +2275,13 @@ class CaptureService : Service() {
          */
         private fun rejectRawTakeZoom(): Boolean {
             if (rawTake == null) return false
-            cameraState.update { it.copy(message = getString(R.string.capture_zoom_locked_raw_take), messageTransient = true) }
+            cameraState.update {
+                it.copy(
+                    message = getString(R.string.capture_zoom_locked_raw_take),
+                    messageTransient = true,
+                    rawTakeZoomHeldAtMs = android.os.SystemClock.elapsedRealtime(),
+                )
+            }
             return true
         }
 

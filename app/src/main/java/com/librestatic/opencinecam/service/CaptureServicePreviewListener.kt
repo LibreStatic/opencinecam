@@ -1197,6 +1197,7 @@ internal fun CaptureService.newPreviewListener(): Camera2PreviewListener = objec
                 zoomEffectiveRatio = kept,
                 message = getString(R.string.capture_zoom_locked_raw_take),
                 messageTransient = true,
+                rawTakeZoomHeldAtMs = android.os.SystemClock.elapsedRealtime(),
             )
         }
     }

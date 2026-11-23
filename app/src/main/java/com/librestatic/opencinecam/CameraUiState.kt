@@ -230,6 +230,8 @@ data class CameraUiState(
     val errorCode: String? = null,
     val message: String? = null,
     val messageTransient: Boolean = false,
+    /** When a zoom change was last refused because a RAW take holds its zoom (elapsed realtime ms); the take's HUD says so briefly. */
+    val rawTakeZoomHeldAtMs: Long? = null,
     val focusPullActive: Boolean = false,
     val focusPullTargetDiopters: Float? = null,
     val focusMarks: Map<String, Float> = emptyMap(),
