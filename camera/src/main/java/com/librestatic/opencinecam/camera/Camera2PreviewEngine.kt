@@ -2410,7 +2410,6 @@ class Camera2PreviewEngine(
         applyManualControls(builder)
         try {
             configured.setPhotoAwareRepeatingRequest(builder.build(), cameraExecutor, previewCaptureCallback(descriptor, false))
-            lastAcceptedZoomRatio = requestedZoomRatio
         } catch (failure: Throwable) {
             if (isZoomRejection(failure, zoomChanged = requestedZoomRatio != lastAcceptedZoomRatio)) {
                 requestedZoomRatio = lastAcceptedZoomRatio

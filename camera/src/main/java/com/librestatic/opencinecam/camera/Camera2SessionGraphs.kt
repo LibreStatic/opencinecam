@@ -76,6 +76,7 @@ internal fun Camera2PreviewEngine.configureGpuPreviewSession(device: CameraDevic
                     if (constrained) {
                         val highSpeed = configured as CameraConstrainedHighSpeedCaptureSession
                         highSpeed.setRepeatingBurstRequests(highSpeed.createHighSpeedRequestList(builder.build()), cameraExecutor, callback)
+                        noteSubmittedZoom(builder)
                     } else configured.setPhotoAwareRepeatingRequest(builder.build(), cameraExecutor, callback)
                     rawStream?.live = true
                     notifyZoomRange()
@@ -160,6 +161,7 @@ internal fun Camera2PreviewEngine.configureGpuInputSession(
                             cameraExecutor,
                             recordingCallback,
                         )
+                        noteSubmittedZoom(builder)
                     } else {
                         configured.setPhotoAwareRepeatingRequest(
                             builder.build(),
@@ -309,6 +311,7 @@ internal fun Camera2PreviewEngine.configureHighSpeedPreviewSession(
                     repeatingBuilder = builder
                     val burst = configured.createHighSpeedRequestList(builder.build())
                     configured.setRepeatingBurstRequests(burst, cameraExecutor, previewCaptureCallback(descriptor, false))
+                    noteSubmittedZoom(builder)
                     listener?.onPreviewStarted(appDescriptor(descriptor))
                     notifyZoomRange()
                 } catch (failure: Throwable) {
@@ -384,6 +387,7 @@ internal fun Camera2PreviewEngine.configureHighSpeedRecordingSession(
                         // Created before the callback is armed, which binds to it; it counts frames once the recorder runs.
                         val anchors = if (startRecorder) DirectRecorderAnchors().also { directRecorderAnchors = it } else directRecorderAnchors
                         configured.setRepeatingBurstRequests(burst, cameraExecutor, previewCaptureCallback(descriptor, false))
+                        noteSubmittedZoom(builder)
                         if (startRecorder) {
                             requireNotNull(recorder).start()
                             anchors?.startElapsedNs = SystemClock.elapsedRealtimeNanos()
@@ -577,6 +581,7 @@ internal fun Camera2PreviewEngine.configureHighSpeedLogSession(
                         cameraExecutor,
                         previewCaptureCallback(descriptor, true),
                     )
+                    noteSubmittedZoom(builder)
                     notifyZoomRange()
                 } catch (failure: Throwable) {
                     listener?.onFailure(
