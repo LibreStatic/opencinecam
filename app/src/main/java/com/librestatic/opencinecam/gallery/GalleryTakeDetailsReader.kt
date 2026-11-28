@@ -25,6 +25,7 @@ import com.librestatic.opencinecam.storage.RecordingDestinationStore
 import com.librestatic.opencinecam.storage.drivePath
 import com.librestatic.opencinecam.storage.isDriveUri
 import com.librestatic.opencinecam.storage.isClipSidecarAttachment
+import com.librestatic.opencinecam.storage.isMotionLogAttachment
 import com.librestatic.opencinecam.storage.parseOcLogSidecar
 import java.text.DateFormat
 import java.util.Date
@@ -65,6 +66,7 @@ internal suspend fun readTakeDetails(context: Context, take: LocalMediaTake): Ta
     when (take.kind) {
         LocalMediaKind.VIDEO -> {
             val clip = take.attachments.firstOrNull(::isClipSidecarAttachment)?.let { read { boundedText(resolver, it)?.let(::parseClipSidecarFacts) } }
+                ?.withMotionLogName(take.attachments.firstOrNull(::isMotionLogAttachment)?.name)
             val documents = take.metadata.filter { it.mimeType == "application/json" }.mapNotNull { read { boundedText(resolver, it) } }
             val log = documents.firstNotNullOfOrNull { parseOcLogSidecar(it, take.primary.uri) }
             val hdr = documents.firstNotNullOfOrNull(::parseHdrVideoSidecar)

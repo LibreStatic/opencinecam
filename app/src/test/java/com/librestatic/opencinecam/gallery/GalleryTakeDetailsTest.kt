@@ -378,6 +378,17 @@ class GalleryTakeDetailsTest {
         assertEquals("498 Hz", bare.value("gyroscope"))
     }
 
+    @Test fun renamedTakeNamesItsCurrentMotionLog() {
+        val written = known(parseClipSidecarFacts(clipJson(camera = null, motion = motionJson("measured"))))
+        val renamed = written.withMotionLogName("interview.gcsv")
+        assertEquals("interview.gcsv", buildTakeDetails(TakeDetailInputs(LocalMediaKind.VIDEO, clip = renamed), text).value("gyroflow-log"))
+        assertEquals("A001.gcsv", written.withMotionLogName(null).motion?.log)
+        val noLog = known(parseClipSidecarFacts(clipJson(camera = null, motion = motionJson("measured", log = null))))
+        assertNull(noLog.withMotionLogName("interview.gcsv").motion?.log)
+        val noBlock = known(parseClipSidecarFacts(clipJson(camera = null)))
+        assertNull(noBlock.withMotionLogName("interview.gcsv").motion)
+    }
+
     @Test fun noMotionGroupWithoutTheBlock() {
         val details = motionDetails(null)
         assertNull(details.group(DetailGroupKind.MOTION))
