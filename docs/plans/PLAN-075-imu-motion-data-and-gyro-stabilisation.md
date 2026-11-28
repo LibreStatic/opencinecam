@@ -73,7 +73,7 @@ Video, LOG and HLG takes, takes with pauses, off-speed and time lapse (GPU route
 
 ## 8. Out of Scope
 
-Photos; lens profiles for Gyroflow (the user calibrates there); optical flow sync; stabilising MediaRecorder or RAW takes live; uploading motion data anywhere but the user's own WebDAV server (the outbox uploads an MP4 take's `.gcsv` beside its video, named after the uploaded video, as the share sheet shares it). Proxies drop the CAMM track. A renamed take keeps its log under the attachment name (`<stem>-motion-01.gcsv`), which Gyroflow does not pick up by itself; the CAMM track is unaffected.
+Photos; lens profiles for Gyroflow (the user calibrates there); optical flow sync; stabilising MediaRecorder or RAW takes live; uploading motion data anywhere but the user's own WebDAV server (the outbox uploads an MP4 take's `.gcsv` beside its video, named after the uploaded video, as the share sheet shares it). Proxies drop the CAMM track. A renamed take's log takes the video's new stem (`<stem>.gcsv`), so Gyroflow still pairs them; the log's `videofilename` header keeps the name it was recorded with, and the CAMM track is unaffected.
 
 ## 9. Architecture
 
