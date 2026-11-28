@@ -230,6 +230,16 @@ internal data class ClipMotionSensorFacts(val present: Boolean, val measuredHz: 
 internal data class ClipMotionFacts(val gyroscope: ClipMotionSensorFacts?, val accelerometer: ClipMotionSensorFacts?,
     val magnetometer: ClipMotionSensorFacts?, val sync: String?, val cammPresent: Boolean?, val cammPackets: Long?, val log: String?)
 
+/**
+ * The sidecar names the log as it was written; a rename gives the log the video's new stem without
+ * rewriting the sidecar, so the take's own log file, when there is one, names it instead.
+ */
+internal fun ClipSidecarFacts.withMotionLogName(current: String?): ClipSidecarFacts {
+    val motion = motion ?: return this
+    if (current == null || motion.log == null || motion.log == current) return this
+    return copy(motion = motion.copy(log = current))
+}
+
 private fun JsonElement?.known(): JsonElement? = when {
     this == null || this is JsonNull -> null
     this is JsonObject && "knowledge" in this -> if (str("knowledge") == "known") this["value"].known() else null
