@@ -9,6 +9,7 @@ internal class PresetPreferences(initial: Map<String, Any> = emptyMap()) : Share
         put("audio-aac-log-migrated-v1", true)
         put("mode-selector-carousel-migrated-v1", true)
         put("recording-policy-migrated-v1", true)
+        put("startup-mode-last-migrated-v1", true)
     }
     override fun getAll(): MutableMap<String, *> = values.toMutableMap()
     override fun contains(key: String?) = values.containsKey(key)

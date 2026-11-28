@@ -434,7 +434,7 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             button3 = enumPreference("operator-button-3", OperatorAction.VIEW_ASSIST).takeUnless { it == OperatorAction.SYSTEM_VOLUME } ?: OperatorAction.VIEW_ASSIST,
             volumeUp = enumPreference("operator-volume-up", OperatorAction.SYSTEM_VOLUME),
             volumeDown = enumPreference("operator-volume-down", OperatorAction.SYSTEM_VOLUME),
-            startupMode = enumPreference("operator-startup-mode", StartupMode.LAST),
+            startupMode = migratedStartupMode(),
             restoreExposureWhiteBalance = preferences.getBoolean("operator-restore-exposure-wb", true),
             restoreTorch = preferences.getBoolean("operator-restore-torch", false),
             restorePhotoSettings = preferences.getBoolean("operator-restore-photo", true),
@@ -648,7 +648,7 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             .putString("operator-button-3", settings.operation.button3.name)
             .putString("operator-volume-up", settings.operation.volumeUp.name)
             .putString("operator-volume-down", settings.operation.volumeDown.name)
-            .putString("operator-startup-mode", settings.operation.startupMode.name)
+            .putString(KEY_STARTUP_MODE, settings.operation.startupMode.name)
             .putBoolean("operator-restore-exposure-wb", settings.operation.restoreExposureWhiteBalance)
             .putBoolean("operator-restore-torch", settings.operation.restoreTorch)
             .putBoolean("operator-restore-photo", settings.operation.restorePhotoSettings)
@@ -1040,6 +1040,23 @@ class CameraSettingsStore internal constructor(private val preferences: android.
         return enumPreference(KEY_RECORDING_POLICY, PolicyMode.STRICT)
     }
 
+    /**
+     * Versions up to 2.0.0 defaulted to Photo and saved it with every other setting, so a stored Photo
+     * is most likely that default: it becomes Last once. Video and Last were chosen and stay.
+     */
+    private fun migratedStartupMode(): StartupMode {
+        if (!preferences.getBoolean(KEY_STARTUP_MODE_LAST_MIGRATED, false)) {
+            val stored = enumPreference(KEY_STARTUP_MODE, StartupMode.LAST)
+            val mode = if (stored == StartupMode.PHOTO) StartupMode.LAST else stored
+            preferences.edit()
+                .putBoolean(KEY_STARTUP_MODE_LAST_MIGRATED, true)
+                .putString(KEY_STARTUP_MODE, mode.name)
+                .apply()
+            return mode
+        }
+        return enumPreference(KEY_STARTUP_MODE, StartupMode.LAST)
+    }
+
     /** Repairs the WAV-only LOG workaround shipped before AAC could be embedded. */
     private fun migratedAudioOutputFormat(): AudioOutputFormat {
         if (!preferences.getBoolean(KEY_AUDIO_AAC_LOG_MIGRATED, false)) {
@@ -1115,6 +1132,8 @@ class CameraSettingsStore internal constructor(private val preferences: android.
         const val KEY_RECORDING_POLICY_MIGRATED = "recording-policy-migrated-v1"
         const val KEY_MODE_SELECTOR_STYLE = "mode-selector-style"
         const val KEY_MODE_SELECTOR_CAROUSEL_MIGRATED = "mode-selector-carousel-migrated-v1"
+        const val KEY_STARTUP_MODE = "operator-startup-mode"
+        const val KEY_STARTUP_MODE_LAST_MIGRATED = "startup-mode-last-migrated-v1"
         const val KEY_TRANSLUCENT_CHROME = "translucent-chrome"
         const val KEY_SCROLL_LONG_TEXT = "scroll-long-text"
         const val KEY_ROTATE_WHEN_LOCKED = "rotate-when-locked"

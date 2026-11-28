@@ -10,7 +10,7 @@ import org.junit.Test
 class RecordingPolicySettingsTest {
     /** PresetPreferences seeds the migration flags; a real fresh install holds nothing. */
     private fun freshInstall() = PresetPreferences().also {
-        it.edit().remove("audio-aac-log-migrated-v1").remove("mode-selector-carousel-migrated-v1").remove("recording-policy-migrated-v1").apply()
+        it.edit().remove("audio-aac-log-migrated-v1").remove("mode-selector-carousel-migrated-v1").remove("recording-policy-migrated-v1").remove("startup-mode-last-migrated-v1").apply()
     }
 
     @Test fun strictByDefaultOnAFreshInstall() {
